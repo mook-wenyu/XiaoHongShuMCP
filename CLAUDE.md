@@ -62,7 +62,7 @@ XiaoHongShuMCP/
 
 ### 1. 账号管理 (AccountManager)
 - 浏览器会话连接和验证
-- 登录状态检查和监控
+- **Cookie 登录检测**: 基于 `web_session` cookie 的可靠登录状态检测
 - 用户信息提取和验证
 - 支持个人页面完整数据获取
 
@@ -82,7 +82,7 @@ XiaoHongShuMCP/
 - 连接现有浏览器会话 (端口 9222)
 - 无头/有头模式支持
 - 会话管理和资源释放
-- 登录状态持久化
+- **Cookie 登录检测**: 通过 `web_session` cookie 验证登录状态
 
 ### 5. 后台自动连接服务 (BrowserConnectionHostedService)
 - **启动时自动连接**: MCP服务器启动后自动尝试连接浏览器

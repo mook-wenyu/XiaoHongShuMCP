@@ -140,7 +140,7 @@ dotnet run --project XiaoHongShuMCP --configuration Release
 ### 👤 账号管理系统
 
 - 浏览器会话连接和验证
-- 登录状态实时监控
+- **Cookie 检测登录** - 基于 `web_session` cookie 的可靠登录状态检测
 - 用户信息自动提取
 - 支持个人页面完整数据获取
 

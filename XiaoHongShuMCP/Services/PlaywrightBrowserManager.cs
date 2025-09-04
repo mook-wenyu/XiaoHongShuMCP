@@ -156,8 +156,8 @@ public class PlaywrightBrowserManager : IBrowserManager, IAsyncDisposable
     }
 
     /// <summary>
-    /// 检查是否已登录 - 优化版
-    /// 基于真实HTML结构，优先检查登录按钮是否存在
+    /// 检查是否已登录 - 基于 Cookie 检测
+    /// 通过检测 web_session cookie 来判断登录状态
     /// </summary>
     public async Task<bool> IsLoggedInAsync()
     {
@@ -165,29 +165,22 @@ public class PlaywrightBrowserManager : IBrowserManager, IAsyncDisposable
         {
             var page = await GetPageAsync();
 
-            // 优化的登录检测逻辑：如果存在登录按钮，说明未登录
-            var loginButton = await _humanizedInteraction.FindElementAsync(page, "LoginButton", retries: 1, timeout: 2000);
-            if (loginButton != null)
-            {
-                _logger.LogDebug("检测到登录按钮，用户未登录");
-                return false;
-            }
-
-            // 如果没有登录按钮，再检查是否存在用户信息元素
-            var userPageContainer = await _humanizedInteraction.FindElementAsync(page, "UserPageContainer", retries: 1, timeout: 2000);
-            var userAvatar = await _humanizedInteraction.FindElementAsync(page, "AvatarIcon", retries: 1, timeout: 2000);
-            var userInfo = await _humanizedInteraction.FindElementAsync(page, "UserInfo", retries: 1, timeout: 2000);
-
-            // 如果找到任何用户信息元素，说明已登录
-            var isLoggedIn = userPageContainer != null || userAvatar != null || userInfo != null;
+            // 获取所有 cookies
+            var cookies = await page.Context.CookiesAsync();
+            
+            // 查找 web_session cookie
+            var webSessionCookie = cookies.FirstOrDefault(c => c.Name == "web_session");
+            
+            // 检查 web_session 是否存在且有值
+            var isLoggedIn = webSessionCookie != null && !string.IsNullOrEmpty(webSessionCookie.Value);
 
             if (isLoggedIn)
             {
-                _logger.LogDebug("检测到用户信息元素，用户已登录");
+                _logger.LogDebug("检测到有效的 web_session cookie，用户已登录");
             }
             else
             {
-                _logger.LogDebug("未检测到登录按钮和用户信息，状态不明确");
+                _logger.LogDebug("未检测到有效的 web_session cookie，用户未登录");
             }
 
             return isLoggedIn;
