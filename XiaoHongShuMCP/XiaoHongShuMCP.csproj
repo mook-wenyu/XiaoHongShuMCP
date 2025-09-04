@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- MCP 核心框架 -->
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
+ <PackageReference Include="ModelContextProtocol" Version="0.3.0-preview.4" />
+        
+        <!-- 浏览器自动化 -->
+        <PackageReference Include="Microsoft.Playwright" Version="1.54.0" />
+        <PackageReference Include="NPOI" Version="2.7.4" />
+        <PackageReference Include="NUnit" Version="4.4.0" />
+        
+        <!-- AI 集成 -->
+        <!-- JSON 处理 -->
+        <PackageReference Include="System.Text.Json" Version="9.0.5" />
+        
+        <!-- 配置和日志 -->
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
+        <PackageReference Include="Serilog" Version="4.1.0" />
+        <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
+        <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+        <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Remove="logs\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <EmbeddedResource Remove="logs\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="logs\**" />
+    </ItemGroup>
+
+</Project>
