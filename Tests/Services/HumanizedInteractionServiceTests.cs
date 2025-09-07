@@ -12,7 +12,7 @@ public class HumanizedInteractionServiceTests
     private Mock<IDelayManager> _mockDelayManager;
     private Mock<IElementFinder> _mockElementFinder;
     private Mock<ITextInputStrategy> _mockInputStrategy;
-    private Mock<ISelectorManager> _mockSelectorManager;
+    private Mock<IDomElementManager> _mockDomElementManager;
     private HumanizedInteractionService _service;
 
     [SetUp]
@@ -21,7 +21,7 @@ public class HumanizedInteractionServiceTests
         _mockDelayManager = new Mock<IDelayManager>();
         _mockElementFinder = new Mock<IElementFinder>();
         _mockInputStrategy = new Mock<ITextInputStrategy>();
-        _mockSelectorManager = new Mock<ISelectorManager>();
+        _mockDomElementManager = new Mock<IDomElementManager>();
         
         var inputStrategies = new List<ITextInputStrategy> { _mockInputStrategy.Object };
         
@@ -29,7 +29,7 @@ public class HumanizedInteractionServiceTests
             _mockDelayManager.Object,
             _mockElementFinder.Object,
             inputStrategies,
-            _mockSelectorManager.Object);
+            _mockDomElementManager.Object);
     }
 
     [Test]

@@ -1,6 +1,6 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
-using System.Text.RegularExpressions;
 
 namespace XiaoHongShuMCP.Services;
 
@@ -11,25 +11,163 @@ public class AccountManager : IAccountManager
 {
     private readonly ILogger<AccountManager> _logger;
     private readonly IBrowserManager _browserManager;
-    private readonly ISelectorManager _selectorManager;
-    private UserInfo _currentUserInfo;
+    private readonly IDomElementManager _domElementManager;
+    // === 全局用户信息管理功能（合并自 GlobalUserInfo） ===
+    private readonly object _lock = new object();
+    private UserInfo? _currentUser;
+    private DateTime? _lastUpdated;
 
-    public UserInfo CurrentUserInfo => _currentUserInfo;
+    /// <summary>
+    /// 全局当前用户信息
+    /// </summary>
+    public UserInfo? CurrentUser
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _currentUser;
+            }
+        }
+        private set
+        {
+            lock (_lock)
+            {
+                _currentUser = value;
+                _lastUpdated = DateTime.UtcNow;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 最后更新时间
+    /// </summary>
+    public DateTime? LastUpdated
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _lastUpdated;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 是否有有效的全局用户信息
+    /// </summary>
+    public bool HasValidUserInfo
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _currentUser is {IsLoggedIn: true};
+            }
+        }
+    }
+
+    /// <summary>
+    /// 更新全局用户信息
+    /// </summary>
+    /// <param name="userInfo">新的用户信息</param>
+    public void UpdateUserInfo(UserInfo? userInfo)
+    {
+        CurrentUser = userInfo;
+    }
+
+    /// <summary>
+    /// 从API响应JSON更新全局用户信息
+    /// </summary>
+    /// <param name="responseJson">API响应的JSON字符串</param>
+    /// <returns>是否成功更新</returns>
+    public bool UpdateFromApiResponse(string responseJson)
+    {
+        try
+        {
+            var options = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                PropertyNameCaseInsensitive = true
+            };
+
+            // 尝试解析小红书用户API响应格式
+            var apiResponse = JsonSerializer.Deserialize<XiaoHongShuUserApiResponse>(responseJson, options);
+            
+            if (apiResponse is {Success: true, Data: not null})
+            {
+                var userData = apiResponse.Data;
+                var userInfo = new UserInfo
+                {
+                    UserId = userData.UserId,
+                    Nickname = userData.Nickname,
+                    IsLoggedIn = true,
+                    RedId = userData.RedId,
+                    AvatarUrl = userData.Avatar,
+                    Avatar = userData.Avatar,
+                    FollowersCount = userData.FansCount ?? userData.FollowersCount,
+                    FollowingCount = userData.FollowCount ?? userData.FollowingCount,
+                    LikesCollectsCount = userData.NoteCount ?? userData.NotesCount,
+                    Description = userData.Desc ?? userData.Description
+                };
+
+                UpdateUserInfo(userInfo);
+                return true;
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "解析用户API响应失败");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 清除全局用户信息
+    /// </summary>
+    public void ClearUserInfo()
+    {
+        CurrentUser = null;
+    }
+
+    /// <summary>
+    /// 获取全局用户信息的简要描述
+    /// </summary>
+    /// <returns>用户信息描述</returns>
+    public string GetUserInfoSummary()
+    {
+        lock (_lock)
+        {
+            if (_currentUser == null)
+                return "无用户信息";
+
+            var summary = $"用户: {_currentUser.Nickname}";
+            if (!string.IsNullOrEmpty(_currentUser.RedId))
+                summary += $" (小红书号: {_currentUser.RedId})";
+            
+            if (_lastUpdated.HasValue)
+                summary += $" [更新于: {_lastUpdated.Value:HH:mm:ss}]";
+
+            return summary;
+        }
+    }
 
     public AccountManager(
         ILogger<AccountManager> logger,
         IBrowserManager browserManager,
-        ISelectorManager selectorManager)
+        IDomElementManager domElementManager)
     {
         _logger = logger;
         _browserManager = browserManager;
-        _selectorManager = selectorManager;
+        _domElementManager = domElementManager;
     }
 
     /// <summary>
     /// 连接到浏览器并验证登录状态
     /// </summary>
-    public async Task<OperationResult<UserInfo>> ConnectToBrowserAsync()
+    public async Task<OperationResult<bool>> ConnectToBrowserAsync()
     {
         _logger.LogInformation("正在连接到浏览器...");
 
@@ -40,20 +178,25 @@ public class AccountManager : IAccountManager
 
             // 检查登录状态
             var isLoggedIn = await _browserManager.IsLoggedInAsync();
-
-            _currentUserInfo = new UserInfo
+            
+            if (!isLoggedIn)
             {
-                IsLoggedIn = isLoggedIn,
-                LastActiveTime = DateTime.UtcNow
-            };
-
+                ClearUserInfo();
+                _logger.LogWarning("浏览器未登录，请先登录小红书账号");
+                
+                return OperationResult<bool>.Fail(
+                    "浏览器未登录，请先登录小红书账号",
+                    ErrorType.LoginRequired,
+                    "NOT_LOGGED_IN");
+            }
+            
             _logger.LogInformation("浏览器连接成功，登录状态: {IsLoggedIn}", isLoggedIn);
-            return OperationResult<UserInfo>.Ok(_currentUserInfo);
+            return OperationResult<bool>.Ok(isLoggedIn);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "连接到浏览器失败");
-            return OperationResult<UserInfo>.Fail(
+            return OperationResult<bool>.Fail(
                 $"连接浏览器失败: {ex.Message}",
                 ErrorType.BrowserError,
                 "BROWSER_CONNECTION_FAILED");
@@ -78,369 +221,12 @@ public class AccountManager : IAccountManager
     }
 
     /// <summary>
-    /// 从浏览器提取当前用户信息
-    /// </summary>
-    private async Task<OperationResult<UserInfo>> ExtractCurrentUserInfoAsync()
-    {
-        try
-        {
-            var context = await _browserManager.GetBrowserContextAsync();
-            var pages = context.Pages;
-            if (!pages.Any())
-            {
-                return OperationResult<UserInfo>.Fail(
-                    "没有可用的页面",
-                    ErrorType.BrowserError,
-                    "NO_PAGES_AVAILABLE");
-            }
-
-            var page = pages.First();
-
-            // 导航到小红书主页以确保侧边栏可见
-            await EnsureOnXiaoHongShuPageAsync(page);
-
-            var userInfo = new UserInfo
-            {
-                IsLoggedIn = false,
-                LastActiveTime = DateTime.UtcNow
-            };
-
-            // 1. 尝试从侧边栏用户链接提取用户ID
-            await ExtractUserIdFromSidebarAsync(page, userInfo);
-
-            // 2. 如果找到了用户ID，尝试获取完整的个人页面数据
-            if (!string.IsNullOrEmpty(userInfo.UserId))
-            {
-                userInfo.IsLoggedIn = true;
-
-                // 尝试获取完整的个人页面数据
-                var completeUserInfo = await GetCompleteUserProfileDataAsync(userInfo.UserId);
-                if (completeUserInfo is {Success: true, Data: not null})
-                {
-                    // 合并完整的个人页面数据
-                    MergeUserInfo(userInfo, completeUserInfo.Data);
-                }
-
-                _logger.LogInformation("成功提取用户信息: UserId={UserId}, Username={Username}, RedId={RedId}",
-                    userInfo.UserId, userInfo.Username, userInfo.RedId);
-            }
-            else
-            {
-                _logger.LogInformation("未检测到登录用户信息");
-            }
-
-            return OperationResult<UserInfo>.Ok(userInfo);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "提取用户信息失败");
-            return OperationResult<UserInfo>.Fail(
-                $"提取用户信息失败: {ex.Message}",
-                ErrorType.NetworkError,
-                "USER_EXTRACTION_FAILED");
-        }
-    }
-
-    /// <summary>
-    /// 确保页面在小红书主页，以便侧边栏可见
-    /// </summary>
-    private async Task EnsureOnXiaoHongShuPageAsync(IPage page)
-    {
-        try
-        {
-            var currentUrl = page.Url;
-            if (!currentUrl.Contains("xiaohongshu.com"))
-            {
-                _logger.LogInformation("当前不在小红书页面，导航到主页");
-                await page.GotoAsync("https://www.xiaohongshu.com", new PageGotoOptions
-                {
-                    WaitUntil = WaitUntilState.NetworkIdle,
-                    Timeout = 15000
-                });
-            }
-
-            // 等待侧边栏加载
-            await Task.Delay(2000);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "导航到小红书主页失败");
-        }
-    }
-
-    /// <summary>
-    /// 从侧边栏用户链接提取用户ID - 增强版
-    /// 支持多种fallback策略和更详细的日志记录
-    /// </summary>
-    private async Task ExtractUserIdFromSidebarAsync(IPage page, UserInfo userInfo)
-    {
-        try
-        {
-            _logger.LogDebug("开始从侧边栏提取用户ID...");
-            var userProfileSelectors = _selectorManager.GetSelectors("SidebarUserProfile");
-
-            foreach (var selector in userProfileSelectors)
-            {
-                try
-                {
-                    _logger.LogDebug("尝试使用选择器: {Selector}", selector);
-                    var userLinkElement = await page.QuerySelectorAsync(selector);
-                    if (userLinkElement != null)
-                    {
-                        var href = await userLinkElement.GetAttributeAsync("href");
-                        _logger.LogDebug("找到用户链接: {Href}", href);
-
-                        if (!string.IsNullOrEmpty(href))
-                        {
-                            var userId = ExtractUserIdFromUrl(href);
-                            if (!string.IsNullOrEmpty(userId))
-                            {
-                                userInfo.UserId = userId;
-
-                                // 尝试提取用户名（如果链接包含用户名信息）
-                                await TryExtractUsernameAsync(userLinkElement, userInfo);
-
-                                _logger.LogInformation("成功从侧边栏提取用户信息: UserId={UserId}", userId);
-                                return;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogDebug("选择器未找到匹配元素: {Selector}", selector);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug("使用选择器 {Selector} 提取用户ID失败: {Error}", selector, ex.Message);
-                    continue;
-                }
-            }
-
-            // 如果所有常规选择器都失败，尝试备用策略
-            await TryFallbackUserExtractionAsync(page, userInfo);
-
-            if (string.IsNullOrEmpty(userInfo.UserId))
-            {
-                _logger.LogDebug("未能从侧边栏提取到用户ID");
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "提取用户ID失败");
-        }
-    }
-
-    /// <summary>
-    /// 尝试提取用户名
-    /// </summary>
-    private async Task TryExtractUsernameAsync(IElementHandle userLinkElement, UserInfo userInfo)
-    {
-        try
-        {
-            // 尝试从链接文本提取用户名
-            var linkText = await userLinkElement.InnerTextAsync();
-            if (!string.IsNullOrWhiteSpace(linkText) && linkText != "我")
-            {
-                userInfo.Username = linkText.Trim();
-                _logger.LogDebug("提取到用户名: {Username}", userInfo.Username);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug("提取用户名失败: {Error}", ex.Message);
-        }
-    }
-
-    /// <summary>
-    /// 备用用户信息提取策略
-    /// </summary>
-    private async Task TryFallbackUserExtractionAsync(IPage page, UserInfo userInfo)
-    {
-        try
-        {
-            _logger.LogDebug("执行备用用户信息提取策略...");
-
-            // 备用策略1：从页面URL中提取（如果当前在用户个人页面）
-            var currentUrl = page.Url;
-            if (currentUrl.Contains("/user/profile/"))
-            {
-                var userId = ExtractUserIdFromUrl(currentUrl);
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    userInfo.UserId = userId;
-                    _logger.LogDebug("从当前页面URL提取到用户ID: {UserId}", userId);
-                    return;
-                }
-            }
-
-            // 备用策略2：从页面中的其他用户链接提取
-            var fallbackSelectors = new[]
-            {
-                "a[href*='/user/profile/']",         // 任何用户个人页面链接
-                ".user-info a",                      // 用户信息区域的链接
-                ".profile-link",                     // 个人页面链接
-                "[class*='user'] a[href*='profile']" // 包含user类的元素下的个人页面链接
-            };
-
-            foreach (var selector in fallbackSelectors)
-            {
-                try
-                {
-                    var elements = await page.QuerySelectorAllAsync(selector);
-                    foreach (var element in elements.Take(3)) // 只检查前3个
-                    {
-                        var href = await element.GetAttributeAsync("href");
-                        if (!string.IsNullOrEmpty(href))
-                        {
-                            var userId = ExtractUserIdFromUrl(href);
-                            if (!string.IsNullOrEmpty(userId))
-                            {
-                                userInfo.UserId = userId;
-                                _logger.LogDebug("通过备用策略提取到用户ID: {UserId}", userId);
-                                return;
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug("备用选择器 {Selector} 失败: {Error}", selector, ex.Message);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug("备用提取策略失败: {Error}", ex.Message);
-        }
-    }
-
-    /// <summary>
-    /// 提取用户头像信息
-    /// </summary>
-    private async Task ExtractUserAvatarAsync(IPage page, UserInfo userInfo)
-    {
-        try
-        {
-            // 尝试从用户头像元素提取信息
-            var avatarSelectors = new[] {".reds-avatar img", ".reds-image-container img", ".user img"};
-
-            foreach (var selector in avatarSelectors)
-            {
-                try
-                {
-                    var avatarElement = await page.QuerySelectorAsync(selector);
-                    if (avatarElement != null)
-                    {
-                        var src = await avatarElement.GetAttributeAsync("src");
-                        if (!string.IsNullOrEmpty(src))
-                        {
-                            _logger.LogDebug("提取到用户头像URL: {AvatarUrl}", src);
-                            // 可以在UserInfo中添加AvatarUrl字段来存储这个信息
-                            break;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug("使用选择器 {Selector} 提取头像失败: {Error}", selector, ex.Message);
-                    continue;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "提取用户头像失败");
-        }
-    }
-
-    /// <summary>
-    /// 从URL中提取用户ID - 增强版
-    /// 支持多种可能的用户ID格式和URL变体
-    /// </summary>
-    /// <param name="url">用户个人页面URL，支持多种格式</param>
-    /// <returns>用户ID</returns>
-    private string? ExtractUserIdFromUrl(string url)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(url))
-                return null;
-
-            // 支持多种可能的用户ID格式：
-            // 1. 标准格式：/user/profile/66482064000000001e00e245
-            // 2. 带域名：https://www.xiaohongshu.com/user/profile/66482064000000001e00e245
-            // 3. 可能的变体格式
-
-            var patterns = new[]
-            {
-                @"/user/profile/([a-f0-9]{24,32})",    // 24-32位十六进制（最常见）
-                @"/user/profile/([0-9a-f]{24,32})",    // 备用格式
-                @"/user/profile/([A-Za-z0-9]{20,40})", // 更宽泛的字符集
-                @"user/profile/([a-f0-9]{24,32})",     // 不带开头斜杠
-                @"profile/([a-f0-9]{24,32})"           // 简化路径
-            };
-
-            foreach (var pattern in patterns)
-            {
-                var match = Regex.Match(url, pattern, RegexOptions.IgnoreCase);
-                if (match is {Success: true, Groups.Count: > 1})
-                {
-                    var userId = match.Groups[1].Value;
-                    if (IsValidUserId(userId))
-                    {
-                        _logger.LogDebug("成功提取用户ID: {UserId} (使用模式: {Pattern})", userId, pattern);
-                        return userId;
-                    }
-                }
-            }
-
-            _logger.LogDebug("无法从URL提取有效用户ID: {Url}", url);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "解析用户ID失败: {Url}", url);
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// 验证用户ID的有效性
-    /// </summary>
-    /// <param name="userId">待验证的用户ID</param>
-    /// <returns>是否为有效的用户ID</returns>
-    private bool IsValidUserId(string userId)
-    {
-        if (string.IsNullOrEmpty(userId))
-            return false;
-
-        // 小红书用户ID通常特征：
-        // 1. 长度在20-40字符之间
-        // 2. 包含数字和字母（通常是十六进制格式）
-        // 3. 不全是数字，不全是字母
-
-        if (userId.Length is < 20 or > 40)
-            return false;
-
-        // 检查是否包含有效字符
-        if (!Regex.IsMatch(userId, @"^[a-fA-F0-9]+$", RegexOptions.IgnoreCase))
-        {
-            // 如果不是纯十六进制，检查是否是字母数字组合
-            if (!Regex.IsMatch(userId, @"^[a-zA-Z0-9]+$"))
-                return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
     /// 获取完整的用户个人页面数据
     /// 访问指定用户的个人页面并提取完整数据
     /// </summary>
     /// <param name="userId">用户ID</param>
     /// <returns>完整的用户信息</returns>
-    public async Task<OperationResult<UserInfo>> GetCompleteUserProfileDataAsync(string userId)
+    public async Task<OperationResult<UserInfo>> GetUserProfileDataAsync(string userId)
     {
         try
         {
@@ -462,7 +248,14 @@ public class AccountManager : IAccountManager
                     "NO_PAGES_AVAILABLE");
             }
 
-            var page = pages.First();
+            var page = pages.FirstOrDefault();
+            if (page == null)
+            {
+                return OperationResult<UserInfo>.Fail(
+                    "无法获取浏览器页面",
+                    ErrorType.BrowserError,
+                    "NO_BROWSER_PAGE");
+            }
 
             // 构造个人页面URL
             var profileUrl = $"https://www.xiaohongshu.com/user/profile/{userId}";
@@ -497,8 +290,8 @@ public class AccountManager : IAccountManager
             await ExtractUserProfileFromPageAsync(page, userInfo);
 
             _logger.LogInformation(
-                "成功提取个人页面数据: UserId={UserId}, Username={Username}, RedId={RedId}",
-                userInfo.UserId, userInfo.Username, userInfo.RedId);
+                "成功提取个人页面数据: UserId={UserId}, Nickname={Nickname}, RedId={RedId}",
+                userInfo.UserId, userInfo.Nickname, userInfo.RedId);
 
             return OperationResult<UserInfo>.Ok(userInfo);
         }
@@ -520,7 +313,7 @@ public class AccountManager : IAccountManager
         try
         {
             // 检查个人页面的特征元素
-            var userPageSelectors = _selectorManager.GetSelectors("UserPageContainer");
+            var userPageSelectors = _domElementManager.GetSelectors("UserPageContainer");
 
             foreach (var selector in userPageSelectors)
             {
@@ -583,7 +376,7 @@ public class AccountManager : IAccountManager
     {
         try
         {
-            var usernameSelectors = _selectorManager.GetSelectors("UserPageName");
+            var usernameSelectors = _domElementManager.GetSelectors("UserPageName");
 
             foreach (var selector in usernameSelectors)
             {
@@ -593,8 +386,8 @@ public class AccountManager : IAccountManager
                     var username = await element.InnerTextAsync();
                     if (!string.IsNullOrWhiteSpace(username))
                     {
-                        userInfo.Username = username.Trim();
-                        _logger.LogDebug("提取到用户名: {Username}", userInfo.Username);
+                        userInfo.Nickname = username.Trim();
+                        _logger.LogDebug("提取到用户名: {Nickname}", userInfo.Nickname);
                         return;
                     }
                 }
@@ -613,7 +406,7 @@ public class AccountManager : IAccountManager
     {
         try
         {
-            var redIdSelectors = _selectorManager.GetSelectors("UserRedId");
+            var redIdSelectors = _domElementManager.GetSelectors("UserRedId");
 
             foreach (var selector in redIdSelectors)
             {
@@ -647,7 +440,7 @@ public class AccountManager : IAccountManager
     {
         try
         {
-            var descriptionSelectors = _selectorManager.GetSelectors("UserDescription");
+            var descriptionSelectors = _domElementManager.GetSelectors("UserDescription");
 
             foreach (var selector in descriptionSelectors)
             {
@@ -678,7 +471,7 @@ public class AccountManager : IAccountManager
     {
         try
         {
-            var avatarSelectors = _selectorManager.GetSelectors("UserPageAvatar");
+            var avatarSelectors = _domElementManager.GetSelectors("UserPageAvatar");
 
             foreach (var selector in avatarSelectors)
             {
@@ -730,7 +523,7 @@ public class AccountManager : IAccountManager
     {
         try
         {
-            var followingSelectors = _selectorManager.GetSelectors("UserFollowingCount");
+            var followingSelectors = _domElementManager.GetSelectors("UserFollowingCount");
 
             foreach (var selector in followingSelectors)
             {
@@ -738,7 +531,7 @@ public class AccountManager : IAccountManager
                 if (element != null)
                 {
                     var countText = await element.InnerTextAsync();
-                    if (int.TryParse(countText?.Trim(), out var count))
+                    if (int.TryParse(countText.Trim(), out var count))
                     {
                         userInfo.FollowingCount = count;
                         _logger.LogDebug("提取到关注数: {Count}", count);
@@ -760,7 +553,7 @@ public class AccountManager : IAccountManager
     {
         try
         {
-            var followersSelectors = _selectorManager.GetSelectors("UserFollowersCount");
+            var followersSelectors = _domElementManager.GetSelectors("UserFollowersCount");
 
             foreach (var selector in followersSelectors)
             {
@@ -768,7 +561,7 @@ public class AccountManager : IAccountManager
                 if (element != null)
                 {
                     var countText = await element.InnerTextAsync();
-                    if (int.TryParse(countText?.Trim(), out var count))
+                    if (int.TryParse(countText.Trim(), out var count))
                     {
                         userInfo.FollowersCount = count;
                         _logger.LogDebug("提取到粉丝数: {Count}", count);
@@ -790,7 +583,7 @@ public class AccountManager : IAccountManager
     {
         try
         {
-            var likesCollectsSelectors = _selectorManager.GetSelectors("UserLikesCollectsCount");
+            var likesCollectsSelectors = _domElementManager.GetSelectors("UserLikesCollectsCount");
 
             foreach (var selector in likesCollectsSelectors)
             {
@@ -798,7 +591,7 @@ public class AccountManager : IAccountManager
                 if (element != null)
                 {
                     var countText = await element.InnerTextAsync();
-                    if (int.TryParse(countText?.Trim(), out var count))
+                    if (int.TryParse(countText.Trim(), out var count))
                     {
                         userInfo.LikesCollectsCount = count;
                         _logger.LogDebug("提取到获赞与收藏数: {Count}", count);
@@ -820,7 +613,7 @@ public class AccountManager : IAccountManager
     {
         try
         {
-            var verifySelectors = _selectorManager.GetSelectors("UserVerifyIcon");
+            var verifySelectors = _domElementManager.GetSelectors("UserVerifyIcon");
 
             foreach (var selector in verifySelectors)
             {
@@ -847,22 +640,15 @@ public class AccountManager : IAccountManager
         }
     }
 
-    /// <summary>
-    /// 合并用户信息
-    /// </summary>
-    private void MergeUserInfo(UserInfo target, UserInfo source)
-    {
-        if (source == null) return;
+}
 
-        if (!string.IsNullOrEmpty(source.Username)) target.Username = source.Username;
-        if (!string.IsNullOrEmpty(source.RedId)) target.RedId = source.RedId;
-        if (!string.IsNullOrEmpty(source.Description)) target.Description = source.Description;
-        if (!string.IsNullOrEmpty(source.AvatarUrl)) target.AvatarUrl = source.AvatarUrl;
-        if (source.FollowingCount.HasValue) target.FollowingCount = source.FollowingCount;
-        if (source.FollowersCount.HasValue) target.FollowersCount = source.FollowersCount;
-        if (source.LikesCollectsCount.HasValue) target.LikesCollectsCount = source.LikesCollectsCount;
-        target.IsVerified = source.IsVerified;
-        if (!string.IsNullOrEmpty(source.VerificationType)) target.VerificationType = source.VerificationType;
-
-    }
+/// <summary>
+/// 小红书用户API响应数据结构
+/// </summary>
+public class XiaoHongShuUserApiResponse
+{
+    public bool Success { get; set; }
+    public UserInfo? Data { get; set; }
+    public int Code { get; set; }
+    public string? Msg { get; set; }
 }

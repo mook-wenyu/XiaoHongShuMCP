@@ -6,19 +6,16 @@
 public static class SmartTextSplitter
 {
     // 中文标点符号
-    private static readonly HashSet<char> _chinesePunctuation = new()
-    {
+    private static readonly HashSet<char> _chinesePunctuation =
+    [
         '\u3001', '\u3002', '\uFF01', '\uFF1F', '\uFF1B', '\uFF1A', // 、。！？；：
         '\u2026',                                                   // …
         '\u201C', '\u201D', '\u2018', '\u2019',                     // ""''
-        '\uFF0C', '\u3010', '\u3011'                                // ，【】
-    };
+        '\uFF0C', '\u3010', '\u3011'
+    ];
 
     // 英文标点符号
-    private static readonly HashSet<char> _englishPunctuation = new()
-    {
-        ',', '.', '!', '?', ';', ':', '"', '\'', '-', '(', ')', '[', ']'
-    };
+    private static readonly HashSet<char> _englishPunctuation = [',', '.', '!', '?', ';', ':', '"', '\'', '-', '(', ')', '[', ']'];
 
     /// <summary>
     /// 按语义单位分割文本
@@ -26,7 +23,7 @@ public static class SmartTextSplitter
     public static List<string> SplitBySemanticUnits(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return new List<string>();
+            return [];
 
         // 1. 首先按标点符号分割大的语义块
         var largeChunks = SplitByPunctuation(text);
@@ -85,7 +82,7 @@ public static class SmartTextSplitter
     private static List<string> SplitChunkIntelligently(string chunk)
     {
         if (string.IsNullOrWhiteSpace(chunk))
-            return new List<string>();
+            return [];
 
         var units = new List<string>();
         var currentUnit = "";
@@ -201,33 +198,4 @@ public static class SmartTextSplitter
         return Random.Shared.Next(2, 5); // 2-4个字符
     }
 
-    /// <summary>
-    /// 判断是否为自然的词汇分割点
-    /// </summary>
-    private static bool IsNaturalBreakPoint(string text, int index)
-    {
-        if (index <= 0 || index >= text.Length)
-            return false;
-
-        var prevChar = text[index - 1];
-        var currentChar = text[index];
-
-        // 中英文边界
-        if (IsChinese(prevChar) && !IsChinese(currentChar))
-            return true;
-        if (!IsChinese(prevChar) && IsChinese(currentChar))
-            return true;
-
-        // 字母和数字边界
-        if (char.IsLetter(prevChar) && char.IsDigit(currentChar))
-            return true;
-        if (char.IsDigit(prevChar) && char.IsLetter(currentChar))
-            return true;
-
-        // 空格边界
-        if (char.IsWhiteSpace(currentChar) || char.IsWhiteSpace(prevChar))
-            return true;
-
-        return false;
-    }
 }

@@ -35,7 +35,7 @@ public static class XiaoHongShuTools
 
             return new BrowserConnectionResult(
                 IsConnected: true,
-                IsLoggedIn: result.Data?.IsLoggedIn ?? false,
+                IsLoggedIn: result.Data,
                 Message: "浏览器连接成功"
             );
         }
@@ -51,51 +51,114 @@ public static class XiaoHongShuTools
     }
 
     /// <summary>
-    /// 搜索小红书笔记
+    /// 获取推荐笔记
     /// </summary>
     [McpServerTool]
-    [Description("智能搜索小红书笔记，支持排序、类型、时间等多维筛选，返回搜索结果")]
-    public static async Task<SearchResult> SearchNotes(
-        [Description("搜索关键词")] string keyword,
-        [Description("返回数量限制，默认10")] int limit = 10,
-        [Description("排序方式：comprehensive(综合), latest(最新), most_liked(最多点赞), most_commented(最多评论), most_favorited(最多收藏)")]
-        string sortBy = "comprehensive",
-        [Description("笔记类型：all(不限), video(视频), image(图文)")] string noteType = "all",
-        [Description("发布时间：all(不限), day(一天内), week(一周内), half_year(半年内)")] string publishTime = "all",
-        [Description("搜索范围：all(不限), viewed(已看过), unviewed(未看过), followed(已关注)")]
-        string searchScope = "all",
-        [Description("位置距离：all(不限), same_city(同城), nearby(附近)")] string locationDistance = "all",
+    [Description("获取小红书推荐笔记")]
+    public static async Task<RecommendResultMcp> GetRecommendedNotes(
+        [Description("获取数量限制，默认20")] int limit = 20,
+        [Description("超时时间（分钟），默认5分钟")] int timeoutMinutes = 5,
         IServiceProvider serviceProvider = null!)
     {
         try
         {
-            var searchDataService = serviceProvider.GetRequiredService<ISearchDataService>();
-            var request = new SearchRequest
-            {
-                Keyword = keyword,
-                MaxResults = limit,
-                SortBy = sortBy,
-                NoteType = noteType,
-                PublishTime = publishTime,
-                SearchScope = searchScope,
-                LocationDistance = locationDistance,
-                AutoExport = true,
-                ExportFileName = $"搜索结果_{keyword}_{DateTime.Now:yyyyMMdd_HHmmss}",
-                ExportOptions = new ExportOptions()
-            };
+            var enhancedRecommendService = serviceProvider.GetRequiredService<IRecommendService>();
+            var timeout = TimeSpan.FromMinutes(timeoutMinutes);
 
-            var result = await searchDataService.SearchWithAnalyticsAsync(request);
+            var result = await enhancedRecommendService.GetRecommendedNotesAsync(limit, timeout);
 
-            return result.Data ?? new SearchResult(
-                new List<NoteInfo>(), 0, keyword, TimeSpan.Zero,
-                new SearchStatistics(0, 0, 0, 0, 0, DateTime.UtcNow), null
+            var successMessage = result.Success
+                ? $"✅ 获取推荐笔记成功，共{result.Data?.Notes.Count ?? 0}条"
+                : "❌ 获取推荐笔记失败";
+
+            return new RecommendResultMcp(
+                Recommendations: result.Data,
+                Success: result.Success,
+                Message: result.Success ? successMessage : (result.ErrorMessage ?? "获取失败"),
+                ErrorCode: result.ErrorCode,
+                ValidationDetails: new Dictionary<string, object>()
             );
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return new SearchResult(
-                new List<NoteInfo>(), 0, keyword, TimeSpan.Zero,
-                new SearchStatistics(0, 0, 0, 0, 0, DateTime.UtcNow), null
+            return new RecommendResultMcp(
+                Recommendations: null,
+                Success: false,
+                Message: $"获取推荐笔记异常: {ex.Message}",
+                ErrorCode: "GET_RECOMMENDATIONS_EXCEPTION",
+                ValidationDetails: new Dictionary<string, object>
+                {
+                    ["异常类型"] = ex.GetType().Name,
+                    ["异常消息"] = ex.Message,
+                    ["发生时间"] = DateTime.UtcNow
+                }
+            );
+        }
+    }
+
+    /// <summary>
+    /// 获取小红书搜索笔记 - 拟人化操作与API监听结合
+    /// </summary>
+    [McpServerTool]
+    [Description("获取小红书搜索笔记")]
+    public static async Task<SearchResultMcp> GetSearchNotes(
+        [Description("搜索关键词")] string keyword,
+        [Description("最大结果数量，默认20，建议10-50之间")] int maxResults = 20,
+        [Description("排序方式：comprehensive(综合), latest(最新), most_liked(最多点赞)")] string sortBy = "comprehensive",
+        [Description("笔记类型：all(不限), video(视频), image(图文)")] string noteType = "all",
+        [Description("发布时间：all(不限), day(一天内), week(一周内), half_year(半年内)")] string publishTime = "all",
+        [Description("是否包含统计分析，默认true")] bool includeAnalytics = true,
+        [Description("是否自动导出Excel，默认true")] bool autoExport = true,
+        [Description("导出文件名（可选），不指定则自动生成")] string? exportFileName = null,
+        IServiceProvider serviceProvider = null!)
+    {
+        try
+        {
+            var xiaoHongShuService = serviceProvider.GetRequiredService<IXiaoHongShuService>();
+            var result = await xiaoHongShuService.SearchNotesAsync(
+                keyword,
+                maxResults,
+                sortBy,
+                noteType,
+                publishTime,
+                includeAnalytics,
+                autoExport,
+                exportFileName);
+
+            var successMessage = result.Success
+                ? $"✅ 获取搜索笔记成功：关键词='{keyword}'，收集={result.Data?.TotalCount ?? 0}条，API请求={result.Data?.ApiRequests ?? 0}次"
+                : "❌ 获取搜索笔记失败";
+
+            return new SearchResultMcp(
+                SearchResult: result.Data,
+                Success: result.Success,
+                Message: result.Success ? successMessage : (result.ErrorMessage ?? "搜索失败"),
+                ErrorCode: result.ErrorCode,
+                Performance: result.Data != null ? new Dictionary<string, object>
+                {
+                    ["搜索关键词"] = result.Data.SearchKeyword,
+                    ["收集数量"] = result.Data.TotalCount,
+                    ["处理耗时"] = $"{result.Data.Duration.TotalMilliseconds:F0}ms",
+                    ["API请求次数"] = result.Data.ApiRequests,
+                    ["监听响应数"] = result.Data.InterceptedResponses,
+                    ["数据完整性"] = result.Data.Statistics.CompleteDataCount > 0 ? "完整" :
+                        result.Data.Statistics.PartialDataCount > 0 ? "部分" : "基础"
+                } : new Dictionary<string, object>()
+            );
+        }
+        catch (Exception ex)
+        {
+            return new SearchResultMcp(
+                SearchResult: null,
+                Success: false,
+                Message: $"搜索笔记异常: {ex.Message}",
+                ErrorCode: "SEARCH_NOTES_ENHANCED_EXCEPTION",
+                Performance: new Dictionary<string, object>
+                {
+                    ["异常类型"] = ex.GetType().Name,
+                    ["异常消息"] = ex.Message,
+                    ["发生时间"] = DateTime.UtcNow
+                }
             );
         }
     }
@@ -142,7 +205,7 @@ public static class XiaoHongShuTools
     /// </summary>
     [McpServerTool]
     [Description("基于关键词列表批量获取笔记详情，集成统计分析和自动导出功能。")]
-    public static async Task<EnhancedBatchNoteResult> BatchGetNoteDetailsOptimized(
+    public static async Task<BatchNoteResult> BatchGetNoteDetailsOptimized(
         [Description("关键词列表，用于在当前页面查找匹配的笔记，匹配任意关键词即可。系统会智能滚动搜索更多内容")] List<string> keywords,
         [Description("最大获取数量，默认10")] int maxCount = 10,
         [Description("是否包含评论信息，默认false")] bool includeComments = false,
@@ -283,7 +346,7 @@ public static class XiaoHongShuTools
     public static async Task<DraftSaveResult> SaveContentDraft(
         [Description("笔记标题")] string title,
         [Description("笔记内容")] string content,
-        [Description("笔记类型：Image(图文), Video(视频), Article(长文)，默认为图文")] NoteType noteType = NoteType.Image,
+        [Description("笔记类型：Image(图文), Video(视频)，默认为图文。注意：长文内容请使用图文类型")] NoteType noteType = NoteType.Image,
         [Description("图片文件路径列表")] List<string>? imagePaths = null,
         [Description("视频文件路径")] string? videoPath = null,
         [Description("标签列表")] List<string>? tags = null,
@@ -291,8 +354,8 @@ public static class XiaoHongShuTools
     {
         try
         {
-            imagePaths ??= new List<string>();
-            tags ??= new List<string>();
+            imagePaths ??= [];
+            tags ??= [];
 
             // 参数验证：检查笔记类型和文件路径的一致性
             var validationResult = ValidateNoteTypeConsistency(noteType, imagePaths, videoPath);
@@ -325,76 +388,9 @@ public static class XiaoHongShuTools
     }
 
     /// <summary>
-    /// 获取指定用户的完整个人资料数据
-    /// </summary>
-    [McpServerTool]
-    [Description("获取指定用户的完整个人资料数据，包括粉丝数、关注数、获赞数、个人简介等详细信息")]
-    public static async Task<UserProfileResult> GetUserCompleteProfile(
-        [Description("用户ID，24-32位十六进制格式，例如：5f8a8c2b8b8a8c2b8b8a8c2b")] string userId,
-        IServiceProvider serviceProvider = null!)
-    {
-        try
-        {
-            // 参数验证
-            if (string.IsNullOrEmpty(userId))
-            {
-                return new UserProfileResult(
-                    UserInfo: null,
-                    Success: false,
-                    Message: "❌ 用户ID不能为空",
-                    ErrorCode: "INVALID_USER_ID"
-                );
-            }
-
-            // 验证用户ID格式的有效性
-            if (!IsValidUserId(userId))
-            {
-                return new UserProfileResult(
-                    UserInfo: null,
-                    Success: false,
-                    Message: "❌ 用户ID格式无效，应为24-32位十六进制字符",
-                    ErrorCode: "INVALID_USER_ID_FORMAT"
-                );
-            }
-
-            var accountManager = serviceProvider.GetRequiredService<IAccountManager>();
-            var result = await accountManager.GetCompleteUserProfileDataAsync(userId);
-
-            if (!result.Success)
-            {
-                return new UserProfileResult(
-                    UserInfo: null,
-                    Success: false,
-                    Message: result.ErrorMessage ?? "获取用户资料失败",
-                    ErrorCode: result.ErrorCode
-                );
-            }
-
-            // 成功获取用户资料
-            return new UserProfileResult(
-                UserInfo: result.Data,
-                Success: true,
-                Message: result.Data?.HasCompleteProfileData() == true
-                    ? "✅ 成功获取用户完整资料"
-                    : "⚠️ 成功获取用户资料，但部分数据可能缺失",
-                ErrorCode: null
-            );
-        }
-        catch (Exception ex)
-        {
-            return new UserProfileResult(
-                UserInfo: null,
-                Success: false,
-                Message: $"获取用户资料异常: {ex.Message}",
-                ErrorCode: "GET_USER_PROFILE_EXCEPTION"
-            );
-        }
-    }
-
-    /// <summary>
     /// 创建空的增强批量结果
     /// </summary>
-    private static EnhancedBatchNoteResult CreateEmptyEnhancedBatchResult(List<string> keywords, int maxCount)
+    private static BatchNoteResult CreateEmptyEnhancedBatchResult(List<string> keywords, int maxCount)
     {
         var emptyStats = new BatchProcessingStatistics(
             CompleteDataCount: 0,
@@ -413,10 +409,10 @@ public static class XiaoHongShuTools
             CalculatedAt: DateTime.UtcNow
         );
 
-        return new EnhancedBatchNoteResult(
-            NoteDetails: new List<NoteDetail>(),
-            FailedNotes: new List<(string, string)> {(string.Join(", ", keywords), "批量获取失败")},
-            TotalProcessed: 0,
+        return new BatchNoteResult(
+            SuccessfulNotes: [],
+            FailedNotes: [(string.Join(", ", keywords), "批量获取失败")],
+            ProcessedCount: 0,
             ProcessingTime: TimeSpan.Zero,
             OverallQuality: DataQuality.Minimal,
             Statistics: emptyStats,
@@ -427,7 +423,7 @@ public static class XiaoHongShuTools
     /// <summary>
     /// 创建错误的增强批量结果
     /// </summary>
-    private static EnhancedBatchNoteResult CreateErrorEnhancedBatchResult(List<string> keywords, int maxCount, Exception ex)
+    private static BatchNoteResult CreateErrorEnhancedBatchResult(List<string> keywords, int maxCount, Exception ex)
     {
         var errorStats = new BatchProcessingStatistics(
             CompleteDataCount: 0,
@@ -446,10 +442,10 @@ public static class XiaoHongShuTools
             CalculatedAt: DateTime.UtcNow
         );
 
-        return new EnhancedBatchNoteResult(
-            NoteDetails: new List<NoteDetail>(),
-            FailedNotes: new List<(string, string)> {(string.Join(", ", keywords), $"批量获取异常: {ex.Message}")},
-            TotalProcessed: 0,
+        return new BatchNoteResult(
+            SuccessfulNotes: [],
+            FailedNotes: [(string.Join(", ", keywords), $"批量获取异常: {ex.Message}")],
+            ProcessedCount: 0,
             ProcessingTime: TimeSpan.Zero,
             OverallQuality: DataQuality.Minimal,
             Statistics: errorStats,
@@ -458,28 +454,8 @@ public static class XiaoHongShuTools
     }
 
     /// <summary>
-    /// 验证用户ID格式的有效性
-    /// </summary>
-    /// <param name="userId">待验证的用户ID</param>
-    /// <returns>是否为有效的用户ID格式</returns>
-    private static bool IsValidUserId(string userId)
-    {
-        if (string.IsNullOrEmpty(userId))
-            return false;
-
-        // 小红书用户ID通常特征：
-        // 1. 长度在20-40字符之间
-        // 2. 包含数字和字母（通常是十六进制格式）
-        if (userId.Length is < 20 or > 40)
-            return false;
-
-        // 检查是否为有效的十六进制字符或字母数字组合
-        return System.Text.RegularExpressions.Regex.IsMatch(userId, @"^[a-fA-F0-9]+$") ||
-               System.Text.RegularExpressions.Regex.IsMatch(userId, @"^[a-zA-Z0-9]+$");
-    }
-
-    /// <summary>
     /// 验证笔记类型和文件路径的一致性
+    /// 简化验证逻辑，只支持Image和Video两种主要类型
     /// </summary>
     /// <param name="noteType">笔记类型</param>
     /// <param name="imagePaths">图片路径列表</param>
@@ -493,24 +469,52 @@ public static class XiaoHongShuTools
 
         return noteType switch
         {
-            NoteType.Image => hasVideo 
+            NoteType.Image => hasVideo
                 ? (false, "❌ 图文笔记不能包含视频文件")
                 : (true, string.Empty),
-            
-            NoteType.Video => hasImages 
+
+            NoteType.Video => hasImages
                 ? (false, "❌ 视频笔记不能包含图片文件")
-                : !hasVideo 
+                : !hasVideo
                     ? (false, "❌ 视频笔记必须包含视频文件")
                     : (true, string.Empty),
-            
-            NoteType.Article => hasImages || hasVideo
-                ? (false, "❌ 长文笔记不能包含图片或视频文件")
-                : (true, string.Empty),
-            
+
             NoteType.Unknown => (false, "❌ 笔记类型不能为未知"),
-            
+
             _ => (false, "❌ 不支持的笔记类型")
         };
     }
-
+    
 }
+
+/// <summary>
+/// 推荐结果MCP返回值 - 统一的MCP工具返回结果
+/// </summary>
+/// <param name="Recommendations">推荐数据</param>
+/// <param name="Success">是否成功</param>
+/// <param name="Message">结果消息</param>
+/// <param name="ErrorCode">错误代码</param>
+/// <param name="ValidationDetails">验证详情</param>
+public record RecommendResultMcp(
+    RecommendListResult? Recommendations,
+    bool Success,
+    string Message,
+    string? ErrorCode = null,
+    Dictionary<string, object>? ValidationDetails = null
+);
+/// <summary>
+/// 搜索结果MCP返回值 - 统一的MCP工具返回结果
+/// 为SearchNotesEnhanced工具设计
+/// </summary>
+/// <param name="SearchResult">搜索结果数据</param>
+/// <param name="Success">是否成功</param>
+/// <param name="Message">结果消息</param>
+/// <param name="ErrorCode">错误代码</param>
+/// <param name="Performance">性能指标和详情</param>
+public record SearchResultMcp(
+    SearchResult? SearchResult,
+    bool Success,
+    string Message,
+    string? ErrorCode = null,
+    Dictionary<string, object>? Performance = null
+);

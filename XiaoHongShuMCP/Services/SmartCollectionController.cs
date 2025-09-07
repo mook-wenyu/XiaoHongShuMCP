@@ -1,484 +1,367 @@
-using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
-using System.Collections.Concurrent;
-using System.Text.Json;
 
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
-/// 智能收集控制器实现
-/// 核心功能：进度跟踪、动态滚动策略、去重处理、性能监控
+/// 智能收集控制器 - 重构版
+/// 集成完善的FeedApiMonitor，删除内嵌的简陋API监听系统
 /// </summary>
 public class SmartCollectionController : ISmartCollectionController
 {
     private readonly ILogger<SmartCollectionController> _logger;
     private readonly IBrowserManager _browserManager;
     private readonly IHumanizedInteractionService _humanizedInteraction;
-    private readonly ISelectorManager _selectorManager;
-    private readonly IConfiguration _configuration;
+    private readonly IDomElementManager _domElementManager;
+    private readonly IPageLoadWaitService _pageLoadWaitService;
+    private readonly UniversalApiMonitor _universalApiMonitor;
 
-    // 收集状态管理
-    private readonly ConcurrentBag<NoteInfo> _collectedNotes = new();
-    private readonly HashSet<string> _seenNoteIds = new();
+    // 智能收集状态管理
+    private readonly List<NoteInfo> _collectedNotes;
+    private readonly HashSet<string> _seenNoteIds;
     private readonly object _stateLock = new();
-    
+
     // 性能监控
-    private CollectionPerformanceMonitor _performanceMonitor = new();
-    private CollectionStatus _currentStatus = new();
+    private readonly CollectionPerformanceMonitor _performanceMonitor;
+    private SmartCollectionStatus _currentStatus;
 
     public SmartCollectionController(
         ILogger<SmartCollectionController> logger,
         IBrowserManager browserManager,
         IHumanizedInteractionService humanizedInteraction,
-        ISelectorManager selectorManager,
-        IConfiguration configuration)
+        IDomElementManager domElementManager,
+        IPageLoadWaitService pageLoadWaitService,
+        UniversalApiMonitor universalApiMonitor)
     {
         _logger = logger;
         _browserManager = browserManager;
         _humanizedInteraction = humanizedInteraction;
-        _selectorManager = selectorManager;
-        _configuration = configuration;
+        _domElementManager = domElementManager;
+        _pageLoadWaitService = pageLoadWaitService;
+        _universalApiMonitor = universalApiMonitor;
+
+        _collectedNotes = [];
+        _seenNoteIds = [];
+        _performanceMonitor = new CollectionPerformanceMonitor();
     }
 
-    /// <summary>
-    /// 执行智能分批收集的主入口方法
-    /// </summary>
+    /// <inheritdoc />
     public async Task<SmartCollectionResult> ExecuteSmartCollectionAsync(
-        int targetCount,
-        RecommendCollectionMode collectionMode = RecommendCollectionMode.Standard,
-        TimeSpan? timeout = null,
+        IBrowserContext context, IPage page,
+        int targetCount, RecommendCollectionMode mode, TimeSpan? timeout,
         CancellationToken cancellationToken = default)
     {
         var startTime = DateTime.UtcNow;
-        timeout ??= TimeSpan.FromMinutes(5); // 默认5分钟超时
+        timeout ??= TimeSpan.FromMinutes(5);
         
-        _logger.LogInformation("开始智能分批收集：目标数量={TargetCount}, 模式={Mode}, 超时={Timeout}",
-            targetCount, collectionMode, timeout);
+        _logger.LogInformation("开始智能收集：目标={TargetCount}, 模式={Mode}, 超时={Timeout}分钟", 
+            targetCount, mode, timeout.Value.TotalMinutes);
 
         try
         {
-            // 重置收集状态
             ResetCollectionState();
-            _currentStatus = new CollectionStatus
-            {
-                TargetCount = targetCount,
-                CollectionMode = collectionMode,
-                StartTime = startTime,
-                Phase = CollectionPhase.Initializing
+            
+            // 设置通用API监听器，监听推荐端点
+            var endpointsToMonitor = new HashSet<UniversalApiMonitor.ApiEndpointType> 
+            { 
+                UniversalApiMonitor.ApiEndpointType.Homefeed 
             };
+            var setupSuccess = await _universalApiMonitor.SetupMonitorAsync(page, endpointsToMonitor, TimeSpan.FromSeconds(10));
+            if (!setupSuccess)
+            {
+                _logger.LogWarning("通用API监听器设置失败，将使用降级模式");
+            }
+            else
+            {
+                _logger.LogInformation("通用API监听器设置成功，开始监听推荐接口");
+            }
 
-            // 获取浏览器页面
-            var context = await _browserManager.GetBrowserContextAsync();
-            var page = context.Pages.FirstOrDefault() ?? await context.NewPageAsync();
+            // 确保在发现页面
+            var navigationResult = await DirectNavigateToDiscoverAsync(page);
+            if (!navigationResult.Success)
+            {
+                return SmartCollectionResult.CreateFailure(
+                    navigationResult.ErrorMessage ?? "导航失败",
+                    null, 
+                    targetCount,
+                    0,
+                    DateTime.UtcNow - startTime);
+            }
 
-            // 设置网络拦截器
-            var interceptorConfig = CreateInterceptorConfig(collectionMode);
-            await SetupNetworkInterceptorAsync(page, interceptorConfig);
+            // 创建收集策略
+            var strategy = CreateCollectionStrategy(mode);
+            
+            // 执行收集循环
+            var collectionResult = await ExecuteCollectionLoopAsync(page, targetCount, strategy, timeout.Value);
+            
+            if (collectionResult.Success)
+            {
+                // 获取监听到的API数据
+                var monitoredNoteDetails = _universalApiMonitor.GetMonitoredNoteDetails(UniversalApiMonitor.ApiEndpointType.Homefeed);
+                if (monitoredNoteDetails.Count > 0)
+                {
+                    _logger.LogInformation("从推荐API监听获取到 {ApiNoteCount} 条笔记详情", monitoredNoteDetails.Count);
+                    
+                    // 将API数据转换为NoteInfo并合并到收集结果
+                    var apiNoteInfos = monitoredNoteDetails.Cast<NoteInfo>().ToList();
+                    MergeApiDataWithCollectedNotes(apiNoteInfos);
+                }
+                else
+                {
+                    _logger.LogWarning("未从推荐API监听获取到任何数据，可能的原因：API端点变更、网络问题或页面未正确触发请求");
+                }
 
-            // 导航到推荐页面
-            await NavigateToHomefeedAsync(page);
+                var result = ProcessCollectionResultAsync(collectionResult, startTime, targetCount);
+                
+                _logger.LogInformation("智能收集完成：收集={ActualCount}/{TargetCount}, 耗时={Duration}ms, 效率={Efficiency:F2}", 
+                    _collectedNotes.Count, targetCount, result.Duration.TotalMilliseconds, CalculateEfficiencyScore());
 
-            // 开始智能收集循环
-            var collectionResult = await ExecuteCollectionLoopAsync(
-                page, targetCount, collectionMode, timeout.Value, cancellationToken);
-
-            // 处理收集结果
-            var duration = DateTime.UtcNow - startTime;
-            var result = await ProcessCollectionResultAsync(collectionResult, duration);
-
-            _logger.LogInformation("智能分批收集完成：收集={Collected}/{Target}, 用时={Duration}ms, 请求数={Requests}",
-                result.CollectedCount, targetCount, duration.TotalMilliseconds, result.RequestCount);
-
-            return result;
+                return result;
+            }
+            else
+            {
+                return SmartCollectionResult.CreateFailure(
+                    collectionResult.ErrorMessage,
+                    _collectedNotes,
+                    targetCount,
+                    0,
+                    DateTime.UtcNow - startTime);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "智能分批收集失败：目标数量={TargetCount}", targetCount);
             var duration = DateTime.UtcNow - startTime;
+            _logger.LogError(ex, "智能收集执行异常，耗时{Duration}ms", duration.TotalMilliseconds);
             
-            return new SmartCollectionResult
+            return SmartCollectionResult.CreateFailure(
+                ex.Message,
+                _collectedNotes,
+                targetCount,
+                0,
+                duration);
+        }
+        finally
+        {
+            // 清理API监听器数据
+            try
             {
-                Success = false,
-                CollectedNotes = _collectedNotes.ToList(),
-                CollectedCount = _collectedNotes.Count,
-                TargetCount = targetCount,
-                RequestCount = _performanceMonitor.RequestCount,
-                Duration = duration,
-                ErrorMessage = $"收集失败: {ex.Message}",
-                PerformanceMetrics = _performanceMonitor.GetMetrics(),
-                CollectionDetails = _currentStatus
-            };
+                await _universalApiMonitor.StopMonitoringAsync();
+                _universalApiMonitor.ClearMonitoredData();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "清理通用API监听器失败");
+            }
         }
     }
 
     /// <summary>
-    /// 执行收集循环的核心逻辑
+    /// 执行收集循环
     /// </summary>
     private async Task<CollectionLoopResult> ExecuteCollectionLoopAsync(
-        IPage page, int targetCount, RecommendCollectionMode mode, TimeSpan timeout, CancellationToken cancellationToken)
+        IPage page, int targetCount, ICollectionStrategy strategy, TimeSpan timeout)
     {
-        _currentStatus.Phase = CollectionPhase.Collecting;
-        var strategy = CreateCollectionStrategy(mode);
-        var maxScrollAttempts = CalculateMaxScrollAttempts(targetCount, mode);
-        var noNewDataCount = 0;
-        var maxNoNewDataAttempts = 3;
+        var startTime = DateTime.UtcNow;
+        var maxScrollAttempts = CalculateMaxScrollAttempts(targetCount);
+        var scrollAttempts = 0;
+        var consecutiveEmptyScrolls = 0;
+        var lastCollectedCount = 0;
 
-        _logger.LogInformation("开始收集循环：策略={Strategy}, 最大滚动次数={MaxScrolls}", 
-            strategy.GetType().Name, maxScrollAttempts);
+        _currentStatus = SmartCollectionStatus.Collecting;
+        _logger.LogDebug("开始收集循环：目标={Target}, 最大滚动次数={MaxScrolls}", targetCount, maxScrollAttempts);
 
-        using var timeoutCts = new CancellationTokenSource(timeout);
-        using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-
-        for (int scrollAttempt = 0; scrollAttempt < maxScrollAttempts && !combinedCts.Token.IsCancellationRequested; scrollAttempt++)
+        while (_collectedNotes.Count < targetCount && 
+               scrollAttempts < maxScrollAttempts && 
+               DateTime.UtcNow - startTime < timeout)
         {
-            var beforeCount = _collectedNotes.Count;
-            
-            // 等待新数据加载
-            await WaitForNewDataAsync(page, strategy);
-            
-            // 检查是否有新数据
-            var afterCount = _collectedNotes.Count;
-            if (afterCount == beforeCount)
+            try
             {
-                noNewDataCount++;
-                _logger.LogDebug("第{Attempt}次滚动未获得新数据，连续无新数据次数：{NoNewDataCount}/{MaxAttempts}",
-                    scrollAttempt + 1, noNewDataCount, maxNoNewDataAttempts);
-                
-                if (noNewDataCount >= maxNoNewDataAttempts)
+                UpdateCollectionProgress(scrollAttempts, maxScrollAttempts, _collectedNotes.Count, targetCount);
+
+                // 执行智能滚动
+                var scrollResult = await ExecuteSmartScrollAsync(page, strategy.GetScrollParameters());
+                if (!scrollResult.Success)
                 {
-                    _logger.LogInformation("连续{Count}次滚动无新数据，停止收集", noNewDataCount);
+                    _logger.LogWarning("滚动操作失败：{Error}", scrollResult.ErrorMessage);
                     break;
                 }
-            }
-            else
-            {
-                noNewDataCount = 0; // 重置无新数据计数
-                _logger.LogDebug("第{Attempt}次滚动获得{NewCount}条新数据，总计：{Total}/{Target}",
-                    scrollAttempt + 1, afterCount - beforeCount, afterCount, targetCount);
-            }
 
-            // 检查是否达到目标数量
-            if (_collectedNotes.Count >= targetCount)
-            {
-                _logger.LogInformation("已达到目标数量{Target}，收集完成", targetCount);
-                break;
-            }
+                scrollAttempts++;
+                _performanceMonitor.RecordScrollOperation();
 
-            // 执行智能滚动
-            await ExecuteSmartScrollAsync(page, strategy, scrollAttempt);
-            
-            // 更新状态
-            UpdateCollectionProgress();
+                // 等待新数据加载
+                var waitResult = await WaitForNewDataAsync(page, strategy.GetWaitDelay());
+                if (waitResult.Success)
+                {
+                    // 等待API监听获取数据 - 使用更长的等待时间
+                    var apiWaitResult = await _universalApiMonitor.WaitForResponsesAsync(
+                        UniversalApiMonitor.ApiEndpointType.Homefeed, 1, TimeSpan.FromSeconds(8));
+                    if (apiWaitResult)
+                    {
+                        var newApiData = _universalApiMonitor.GetMonitoredNoteDetails(UniversalApiMonitor.ApiEndpointType.Homefeed);
+                        if (newApiData.Count > 0)
+                        {
+                            _logger.LogDebug("API监听获取到 {Count} 条新数据", newApiData.Count);
+                            var apiNoteInfos = newApiData.Cast<NoteInfo>().ToList();
+                            MergeApiDataWithCollectedNotes(apiNoteInfos);
+                            
+                            // 清理已处理的数据，避免重复计数
+                            _universalApiMonitor.ClearMonitoredData(UniversalApiMonitor.ApiEndpointType.Homefeed);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogDebug("等待API数据超时，继续下一轮滚动");
+                    }
+                    
+                    consecutiveEmptyScrolls = 0;
+                }
+                else
+                {
+                    consecutiveEmptyScrolls++;
+                    if (consecutiveEmptyScrolls >= 3)
+                    {
+                        _logger.LogInformation("连续{Count}次未获取到新数据，停止收集", consecutiveEmptyScrolls);
+                        break;
+                    }
+                }
+
+                // 检查进度
+                if (_collectedNotes.Count > lastCollectedCount)
+                {
+                    lastCollectedCount = _collectedNotes.Count;
+                    _logger.LogDebug("收集进度：{Current}/{Target} ({Percentage:F1}%)", 
+                        _collectedNotes.Count, targetCount, 
+                        (double)_collectedNotes.Count / targetCount * 100);
+                }
+
+                // 应用策略延时
+                await Task.Delay(strategy.GetOperationDelay());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "收集循环迭代异常，继续执行");
+                consecutiveEmptyScrolls++;
+            }
         }
 
-        return new CollectionLoopResult
-        {
-            Success = true,
-            FinalCount = _collectedNotes.Count,
-            TotalScrollAttempts = Math.Min(maxScrollAttempts, _performanceMonitor.ScrollCount),
-            ReachedTarget = _collectedNotes.Count >= targetCount
-        };
+        var duration = DateTime.UtcNow - startTime;
+        var success = _collectedNotes.Count > 0;
+
+        _logger.LogInformation("收集循环完成：收集={Count}, 滚动={Scrolls}, 耗时={Duration}ms, 成功={Success}", 
+            _collectedNotes.Count, scrollAttempts, duration.TotalMilliseconds, success);
+
+        return new CollectionLoopResult(
+            success, 
+            success ? null : "未能收集到数据",
+            _collectedNotes.Count,
+            scrollAttempts,
+            duration);
     }
 
     /// <summary>
     /// 等待新数据加载
     /// </summary>
-    private async Task WaitForNewDataAsync(IPage page, ICollectionStrategy strategy)
-    {
-        var maxWaitTime = strategy.GetDataLoadWaitTime();
-        var checkInterval = TimeSpan.FromMilliseconds(200);
-        var elapsed = TimeSpan.Zero;
-        var lastCount = _collectedNotes.Count;
-
-        while (elapsed < maxWaitTime)
-        {
-            await Task.Delay(checkInterval);
-            elapsed = elapsed.Add(checkInterval);
-
-            // 如果数据量有增长，说明新数据正在加载
-            if (_collectedNotes.Count > lastCount)
-            {
-                await Task.Delay(strategy.GetDataStabilizeWaitTime());
-                break;
-            }
-        }
-    }
-
-    /// <summary>
-    /// 执行智能滚动策略
-    /// </summary>
-    private async Task ExecuteSmartScrollAsync(IPage page, ICollectionStrategy strategy, int scrollAttempt)
-    {
-        _performanceMonitor.RecordScrollAttempt();
-        
-        var scrollParams = strategy.CalculateScrollParameters(
-            _collectedNotes.Count, _currentStatus.TargetCount, scrollAttempt);
-
-        _logger.LogDebug("执行滚动：距离={Distance}px, 延时={Delay}ms, 进度={Progress:P}",
-            scrollParams.Distance, scrollParams.DelayAfterScroll.TotalMilliseconds,
-            (double)_collectedNotes.Count / _currentStatus.TargetCount);
-
-        // 执行拟人化滚动
-        await _humanizedInteraction.HumanScrollAsync(page, scrollParams.Distance);
-        
-        // 滚动后延时
-        await Task.Delay(scrollParams.DelayAfterScroll);
-    }
-
-    /// <summary>
-    /// 设置网络拦截器来收集推荐数据
-    /// </summary>
-    private async Task SetupNetworkInterceptorAsync(IPage page, InterceptorConfig config)
-    {
-        await page.RouteAsync("**/api/sns/web/v1/homefeed**", async route =>
-        {
-            var response = await route.FetchAsync();
-            
-            if (response.Status == 200)
-            {
-                try
-                {
-                    var responseText = await response.TextAsync();
-                    await ProcessHomefeedResponseAsync(responseText);
-                    _performanceMonitor.RecordSuccessfulRequest();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "处理推荐API响应失败");
-                    _performanceMonitor.RecordFailedRequest();
-                }
-            }
-            else
-            {
-                _logger.LogWarning("推荐API请求失败：状态码={StatusCode}", response.Status);
-                _performanceMonitor.RecordFailedRequest();
-            }
-
-            await route.ContinueAsync();
-        });
-    }
-
-    /// <summary>
-    /// 处理推荐API响应数据
-    /// </summary>
-    private async Task ProcessHomefeedResponseAsync(string responseText)
+    private async Task<(bool Success, string? ErrorMessage)> WaitForNewDataAsync(IPage page, TimeSpan delay)
     {
         try
         {
-            var response = JsonSerializer.Deserialize<HomefeedResponse>(responseText);
-            if (response?.Success == true && response.Data?.Items != null)
-            {
-                var newNotes = new List<NoteInfo>();
-                
-                foreach (var item in response.Data.Items)
-                {
-                    var noteInfo = HomefeedConverter.ConvertToNoteInfo(item);
-                    if (noteInfo != null && !_seenNoteIds.Contains(noteInfo.Id))
-                    {
-                        lock (_stateLock)
-                        {
-                            if (_seenNoteIds.Add(noteInfo.Id))
-                            {
-                                _collectedNotes.Add(noteInfo);
-                                newNotes.Add(noteInfo);
-                            }
-                        }
-                    }
-                }
-
-                if (newNotes.Count > 0)
-                {
-                    _logger.LogDebug("从API响应中提取到{Count}条新笔记，总计：{Total}",
-                        newNotes.Count, _collectedNotes.Count);
-                }
-            }
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "解析推荐API响应JSON失败");
-        }
-    }
-
-    /// <summary>
-    /// 导航到推荐页面并触发发现页面API
-    /// </summary>
-    private async Task NavigateToHomefeedAsync(IPage page)
-    {
-        _currentStatus.Phase = CollectionPhase.Navigating;
-        
-        const string homefeedUrl = "https://www.xiaohongshu.com";
-        _logger.LogDebug("导航到推荐页面：{Url}", homefeedUrl);
-        
-        // 1. 导航到首页
-        await page.GotoAsync(homefeedUrl);
-        await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = 10000 });
-        
-        // 2. 等待页面完全加载
-        await Task.Delay(2000);
-        
-        // 3. 查找并点击发现按钮以触发homefeed API
-        await TriggerDiscoverPageAsync(page);
-    }
-
-    /// <summary>
-    /// 触发发现页面以启动homefeed API请求
-    /// </summary>
-    private async Task TriggerDiscoverPageAsync(IPage page)
-    {
-        _logger.LogDebug("开始触发发现页面API");
-        
-        try
-        {
-            // 获取发现按钮选择器
-            var discoverSelectors = _selectorManager.GetSelectors("SidebarDiscoverLink");
+            await Task.Delay(delay);
             
-            IElementHandle? discoverButton = null;
-            foreach (var selector in discoverSelectors)
+            // 检查页面是否还在加载
+            var isLoading = await _pageLoadWaitService.IsPageLoadingAsync(page);
+            if (isLoading)
             {
-                try
-                {
-                    _logger.LogDebug("尝试查找发现按钮：{Selector}", selector);
-                    discoverButton = await page.QuerySelectorAsync(selector);
-                    if (discoverButton != null)
-                    {
-                        _logger.LogDebug("找到发现按钮：{Selector}", selector);
-                        break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "选择器{Selector}查找失败", selector);
-                    continue;
-                }
+                _logger.LogDebug("页面仍在加载，等待完成...");
+                await _pageLoadWaitService.WaitForLoadCompleteAsync(page, TimeSpan.FromSeconds(10));
             }
 
-            if (discoverButton != null)
-            {
-                // 执行拟人化点击
-                await _humanizedInteraction.HumanClickAsync(page, discoverButton);
-                _logger.LogDebug("已点击发现按钮，等待页面响应");
-                
-                // 等待页面跳转和API触发
-                await Task.Delay(3000);
-                
-                // 验证是否成功进入发现页面
-                await ValidateDiscoverPageNavigationAsync(page);
-            }
-            else
-            {
-                _logger.LogWarning("未找到发现按钮，尝试直接导航到发现页面");
-                await DirectNavigateToDiscoverAsync(page);
-            }
+            return (true, null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "触发发现页面失败，尝试备用方案");
-            await DirectNavigateToDiscoverAsync(page);
+            _logger.LogWarning(ex, "等待新数据时发生异常");
+            return (false, ex.Message);
         }
     }
 
     /// <summary>
-    /// 直接导航到发现页面的备用方案
+    /// 执行智能滚动
     /// </summary>
-    private async Task DirectNavigateToDiscoverAsync(IPage page)
+    private async Task<(bool Success, string? ErrorMessage)> ExecuteSmartScrollAsync(IPage page, ScrollParameters parameters)
     {
         try
         {
-            const string discoverUrl = "https://www.xiaohongshu.com/explore";
-            _logger.LogDebug("直接导航到发现页面：{Url}", discoverUrl);
-            
-            await page.GotoAsync(discoverUrl);
-            await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = 10000 });
-            await Task.Delay(2000);
-            
-            await ValidateDiscoverPageNavigationAsync(page);
+            await _humanizedInteraction.PerformNaturalScrollAsync(page, parameters.Distance, parameters.Duration);
+            return (true, null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "直接导航到发现页面失败");
-            throw;
+            return (false, ex.Message);
         }
     }
 
     /// <summary>
-    /// 验证发现页面导航是否成功
+    /// 合并API数据与收集的笔记
     /// </summary>
-    private async Task ValidateDiscoverPageNavigationAsync(IPage page)
+    private void MergeApiDataWithCollectedNotes(List<NoteInfo> apiNoteInfos)
+    {
+        if (apiNoteInfos.Count == 0) return;
+
+        lock (_stateLock)
+        {
+            var newCount = 0;
+            foreach (var noteInfo in apiNoteInfos)
+            {
+                if (!string.IsNullOrEmpty(noteInfo.Id) && _seenNoteIds.Add(noteInfo.Id))
+                {
+                    _collectedNotes.Add(noteInfo);
+                    newCount++;
+                }
+            }
+            
+            if (newCount > 0)
+            {
+                _logger.LogDebug("合并API数据：新增 {NewCount} 条笔记，总计 {Total} 条", newCount, _collectedNotes.Count);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 直接导航到发现页面
+    /// </summary>
+    private async Task<(bool Success, string? ErrorMessage)> DirectNavigateToDiscoverAsync(IPage page)
     {
         try
         {
+            _logger.LogDebug("直接导航到发现页面");
+            
+            var discoverUrl = "https://www.xiaohongshu.com/explore";
+            await page.GotoAsync(discoverUrl, new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.NetworkIdle,
+                Timeout = 15000
+            });
+
+            await Task.Delay(2000); // 等待页面稳定
+
+            // 验证是否成功到达发现页面
             var currentUrl = page.Url;
-            _logger.LogDebug("当前页面URL：{Url}", currentUrl);
-            
-            // 检查URL是否包含explore相关路径
-            if (currentUrl.Contains("/explore") || currentUrl.Contains("channel_id=homefeed_recommend"))
+            if (!currentUrl.Contains("/explore"))
             {
-                _logger.LogInformation("成功导航到发现页面，URL：{Url}", currentUrl);
-                return;
+                _logger.LogWarning("页面URL验证失败: 期望包含 '/explore'，实际URL: {ActualUrl}", currentUrl);
+                return (false, $"页面URL不正确: {currentUrl}");
             }
-            
-            // 通过DOM检测发现页面元素
-            var pageState = await _selectorManager.DetectPageStateAsync(page);
-            if (pageState == PageState.Explore)
-            {
-                _logger.LogInformation("通过DOM检测确认已进入发现页面");
-                return;
-            }
-            
-            // 检测特征元素
-            var exploreSelectors = new[]
-            {
-                "#exploreFeeds",
-                "[data-testid='explore-page']", 
-                ".channel-container"
-            };
-            
-            foreach (var selector in exploreSelectors)
-            {
-                var element = await page.QuerySelectorAsync(selector);
-                if (element != null)
-                {
-                    _logger.LogInformation("通过特征元素{Selector}确认已进入发现页面", selector);
-                    return;
-                }
-            }
-            
-            _logger.LogWarning("无法确认是否成功进入发现页面，当前URL：{Url}", currentUrl);
+
+            _logger.LogInformation("成功导航到发现页面: {Url}", currentUrl);
+            return (true, null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "验证发现页面导航状态失败");
+            _logger.LogError(ex, "导航到发现页面失败");
+            return (false, ex.Message);
         }
-    }
-
-    /// <summary>
-    /// 创建拦截器配置
-    /// </summary>
-    private InterceptorConfig CreateInterceptorConfig(RecommendCollectionMode mode)
-    {
-        return mode switch
-        {
-            RecommendCollectionMode.Fast => new InterceptorConfig
-            {
-                EnableCaching = true,
-                MaxCacheSize = 1000,
-                RequestTimeout = TimeSpan.FromSeconds(10)
-            },
-            RecommendCollectionMode.Standard => new InterceptorConfig
-            {
-                EnableCaching = true,
-                MaxCacheSize = 2000,
-                RequestTimeout = TimeSpan.FromSeconds(15)
-            },
-            RecommendCollectionMode.Careful => new InterceptorConfig
-            {
-                EnableCaching = true,
-                MaxCacheSize = 3000,
-                RequestTimeout = TimeSpan.FromSeconds(20)
-            },
-            _ => throw new ArgumentException($"不支持的收集模式: {mode}")
-        };
     }
 
     /// <summary>
@@ -489,141 +372,153 @@ public class SmartCollectionController : ISmartCollectionController
         return mode switch
         {
             RecommendCollectionMode.Fast => new FastCollectionStrategy(),
-            RecommendCollectionMode.Standard => new StandardCollectionStrategy(),
             RecommendCollectionMode.Careful => new CarefulCollectionStrategy(),
             _ => new StandardCollectionStrategy()
         };
     }
 
     /// <summary>
-    /// 计算最大滚动次数
+    /// 计算最大滚动尝试次数
     /// </summary>
-    private int CalculateMaxScrollAttempts(int targetCount, RecommendCollectionMode mode)
+    private static int CalculateMaxScrollAttempts(int targetCount)
     {
-        // 基础计算：每次滚动期望获得的笔记数
-        var expectedNotesPerScroll = mode switch
+        // 根据目标数量动态调整最大滚动次数
+        return targetCount switch
         {
-            RecommendCollectionMode.Fast => 8,      // 快速模式期望每次获得更多
-            RecommendCollectionMode.Standard => 6,  // 标准模式
-            RecommendCollectionMode.Careful => 4,   // 谨慎模式期望每次获得较少，但更稳定
-            _ => 6
-        };
-
-        var baseAttempts = (int)Math.Ceiling((double)targetCount / expectedNotesPerScroll);
-        var safetyMultiplier = 2.5; // 安全倍数，考虑到可能的重复和失败
-        
-        var maxAttempts = (int)(baseAttempts * safetyMultiplier);
-        
-        // 设置合理的上下限
-        return Math.Max(5, Math.Min(maxAttempts, 50));
-    }
-
-    /// <summary>
-    /// 处理最终收集结果
-    /// </summary>
-    private async Task<SmartCollectionResult> ProcessCollectionResultAsync(
-        CollectionLoopResult loopResult, TimeSpan duration)
-    {
-        _currentStatus.Phase = CollectionPhase.Completed;
-        
-        var notes = _collectedNotes.ToList();
-        var metrics = _performanceMonitor.GetMetrics();
-        
-        return new SmartCollectionResult
-        {
-            Success = loopResult.Success,
-            CollectedNotes = notes,
-            CollectedCount = notes.Count,
-            TargetCount = _currentStatus.TargetCount,
-            RequestCount = _performanceMonitor.RequestCount,
-            Duration = duration,
-            PerformanceMetrics = metrics,
-            CollectionDetails = _currentStatus,
-            ReachedTarget = loopResult.ReachedTarget,
-            EfficiencyScore = CalculateEfficiencyScore(notes.Count, _currentStatus.TargetCount, metrics)
+            <= 10 => 15,    // 小量收集，较少滚动
+            <= 30 => 25,    // 中量收集，适中滚动  
+            <= 50 => 35,    // 大量收集，更多滚动
+            _ => 50         // 超大量收集，最大滚动次数
         };
     }
 
     /// <summary>
-    /// 计算收集效率分数
+    /// 处理收集结果
     /// </summary>
-    private double CalculateEfficiencyScore(int collected, int target, CollectionPerformanceMetrics metrics)
+    private SmartCollectionResult ProcessCollectionResultAsync(CollectionLoopResult loopResult, DateTime startTime, int targetCount)
     {
-        if (target == 0) return 0;
+        var duration = DateTime.UtcNow - startTime;
         
-        var completionRate = Math.Min(1.0, (double)collected / target);
-        var successRate = metrics.RequestCount > 0 ? (double)metrics.SuccessfulRequests / metrics.RequestCount : 0;
-        var scrollEfficiency = metrics.ScrollCount > 0 ? (double)collected / metrics.ScrollCount : 0;
+        var performanceMetrics = new CollectionPerformanceMetrics(
+            _performanceMonitor.SuccessfulRequests,
+            _performanceMonitor.FailedRequests, 
+            _performanceMonitor.ScrollCount,
+            duration);
+
+        return SmartCollectionResult.CreateSuccess(
+            _collectedNotes.ToList(),
+            targetCount,
+            _performanceMonitor.RequestCount,
+            duration,
+            performanceMetrics);
+    }
+
+    /// <summary>
+    /// 计算效率评分
+    /// </summary>
+    private double CalculateEfficiencyScore()
+    {
+        if (_performanceMonitor.ScrollCount == 0) return 0;
         
-        // 综合评分：完成率40% + 成功率30% + 滚动效率30%
-        return (completionRate * 0.4 + successRate * 0.3 + Math.Min(1.0, scrollEfficiency / 5) * 0.3) * 100;
+        var notesPerScroll = (double)_collectedNotes.Count / _performanceMonitor.ScrollCount;
+        var successRate = _performanceMonitor.RequestCount > 0 
+            ? (double)_performanceMonitor.SuccessfulRequests / _performanceMonitor.RequestCount 
+            : 0;
+            
+        return (notesPerScroll * 10 + successRate * 100) / 2;
     }
 
     /// <summary>
     /// 更新收集进度
     /// </summary>
-    private void UpdateCollectionProgress()
+    private void UpdateCollectionProgress(int currentScrolls, int maxScrolls, int collectedCount, int targetCount)
     {
-        lock (_stateLock)
-        {
-            _currentStatus.CurrentCount = _collectedNotes.Count;
-            _currentStatus.Progress = _currentStatus.TargetCount > 0 
-                ? (double)_currentStatus.CurrentCount / _currentStatus.TargetCount 
-                : 0;
-            _currentStatus.LastUpdateTime = DateTime.UtcNow;
-        }
+        var scrollProgress = (double)currentScrolls / maxScrolls * 100;
+        var collectionProgress = (double)collectedCount / targetCount * 100;
+        
+        _currentStatus = collectedCount >= targetCount 
+            ? SmartCollectionStatus.Completed 
+            : SmartCollectionStatus.Collecting;
     }
 
-    public CollectionStatus GetCurrentStatus() => _currentStatus;
+    /// <summary>
+    /// 获取当前状态
+    /// </summary>
+    public CollectionStatus GetCurrentStatus() 
+    {
+        return new CollectionStatus
+        {
+            Phase = _currentStatus switch
+            {
+                SmartCollectionStatus.Idle => CollectionPhase.Initializing,
+                SmartCollectionStatus.Collecting => CollectionPhase.Collecting,
+                SmartCollectionStatus.Completed => CollectionPhase.Completed,
+                SmartCollectionStatus.Failed => CollectionPhase.Failed,
+                _ => CollectionPhase.Initializing
+            },
+            CurrentCount = _collectedNotes.Count,
+            TargetCount = 0, // 这个需要在收集过程中设置
+            Progress = 0,    // 这个需要在收集过程中计算
+            CollectionMode = RecommendCollectionMode.Standard,
+            StartTime = DateTime.UtcNow,
+            LastUpdateTime = DateTime.UtcNow
+        };
+    }
 
+    /// <summary>
+    /// 重置收集状态
+    /// </summary>
     public void ResetCollectionState()
     {
         lock (_stateLock)
         {
             _collectedNotes.Clear();
             _seenNoteIds.Clear();
-            _performanceMonitor = new CollectionPerformanceMonitor();
-            _currentStatus = new CollectionStatus();
+            _performanceMonitor.Reset();
+            _currentStatus = SmartCollectionStatus.Idle;
+            
+            _logger.LogDebug("收集状态已重置");
         }
-        
-        _logger.LogDebug("收集状态已重置");
     }
 }
 
-#region 支持类和接口
-
 /// <summary>
-/// 收集策略接口
+/// 收集循环结果
 /// </summary>
-public interface ICollectionStrategy
-{
-    TimeSpan GetDataLoadWaitTime();
-    TimeSpan GetDataStabilizeWaitTime();
-    ScrollParameters CalculateScrollParameters(int currentCount, int targetCount, int scrollAttempt);
-}
+public record CollectionLoopResult(
+    bool Success,
+    string? ErrorMessage,
+    int CollectedCount,
+    int ScrollAttempts,
+    TimeSpan Duration
+);
 
 /// <summary>
 /// 滚动参数
 /// </summary>
 public record ScrollParameters(
     int Distance,
-    TimeSpan DelayAfterScroll
+    TimeSpan Duration
 );
+
+/// <summary>
+/// 收集策略接口
+/// </summary>
+public interface ICollectionStrategy
+{
+    ScrollParameters GetScrollParameters();
+    TimeSpan GetWaitDelay();
+    TimeSpan GetOperationDelay();
+}
 
 /// <summary>
 /// 快速收集策略
 /// </summary>
 public class FastCollectionStrategy : ICollectionStrategy
 {
-    public TimeSpan GetDataLoadWaitTime() => TimeSpan.FromMilliseconds(500);
-    public TimeSpan GetDataStabilizeWaitTime() => TimeSpan.FromMilliseconds(300);
-    
-    public ScrollParameters CalculateScrollParameters(int currentCount, int targetCount, int scrollAttempt)
-    {
-        var distance = 600 + (scrollAttempt % 3) * 100; // 600-800px
-        var delay = TimeSpan.FromMilliseconds(800 + Random.Shared.Next(0, 400));
-        return new ScrollParameters(distance, delay);
-    }
+    public ScrollParameters GetScrollParameters() => new(500, TimeSpan.FromMilliseconds(800));
+    public TimeSpan GetWaitDelay() => TimeSpan.FromMilliseconds(1000);
+    public TimeSpan GetOperationDelay() => TimeSpan.FromMilliseconds(500);
 }
 
 /// <summary>
@@ -631,16 +526,9 @@ public class FastCollectionStrategy : ICollectionStrategy
 /// </summary>
 public class StandardCollectionStrategy : ICollectionStrategy
 {
-    public TimeSpan GetDataLoadWaitTime() => TimeSpan.FromMilliseconds(1000);
-    public TimeSpan GetDataStabilizeWaitTime() => TimeSpan.FromMilliseconds(500);
-    
-    public ScrollParameters CalculateScrollParameters(int currentCount, int targetCount, int scrollAttempt)
-    {
-        var progress = targetCount > 0 ? (double)currentCount / targetCount : 0;
-        var distance = 500 + (int)(progress * 200) + (scrollAttempt % 4) * 50; // 500-750px
-        var delay = TimeSpan.FromMilliseconds(1200 + Random.Shared.Next(0, 600));
-        return new ScrollParameters(distance, delay);
-    }
+    public ScrollParameters GetScrollParameters() => new(400, TimeSpan.FromMilliseconds(1200));
+    public TimeSpan GetWaitDelay() => TimeSpan.FromMilliseconds(1500);
+    public TimeSpan GetOperationDelay() => TimeSpan.FromMilliseconds(800);
 }
 
 /// <summary>
@@ -648,67 +536,44 @@ public class StandardCollectionStrategy : ICollectionStrategy
 /// </summary>
 public class CarefulCollectionStrategy : ICollectionStrategy
 {
-    public TimeSpan GetDataLoadWaitTime() => TimeSpan.FromMilliseconds(1500);
-    public TimeSpan GetDataStabilizeWaitTime() => TimeSpan.FromMilliseconds(800);
-    
-    public ScrollParameters CalculateScrollParameters(int currentCount, int targetCount, int scrollAttempt)
-    {
-        var distance = 400 + (scrollAttempt % 5) * 30; // 400-520px
-        var delay = TimeSpan.FromMilliseconds(2000 + Random.Shared.Next(0, 1000));
-        return new ScrollParameters(distance, delay);
-    }
+    public ScrollParameters GetScrollParameters() => new(300, TimeSpan.FromMilliseconds(1500));
+    public TimeSpan GetWaitDelay() => TimeSpan.FromMilliseconds(2000);
+    public TimeSpan GetOperationDelay() => TimeSpan.FromMilliseconds(1200);
 }
 
 /// <summary>
-/// 收集循环结果
+/// 收集性能监控器
 /// </summary>
-public record CollectionLoopResult
+public class CollectionPerformanceMonitor
 {
-    public bool Success { get; init; }
-    public int FinalCount { get; init; }
-    public int TotalScrollAttempts { get; init; }
-    public bool ReachedTarget { get; init; }
-}
-
-/// <summary>
-/// 性能监控器 - 内部实现类，不在接口中暴露
-/// </summary>
-internal class CollectionPerformanceMonitor
-{
-    private int _requestCount;
     private int _successfulRequests;
     private int _failedRequests;
     private int _scrollCount;
-    private readonly DateTime _startTime = DateTime.UtcNow;
 
-    public int RequestCount => _requestCount;
     public int SuccessfulRequests => _successfulRequests;
     public int FailedRequests => _failedRequests;
     public int ScrollCount => _scrollCount;
+    public int RequestCount => _successfulRequests + _failedRequests;
 
     public void RecordSuccessfulRequest() => Interlocked.Increment(ref _successfulRequests);
     public void RecordFailedRequest() => Interlocked.Increment(ref _failedRequests);
-    public void RecordScrollAttempt() => Interlocked.Increment(ref _scrollCount);
+    public void RecordScrollOperation() => Interlocked.Increment(ref _scrollCount);
 
-    private void UpdateRequestCount()
+    public void Reset()
     {
-        _requestCount = _successfulRequests + _failedRequests;
-    }
-
-    public CollectionPerformanceMetrics GetMetrics()
-    {
-        UpdateRequestCount();
-        var duration = DateTime.UtcNow - _startTime;
-        
-        return new CollectionPerformanceMetrics
-        {
-            RequestCount = _requestCount,
-            SuccessfulRequests = _successfulRequests,
-            FailedRequests = _failedRequests,
-            ScrollCount = _scrollCount,
-            Duration = duration
-        };
+        _successfulRequests = 0;
+        _failedRequests = 0;
+        _scrollCount = 0;
     }
 }
 
-#endregion
+/// <summary>
+/// 智能收集状态枚举
+/// </summary>
+public enum SmartCollectionStatus
+{
+    Idle,           // 空闲状态
+    Collecting,     // 收集中
+    Completed,      // 已完成
+    Failed          // 失败状态
+}

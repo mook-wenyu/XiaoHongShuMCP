@@ -7,11 +7,11 @@ namespace XiaoHongShuMCP.Services;
 /// </summary>
 public abstract class BaseTextInputStrategy : ITextInputStrategy
 {
-    protected readonly IDelayManager _delayManager;
+    protected readonly IDelayManager delayManager;
     
     protected BaseTextInputStrategy(IDelayManager delayManager)
     {
-        _delayManager = delayManager;
+        this.delayManager = delayManager;
     }
     
     /// <inheritdoc />
@@ -35,8 +35,8 @@ public abstract class BaseTextInputStrategy : ITextInputStrategy
     protected int GetSemanticUnitReviewDelay(string unit)
     {
         return unit.Length > 4 || ContainsEndPunctuation(unit) 
-            ? _delayManager.GetReviewPauseDelay() 
-            : _delayManager.GetSemanticUnitDelay();
+            ? delayManager.GetReviewPauseDelay() 
+            : delayManager.GetSemanticUnitDelay();
     }
 }
 
@@ -78,7 +78,7 @@ public class RegularInputStrategy : BaseTextInputStrategy
             await element.ClickAsync();
             
             // 2. 初始思考停顿
-            await Task.Delay(_delayManager.GetThinkingPauseDelay());
+            await Task.Delay(delayManager.GetThinkingPauseDelay());
             
             // 3. 智能分割文本为语义单位
             var semanticUnits = SmartTextSplitter.SplitBySemanticUnits(text);
@@ -91,14 +91,14 @@ public class RegularInputStrategy : BaseTextInputStrategy
                 // 思考停顿（每个语义单位前）
                 if (i > 0)
                 {
-                    await Task.Delay(_delayManager.GetThinkingPauseDelay());
+                    await Task.Delay(delayManager.GetThinkingPauseDelay());
                 }
                 
                 // 快速连续输入整个语义单位
                 foreach (var character in unit)
                 {
                     await page.Keyboard.TypeAsync(character.ToString());
-                    await Task.Delay(_delayManager.GetCharacterTypingDelay());
+                    await Task.Delay(delayManager.GetCharacterTypingDelay());
                 }
                 
                 // 检查停顿
@@ -149,7 +149,7 @@ public class ContentEditableInputStrategy : BaseTextInputStrategy
         {
             // 1. 点击元素获得焦点
             await element.ClickAsync();
-            await Task.Delay(_delayManager.GetThinkingPauseDelay());
+            await Task.Delay(delayManager.GetThinkingPauseDelay());
             
             // 2. 确保元素处于可编辑状态
             await page.EvaluateAsync(@"(element) => {
@@ -172,11 +172,11 @@ public class ContentEditableInputStrategy : BaseTextInputStrategy
                 // 思考停顿
                 if (i > 0)
                 {
-                    await Task.Delay(_delayManager.GetThinkingPauseDelay());
+                    await Task.Delay(delayManager.GetThinkingPauseDelay());
                 }
                 
                 // 使用Playwright的type方法，它能正确处理contenteditable
-                await element.TypeAsync(unit, new() { Delay = _delayManager.GetCharacterTypingDelay() });
+                await element.TypeAsync(unit, new() { Delay = delayManager.GetCharacterTypingDelay() });
                 
                 // 检查停顿
                 var reviewDelay = GetSemanticUnitReviewDelay(unit);

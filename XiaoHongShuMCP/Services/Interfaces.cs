@@ -1,10 +1,10 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
-/// 小红书核心服务接口 - 重构版 v3.0
-/// 简化接口，移除多余参数，基于关键词的统一查找模式
+/// 小红书核心服务接口
 /// </summary>
 public interface IXiaoHongShuService
 {
@@ -31,7 +31,7 @@ public interface IXiaoHongShuService
     /// <param name="autoExport">是否自动导出到Excel</param>
     /// <param name="exportFileName">导出文件名（可选）</param>
     /// <returns>增强的批量笔记结果，包含统计分析和导出信息</returns>
-    Task<OperationResult<EnhancedBatchNoteResult>> BatchGetNoteDetailsAsync(
+    Task<OperationResult<BatchNoteResult>> BatchGetNoteDetailsAsync(
         List<string> keywords,
         int maxCount = 10,
         bool includeComments = false,
@@ -87,16 +87,41 @@ public interface IXiaoHongShuService
     Task<OperationResult<InteractionResult>> FavoriteNoteAsync(
         List<string> keywords,
         bool forceAction = false);
+
+
+    /// <summary>
+    /// 执行搜索笔记功能 - 拟人化操作与API监听结合
+    /// 先导航到探索页面，模拟用户输入搜索关键词，然后使用网络监听捕获API响应数据
+    /// 实现真实用户行为与结构化数据获取的完美结合
+    /// </summary>
+    /// <param name="keyword">搜索关键词</param>
+    /// <param name="maxResults">最大结果数量，默认20</param>
+    /// <param name="sortBy">排序方式：comprehensive(综合), latest(最新), most_liked(最多点赞)</param>
+    /// <param name="noteType">笔记类型：all(不限), video(视频), image(图文)</param>
+    /// <param name="publishTime">发布时间：all(不限), day(一天内), week(一周内), half_year(半年内)</param>
+    /// <param name="includeAnalytics">是否包含数据分析，默认true</param>
+    /// <param name="autoExport">是否自动导出Excel，默认true</param>
+    /// <param name="exportFileName">导出文件名，默认自动生成</param>
+    /// <returns>包含搜索结果、统计分析和导出信息的增强搜索结果</returns>
+    Task<OperationResult<SearchResult>> SearchNotesAsync(
+        string keyword,
+        int maxResults = 20,
+        string sortBy = "comprehensive",
+        string noteType = "all",
+        string publishTime = "all",
+        bool includeAnalytics = true,
+        bool autoExport = true,
+        string? exportFileName = null);
 }
 /// <summary>
-/// 账号管理服务接口 - 简化版
+/// 账号管理服务接口
 /// </summary>
 public interface IAccountManager
 {
     /// <summary>
     /// 连接到浏览器并验证登录状态
     /// </summary>
-    Task<OperationResult<UserInfo>> ConnectToBrowserAsync();
+    Task<OperationResult<bool>> ConnectToBrowserAsync();
 
     /// <summary>
     /// 检查是否已登录
@@ -108,7 +133,43 @@ public interface IAccountManager
     /// </summary>
     /// <param name="userId">用户ID</param>
     /// <returns>完整的用户信息</returns>
-    Task<OperationResult<UserInfo>> GetCompleteUserProfileDataAsync(string userId);
+    Task<OperationResult<UserInfo>> GetUserProfileDataAsync(string userId);
+
+    // === 全局用户信息管理方法（合并自 GlobalUserInfo） ===
+
+    /// <summary>
+    /// 全局当前用户信息
+    /// </summary>
+    UserInfo? CurrentUser { get; }
+
+    /// <summary>
+    /// 最后更新时间
+    /// </summary>
+    DateTime? LastUpdated { get; }
+
+    /// <summary>
+    /// 是否有有效的全局用户信息
+    /// </summary>
+    bool HasValidUserInfo { get; }
+
+    /// <summary>
+    /// 更新全局用户信息
+    /// </summary>
+    /// <param name="userInfo">新的用户信息</param>
+    void UpdateUserInfo(UserInfo? userInfo);
+
+    /// <summary>
+    /// 从API响应JSON更新全局用户信息
+    /// </summary>
+    /// <param name="responseJson">API响应的JSON字符串</param>
+    /// <returns>是否成功更新</returns>
+    bool UpdateFromApiResponse(string responseJson);
+
+    /// <summary>
+    /// 获取全局用户信息的简要描述
+    /// </summary>
+    /// <returns>用户信息描述</returns>
+    string GetUserInfoSummary();
 }
 /// <summary>
 /// 浏览器管理服务接口 - 单用户模式
@@ -129,11 +190,16 @@ public interface IBrowserManager
     /// 检查登录状态
     /// </summary>
     Task<bool> IsLoggedInAsync();
+
+    /// <summary>
+    /// 检查浏览器连接是否健康
+    /// </summary>
+    Task<bool> IsConnectionHealthyAsync();
 }
 /// <summary>
-/// 选择器管理服务接口 - 支持页面状态感知
+/// DOM元素管理服务接口 - 支持页面状态感知
 /// </summary>
-public interface ISelectorManager
+public interface IDomElementManager
 {
     /// <summary>
     /// 获取指定别名的选择器列表
@@ -369,6 +435,14 @@ public interface IHumanizedInteractionService
     /// 检测当前收藏状态，执行收藏操作，并验证结果
     /// </summary>
     Task<InteractionResult> HumanFavoriteAsync(IPage page);
+
+    /// <summary>
+    /// 执行自然滚动操作
+    /// </summary>
+    /// <param name="page">页面对象</param>
+    /// <param name="distance">滚动距离</param>
+    /// <param name="duration">滚动时长</param>
+    Task PerformNaturalScrollAsync(IPage page, int distance, TimeSpan duration);
 }
 #region 数据模型
 /// <summary>
@@ -426,14 +500,14 @@ public enum HumanWaitType
 }
 /// <summary>
 /// 笔记类型枚举
-/// 用于数据识别和处理，支持平台的所有内容类型
+/// 用于数据识别和处理，支持平台的主要内容类型
+/// 注意：长文类型本质上是字数更多的图文笔记，在搜索和处理中统一归类为图文类型
 /// </summary>
 public enum NoteType
 {
     Unknown, // 未知类型
-    Image,   // 图文笔记
-    Video,   // 视频笔记
-    Article  // 长文笔记（仅用于创作和数据识别，搜索筛选中不单独列出）
+    Image,   // 图文笔记（包含长文，因为长文本质就是字数更多的图文）
+    Video    // 视频笔记
 }
 /// <summary>
 /// 类型识别置信度
@@ -465,6 +539,26 @@ public class NoteInfo
     public string? Content { get; set; }
 
     /// <summary>
+    /// 扩展字段：作者用户ID
+    /// </summary>
+    public string AuthorId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 扩展字段：作者头像URL
+    /// </summary>
+    public string AuthorAvatar { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 扩展字段：跟踪ID，用于分析和后续请求
+    /// </summary>
+    public string? TrackId { get; set; }
+
+    /// <summary>
+    /// 扩展字段：安全令牌
+    /// </summary>
+    public string? XsecToken { get; set; }
+
+    /// <summary>
     /// 笔记类型
     /// </summary>
     public NoteType Type { get; set; } = NoteType.Unknown;
@@ -477,7 +571,7 @@ public class NoteInfo
     /// <summary>
     /// 缺失字段列表
     /// </summary>
-    public List<string> MissingFields { get; set; } = new();
+    public List<string> MissingFields { get; set; } = [];
 
     /// <summary>
     /// 数据提取时间
@@ -493,46 +587,61 @@ public class NoteInfo
     }
 
     /// <summary>
-    /// 根据内容特征确定笔记类型
+    /// 确定数据质量
+    /// </summary>
+    public void DetermineDataQuality()
+    {
+        var hasBasicInfo = !string.IsNullOrEmpty(Title) && !string.IsNullOrEmpty(Author);
+        var hasStats = LikeCount.HasValue && CommentCount.HasValue;
+        var hasTime = PublishTime.HasValue;
+
+        if (hasBasicInfo && hasStats && hasTime)
+            Quality = DataQuality.Complete;
+        else if (hasBasicInfo && (hasStats || hasTime))
+            Quality = DataQuality.Partial;
+        else
+            Quality = DataQuality.Minimal;
+    }
+
+    /// <summary>
+    /// 根据内容特征确定笔记类型 - 简化的类型识别逻辑
+    /// 长文类型统一归类为图文类型，因为本质上是字数更多的图文笔记
     /// </summary>
     protected virtual NoteType DetermineNoteTypeFromContent()
     {
         // 如果是NoteDetail类型，可以使用更丰富的信息
         if (this is NoteDetail detail)
         {
-            // 视频类型：有视频URL
+            // 优先级1：视频时长信息（最可靠的视频标识）
+            if (detail.VideoDuration is > 0)
+            {
+                return NoteType.Video;
+            }
+            
+            // 优先级2：视频URL（直接视频标识）
             if (!string.IsNullOrEmpty(detail.VideoUrl))
             {
                 return NoteType.Video;
             }
 
-            // 图文类型：有图片
-            if (detail.Images.Any())
+            // 优先级3：图片存在或有内容时，统一归类为图文类型
+            if (detail.Images.Count != 0 || !string.IsNullOrEmpty(detail.Content))
             {
                 return NoteType.Image;
-            }
-
-            // 长文类型：纯文字且内容较长
-            if (!string.IsNullOrEmpty(detail.Content) &&
-                detail.Content.Length > 500 &&
-                !detail.Images.Any() &&
-                string.IsNullOrEmpty(detail.VideoUrl))
-            {
-                return NoteType.Article;
             }
         }
 
         // 基于基础信息的简单判断
         if (!string.IsNullOrEmpty(CoverImage))
         {
-            // 如果有封面图，可能是图文或视频，倾向于图文
+            // 如果有封面图，可能是图文或视频，无法准确区分时倾向于图文
             return NoteType.Image;
         }
 
-        // 基于内容长度判断
-        if (!string.IsNullOrEmpty(Content) && Content.Length > 300)
+        // 基于内容长度判断 - 有内容的都归为图文类型
+        if (!string.IsNullOrEmpty(Content))
         {
-            return NoteType.Article;
+            return NoteType.Image;
         }
 
         // 默认返回未知
@@ -540,33 +649,72 @@ public class NoteInfo
     }
 
     /// <summary>
-    /// 检查类型识别的置信度
+    /// 检查类型识别的置信度 - 增强视频识别置信度评估
     /// </summary>
     public TypeIdentificationConfidence GetTypeConfidence()
     {
         if (this is NoteDetail detail)
         {
-            if (!string.IsNullOrEmpty(detail.VideoUrl)) return TypeIdentificationConfidence.High;
-            if (detail.Images.Any()) return TypeIdentificationConfidence.High;
-            if (detail.Content.Length > 500) return TypeIdentificationConfidence.Medium;
+            // 视频时长信息 - 最高置信度
+            if (detail.VideoDuration is > 0) 
+                return TypeIdentificationConfidence.High;
+            
+            // 视频URL - 高置信度
+            if (!string.IsNullOrEmpty(detail.VideoUrl)) 
+                return TypeIdentificationConfidence.High;
+                
+            // 图片存在 - 高置信度
+            if (detail.Images.Count != 0) 
+                return TypeIdentificationConfidence.High;
+                
+            // 长文本 - 中等置信度
+            if (detail.Content.Length > 500) 
+                return TypeIdentificationConfidence.Medium;
         }
 
-        if (!string.IsNullOrEmpty(CoverImage)) return TypeIdentificationConfidence.Low;
-        if (!string.IsNullOrEmpty(Content) && Content.Length > 300) return TypeIdentificationConfidence.Low;
+        // 基于基础信息的低置信度判断
+        if (!string.IsNullOrEmpty(CoverImage)) 
+            return TypeIdentificationConfidence.Low;
+        if (!string.IsNullOrEmpty(Content) && Content.Length > 300) 
+            return TypeIdentificationConfidence.Low;
 
         return TypeIdentificationConfidence.Unknown;
     }
 }
 /// <summary>
-/// 笔记详细信息
+/// 笔记详细信息 - 扩展支持视频信息
 /// </summary>
 public class NoteDetail : NoteInfo
 {
     public new string Content { get; set; } = string.Empty;
-    public List<string> Images { get; set; } = new();
-    public List<string> Tags { get; set; } = new();
-    public List<CommentInfo> Comments { get; set; } = new();
+    public List<string> Images { get; set; } = [];
+    public List<string> Tags { get; set; } = [];
+    public List<CommentInfo> Comments { get; set; } = [];
     public string VideoUrl { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// 视频时长（秒）- 从原始JSON数据中提取
+    /// </summary>
+    public int? VideoDuration { get; set; }
+    
+    /// <summary>
+    /// 是否为视频笔记
+    /// </summary>
+    public bool IsVideo => !string.IsNullOrEmpty(VideoUrl) || VideoDuration.HasValue;
+    
+    /// <summary>
+    /// 获取格式化的视频时长文本
+    /// </summary>
+    /// <returns>格式化的时长，如"1:23"或"0:45"</returns>
+    public string GetFormattedVideoDuration()
+    {
+        if (!VideoDuration.HasValue || VideoDuration.Value <= 0)
+            return string.Empty;
+            
+        int minutes = VideoDuration.Value / 60;
+        int seconds = VideoDuration.Value % 60;
+        return $"{minutes}:{seconds:D2}";
+    }
 }
 /// <summary>
 /// 评论信息 - 诚实数据模型
@@ -581,7 +729,7 @@ public class CommentInfo
     public int? LikeCount { get; set; }
     public DateTime? PublishTime { get; set; }
 
-    public List<CommentInfo> Replies { get; set; } = new();
+    public List<CommentInfo> Replies { get; set; } = [];
 
     /// <summary>
     /// 评论数据质量评级
@@ -620,7 +768,9 @@ public enum ErrorType
     ElementNotFound,
     BrowserError,
     ValidationError,
-    FileOperation
+    FileOperation,
+    NavigationError,
+    CollectionError
 }
 /// <summary>
 /// 数据质量枚举
@@ -635,11 +785,32 @@ public enum DataQuality
 /// 用户信息类 - 简化版，仅保留核心用户信息
 /// 移除拟人化时间配置和数据提取相关属性
 /// </summary>
-public class UserInfo
+/// <summary>
+/// 基础用户信息类，包含所有用户信息类的共同字段
+/// </summary>
+public abstract class BaseUserInfo
 {
-    // 基础账号信息
+    /// <summary>
+    /// 用户ID
+    /// </summary>
     public string UserId { get; set; } = string.Empty;
-    public string Username { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 用户昵称
+    /// </summary>
+    public string Nickname { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 用户头像URL
+    /// </summary>
+    public string Avatar { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 完整的用户信息类（继承自BaseUserInfo）
+/// </summary>
+public class UserInfo : BaseUserInfo
+{
     public bool IsLoggedIn { get; set; }
     public DateTime LastActiveTime { get; set; } = DateTime.UtcNow;
 
@@ -656,7 +827,7 @@ public class UserInfo
     public string Description { get; set; } = string.Empty;
 
     /// <summary>
-    /// 用户头像URL
+    /// 用户头像URL（重命名以避免与基类冲突）
     /// </summary>
     public string AvatarUrl { get; set; } = string.Empty;
 
@@ -691,7 +862,7 @@ public class UserInfo
     public bool HasCompleteProfileData()
     {
         return !string.IsNullOrEmpty(RedId) &&
-               !string.IsNullOrEmpty(Username) &&
+               !string.IsNullOrEmpty(Nickname) &&
                !string.IsNullOrEmpty(AvatarUrl) &&
                FollowingCount.HasValue &&
                FollowersCount.HasValue &&
@@ -706,7 +877,7 @@ public class UserInfo
         var missing = new List<string>();
 
         if (string.IsNullOrEmpty(RedId)) missing.Add("RedId");
-        if (string.IsNullOrEmpty(Username)) missing.Add("Username");
+        if (string.IsNullOrEmpty(Nickname)) missing.Add("Nickname");
         if (string.IsNullOrEmpty(Description)) missing.Add("Description");
         if (string.IsNullOrEmpty(AvatarUrl)) missing.Add("AvatarUrl");
         if (!FollowingCount.HasValue) missing.Add("FollowingCount");
@@ -714,6 +885,64 @@ public class UserInfo
         if (!LikesCollectsCount.HasValue) missing.Add("LikesCollectsCount");
 
         return missing;
+    }
+
+    // === API 兼容性字段（用于支持原 UserApiData 的字段） ===
+
+    /// <summary>
+    /// 用户ID的替代字段（API兼容性）
+    /// </summary>
+    public string? Id { get; set; }
+
+    /// <summary>
+    /// 用户名称的替代字段（API兼容性）
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// 粉丝数的替代字段（API兼容性）
+    /// </summary>
+    public int? FansCount { get; set; }
+
+    /// <summary>
+    /// 关注数的替代字段（API兼容性）
+    /// </summary>
+    public int? FollowCount { get; set; }
+
+    /// <summary>
+    /// 笔记数的替代字段（API兼容性）
+    /// </summary>
+    public int? NoteCount { get; set; }
+
+    /// <summary>
+    /// 笔记数的另一个替代字段（API兼容性）
+    /// </summary>
+    public int? NotesCount { get; set; }
+
+    /// <summary>
+    /// 描述的替代字段（API兼容性）
+    /// </summary>
+    public string? Desc { get; set; }
+
+    /// <summary>
+    /// 从API响应创建UserInfo实例
+    /// </summary>
+    public static UserInfo FromApiData(UserInfo apiData)
+    {
+        return new UserInfo
+        {
+            UserId = apiData.UserId,
+            Nickname = apiData.Nickname,
+            IsLoggedIn = true,
+            RedId = apiData.RedId,
+            AvatarUrl = apiData.Avatar,
+            Avatar = apiData.Avatar,
+            FollowersCount = apiData.FansCount ?? apiData.FollowersCount,
+            FollowingCount = apiData.FollowCount ?? apiData.FollowingCount,
+            LikesCollectsCount = apiData.NoteCount ?? apiData.NotesCount ?? apiData.LikesCollectsCount,
+            Description = apiData.Desc ?? apiData.Description,
+            LastActiveTime = DateTime.UtcNow
+        };
     }
 
     /// <summary>
@@ -724,111 +953,8 @@ public class UserInfo
         if (string.IsNullOrEmpty(redIdText)) return string.Empty;
 
         // 从"小红书号：27456090856"中提取"27456090856"
-        var match = System.Text.RegularExpressions.Regex.Match(redIdText, @"\d+");
+        var match = Regex.Match(redIdText, @"\d+");
         return match.Success ? match.Value : string.Empty;
-    }
-}
-/// <summary>
-/// 搜索数据服务接口 - 重构版
-/// 集成搜索、统计分析、异步导出功能的统一服务
-/// </summary>
-public interface ISearchDataService
-{
-    /// <summary>
-    /// 执行搜索并包含统计分析
-    /// 集成搜索、统计计算和可选的异步导出功能
-    /// </summary>
-    Task<OperationResult<SearchResult>> SearchWithAnalyticsAsync(SearchRequest request);
-
-    /// <summary>
-    /// 计算搜索统计信息
-    /// 基于笔记列表生成详细的统计分析
-    /// </summary>
-    Task<OperationResult<SearchStatistics>> CalculateSearchStatisticsAsync(List<NoteInfo> notes);
-
-    /// <summary>
-    /// 简化导出操作
-    /// 只支持Excel格式
-    /// </summary>
-    OperationResult<SimpleExportInfo> ExportNotesAsync(List<NoteInfo> notes, string fileName, ExportOptions? options = null);
-}
-/// <summary>
-/// 搜索请求 - 增强版，支持小红书的真实筛选选项
-/// 基于真实HTML结构中的筛选面板设计
-/// </summary>
-public class SearchRequest
-{
-    public string Keyword { get; set; } = string.Empty;
-    public int MaxResults { get; set; } = 10;
-
-    /// <summary>
-    /// 排序方式：comprehensive(综合), latest(最新), most_liked(最多点赞), most_commented(最多评论), most_favorited(最多收藏)
-    /// </summary>
-    public string SortBy { get; set; } = "comprehensive";
-
-    /// <summary>
-    /// 笔记类型：all(不限), video(视频), image(图文)
-    /// 注意：搜索界面只支持这三种筛选选项，虽然平台支持article(长文)类型的创作，
-    /// 但搜索筛选中不提供长文单独筛选，长文内容会在"不限"中显示
-    /// </summary>
-    public string NoteType { get; set; } = "all";
-
-    /// <summary>
-    /// 发布时间：all(不限), day(一天内), week(一周内), half_year(半年内)
-    /// </summary>
-    public string PublishTime { get; set; } = "all";
-
-    /// <summary>
-    /// 搜索范围：all(不限), viewed(已看过), unviewed(未看过), followed(已关注)
-    /// </summary>
-    public string SearchScope { get; set; } = "all";
-
-    /// <summary>
-    /// 位置距离：all(不限), same_city(同城), nearby(附近)
-    /// </summary>
-    public string LocationDistance { get; set; } = "all";
-
-    public bool AutoExport { get; set; } = true;
-    public string? ExportFileName { get; set; }
-    public ExportOptions? ExportOptions { get; set; }
-
-    /// <summary>
-    /// 获取排序参数的中文显示文本
-    /// </summary>
-    public string GetSortDisplayText()
-    {
-        return SortBy switch
-        {
-            "comprehensive" => "综合",
-            "latest" => "最新",
-            "most_liked" => "最多点赞",
-            "most_commented" => "最多评论",
-            "most_favorited" => "最多收藏",
-            _ => "综合"
-        };
-    }
-
-    /// <summary>
-    /// 获取笔记类型的中文显示文本
-    /// 仅支持搜索界面实际提供的筛选选项
-    /// </summary>
-    public string GetNoteTypeDisplayText()
-    {
-        return NoteType switch
-        {
-            "all" => "不限",
-            "video" => "视频",
-            "image" => "图文",
-            _ => "不限"
-        };
-    }
-
-    /// <summary>
-    /// 验证搜索请求的有效性
-    /// </summary>
-    public bool IsValid()
-    {
-        return !string.IsNullOrWhiteSpace(Keyword) && MaxResults > 0;
     }
 }
 /// <summary>
@@ -841,47 +967,60 @@ public record SimpleExportInfo(
     bool Success
 );
 /// <summary>
-/// 搜索结果
+/// 搜索结果 - 统一的搜索结果数据模型
+/// 整合了基础搜索和增强搜索的所有功能
 /// </summary>
+/// <param name="Notes">搜索到的笔记列表（支持基础NoteInfo和扩展RecommendedNote）</param>
+/// <param name="TotalCount">总计数量（TotalCollected的别名，保持向后兼容）</param>
+/// <param name="SearchKeyword">搜索关键词</param>
+/// <param name="Duration">搜索耗时</param>
+/// <param name="Statistics">搜索统计信息</param>
+/// <param name="ExportInfo">导出信息（可选）</param>
+/// <param name="ApiRequests">API请求次数（可选，增强功能）</param>
+/// <param name="InterceptedResponses">成功监听的API响应数量（可选，增强功能）</param>
+/// <param name="RawApiData">原始API响应数据（可选，增强功能）</param>
+/// <param name="SearchParameters">搜索参数详情（可选，增强功能）</param>
 public record SearchResult(
     List<NoteInfo> Notes,
     int TotalCount,
     string SearchKeyword,
     TimeSpan Duration,
     SearchStatistics Statistics,
-    SimpleExportInfo? ExportInfo = null
+    SimpleExportInfo? ExportInfo = null,
+    int ApiRequests = 0,
+    int InterceptedResponses = 0,
+    List<SearchNotesApiResponse>? RawApiData = null,
+    SearchParametersInfo? SearchParameters = null
 );
 /// <summary>
-/// 搜索统计信息 - 增强版统计数据
-/// 取代 BasicStatistics 提供更详细的分析
+/// 搜索统计信息 - 统一的搜索统计数据模型
+/// 整合了基础统计和增强统计的所有功能
 /// </summary>
+/// <param name="CompleteDataCount">完整数据数量</param>
+/// <param name="PartialDataCount">部分数据数量</param>
+/// <param name="MinimalDataCount">最少数据数量</param>
+/// <param name="AverageLikes">平均点赞数</param>
+/// <param name="AverageComments">平均评论数</param>
+/// <param name="CalculatedAt">统计计算时间</param>
+/// <param name="VideoNotesCount">视频笔记数量（可选，增强功能）</param>
+/// <param name="ImageNotesCount">图文笔记数量（可选，增强功能）</param>
+/// <param name="AverageCollects">平均收藏数（可选，增强功能）</param>
+/// <param name="AuthorDistribution">作者分布统计（可选，增强功能）</param>
+/// <param name="TypeDistribution">笔记类型分布统计（可选，增强功能）</param>
+/// <param name="DataQualityDistribution">数据质量分布统计（可选，增强功能）</param>
 public record SearchStatistics(
     int CompleteDataCount,
     int PartialDataCount,
     int MinimalDataCount,
     double AverageLikes,
     double AverageComments,
-    DateTime CalculatedAt
-);
-/// <summary>
-/// 增强批量笔记结果 - 三位一体功能设计
-/// 参考 SearchResult 的设计模式，集成笔记详情、统计分析和导出信息
-/// </summary>
-/// <param name="NoteDetails">成功获取的笔记详情列表</param>
-/// <param name="FailedNotes">失败的关键词及错误信息</param>
-/// <param name="TotalProcessed">总处理数量</param>
-/// <param name="ProcessingTime">处理总耗时</param>
-/// <param name="OverallQuality">整体数据质量</param>
-/// <param name="Statistics">批量处理统计数据</param>
-/// <param name="ExportInfo">导出信息（如果启用自动导出）</param>
-public record EnhancedBatchNoteResult(
-    List<NoteDetail> NoteDetails,
-    List<(string Keyword, string ErrorMessage)> FailedNotes,
-    int TotalProcessed,
-    TimeSpan ProcessingTime,
-    DataQuality OverallQuality,
-    BatchProcessingStatistics Statistics,
-    SimpleExportInfo? ExportInfo = null
+    DateTime CalculatedAt,
+    int VideoNotesCount = 0,
+    int ImageNotesCount = 0,
+    double AverageCollects = 0.0,
+    Dictionary<string, int>? AuthorDistribution = null,
+    Dictionary<NoteType, int>? TypeDistribution = null,
+    Dictionary<DataQuality, int>? DataQualityDistribution = null
 );
 /// <summary>
 /// 批量处理统计数据 - 增强版统计信息
@@ -908,26 +1047,25 @@ public record BatchProcessingStatistics(
     DateTime CalculatedAt
 );
 /// <summary>
-/// 批量笔记结果
-/// 包含详细的处理统计和性能指标
+/// 批量笔记结果 - 统一的批量处理结果模型
+/// 整合了基础批量处理和增强批量处理的所有功能
 /// 支持关键词组的多对一匹配模式
 /// </summary>
+/// <param name="SuccessfulNotes">成功获取的笔记详情列表（NoteDetails的别名，保持向后兼容）</param>
+/// <param name="FailedNotes">失败的关键词及错误信息（支持Keyword和KeywordGroup）</param>
+/// <param name="ProcessedCount">总处理数量（TotalProcessed的别名，保持向后兼容）</param>
+/// <param name="ProcessingTime">处理总耗时</param>
+/// <param name="OverallQuality">整体数据质量</param>
+/// <param name="Statistics">批量处理统计数据</param>
+/// <param name="ExportInfo">导出信息（可选，增强功能）</param>
 public record BatchNoteResult(
     List<NoteDetail> SuccessfulNotes,
     List<(string KeywordGroup, string ErrorMessage)> FailedNotes,
     int ProcessedCount,
     TimeSpan ProcessingTime,
     DataQuality OverallQuality,
-    ProcessingStatistics Statistics
-);
-/// <summary>
-/// 处理统计信息 - 批量处理的性能指标
-/// </summary>
-public record ProcessingStatistics(
-    double AverageProcessingTimePerNote,
-    int FastModeCount,
-    int StandardModeCount,
-    int CarefulModeCount
+    BatchProcessingStatistics Statistics,
+    SimpleExportInfo? ExportInfo = null
 );
 /// <summary>
 /// 处理模式枚举 - 智能处理策略
@@ -951,204 +1089,632 @@ public record ExportOptions(
     bool IncludeComments = false
 );
 #endregion
-#region 页面内笔记查找数据模型
+
+#region 推荐服务接口
 
 /// <summary>
-/// 页面内查找结果
+/// 增强的推荐服务接口
+/// 负责管理小红书推荐API的调用和数据收集
 /// </summary>
-public class InPageFindResult
+public interface IRecommendService
 {
     /// <summary>
-    /// 成功找到的笔记详情列表
+    /// 获取推荐笔记，确保API被正确触发
     /// </summary>
-    public List<NoteDetail> FoundNotes { get; set; } = new();
-
-    /// <summary>
-    /// 失败的笔记处理记录
-    /// </summary>
-    public List<InPageFindError> Errors { get; set; } = new();
-
-    /// <summary>
-    /// 处理统计信息
-    /// </summary>
-    public InPageFindStatistics Statistics { get; set; } = new();
-
-    /// <summary>
-    /// 跳过的笔记数量（重复处理）
-    /// </summary>
-    public int SkippedCount { get; set; }
-
-    /// <summary>
-    /// 查找开始时间
-    /// </summary>
-    public DateTime StartTime { get; set; } = DateTime.UtcNow;
-
-    /// <summary>
-    /// 查找结束时间
-    /// </summary>
-    public DateTime EndTime { get; set; } = DateTime.UtcNow;
-
-    /// <summary>
-    /// 总处理时长
-    /// </summary>
-    public TimeSpan Duration => EndTime - StartTime;
+    /// <param name="limit">获取数量限制</param>
+    /// <param name="timeout">超时时间</param>
+    /// <returns>推荐结果</returns>
+    Task<OperationResult<RecommendListResult>> GetRecommendedNotesAsync(int limit = 20, TimeSpan? timeout = null);
 }
+
 /// <summary>
-/// 页面内查找错误记录
+/// 发现页面导航服务接口
+/// 负责管理到发现页面的导航和API触发验证
 /// </summary>
-public class InPageFindError
+public interface IDiscoverPageNavigationService
 {
     /// <summary>
-    /// 笔记ID（如果能获取到）
+    /// 导航到发现页面并确保API被正确触发
     /// </summary>
-    public string? NoteId { get; set; }
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="timeout">超时时间</param>
+    /// <returns>导航结果</returns>
+    Task<DiscoverNavigationResult> NavigateToDiscoverPageAsync(IPage page, TimeSpan? timeout = null);
+}
+
+/// <summary>
+/// 智能收集控制器接口
+/// 负责管理分批收集推荐笔记的整体流程，包括进度跟踪、滚动策略和性能监控
+/// </summary>
+public interface ISmartCollectionController
+{
+    /// <summary>
+    /// 执行智能分批收集
+    /// </summary>
+    /// <param name="context">浏览器上下文</param>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="targetCount">目标收集数量</param>
+    /// <param name="collectionMode">收集模式</param>
+    /// <param name="timeout">超时时间</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>智能收集结果</returns>
+    Task<SmartCollectionResult> ExecuteSmartCollectionAsync(
+        IBrowserContext context,
+        IPage page,
+        int targetCount,
+        RecommendCollectionMode collectionMode = RecommendCollectionMode.Standard,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 获取当前收集状态
+    /// </summary>
+    CollectionStatus GetCurrentStatus();
+
+    /// <summary>
+    /// 重置收集状态
+    /// </summary>
+    void ResetCollectionState();
+}
+
+/// <summary>
+/// API连接状态
+/// 用于验证推荐API的连接和触发状态
+/// </summary>
+public class ApiConnectionStatus
+{
+    /// <summary>
+    /// 连接是否正常
+    /// </summary>
+    public bool IsConnected { get; set; }
+
+    /// <summary>
+    /// 浏览器状态
+    /// </summary>
+    public string BrowserStatus { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 页面状态
+    /// </summary>
+    public string PageStatus { get; set; } = string.Empty;
+
+    /// <summary>
+    /// API触发状态
+    /// </summary>
+    public bool ApiTriggered { get; set; }
+
+    /// <summary>
+    /// 详细信息
+    /// </summary>
+    public List<string> Details { get; set; } = [];
+}
+
+/// <summary>
+/// 发现页面导航结果
+/// </summary>
+public class DiscoverNavigationResult
+{
+    /// <summary>
+    /// 导航是否成功
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// 最终页面URL
+    /// </summary>
+    public string FinalUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 导航方式
+    /// </summary>
+    public DiscoverNavigationMethod Method { get; set; }
+
+    /// <summary>
+    /// API是否被触发
+    /// </summary>
+    public bool ApiTriggered { get; set; }
+
+    /// <summary>
+    /// 耗时（毫秒）
+    /// </summary>
+    public long DurationMs { get; set; }
 
     /// <summary>
     /// 错误消息
     /// </summary>
-    public string ErrorMessage { get; set; } = string.Empty;
+    public string? ErrorMessage { get; set; }
 
     /// <summary>
-    /// 错误类型
+    /// 详细日志
     /// </summary>
-    public InPageErrorType ErrorType { get; set; }
-
-    /// <summary>
-    /// 错误发生时间
-    /// </summary>
-    public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
-
-    /// <summary>
-    /// 重试次数
-    /// </summary>
-    public int RetryCount { get; set; }
+    public List<string> NavigationLog { get; set; } = [];
 }
+
 /// <summary>
-/// 页面内查找错误类型
+/// 发现页面状态
 /// </summary>
-public enum InPageErrorType
-{
-    /// <summary>元素不可点击</summary>
-    ElementNotClickable,
-    /// <summary>模态窗口打开失败</summary>
-    ModalOpenFailed,
-    /// <summary>模态窗口关闭失败</summary>
-    ModalCloseFailed,
-    /// <summary>数据提取失败</summary>
-    DataExtractionFailed,
-    /// <summary>网络超时</summary>
-    NetworkTimeout,
-    /// <summary>页面状态异常</summary>
-    PageStateError,
-    /// <summary>重复处理</summary>
-    DuplicateProcessing
-}
-/// <summary>
-/// 页面内查找统计信息
-/// </summary>
-public class InPageFindStatistics
+public class DiscoverPageStatus
 {
     /// <summary>
-    /// 尝试处理的笔记总数
+    /// 是否在发现页面
     /// </summary>
-    public int AttemptedCount { get; set; }
+    public bool IsOnDiscoverPage { get; set; }
 
     /// <summary>
-    /// 成功处理的笔记数
+    /// 当前页面URL
     /// </summary>
-    public int SuccessfulCount { get; set; }
+    public string CurrentUrl { get; set; } = string.Empty;
 
     /// <summary>
-    /// 失败的笔记数
+    /// 页面状态
     /// </summary>
-    public int FailedCount { get; set; }
+    public PageState PageState { get; set; }
 
     /// <summary>
-    /// 平均处理时间（毫秒）
+    /// 可见的发现页面元素数量
     /// </summary>
-    public double AverageProcessingTime { get; set; }
+    public int DiscoverElementsCount { get; set; }
 
     /// <summary>
-    /// 模态窗口打开成功率
+    /// API请求特征
     /// </summary>
-    public double ModalOpenSuccessRate { get; set; }
-
-    /// <summary>
-    /// 数据提取完整率
-    /// </summary>
-    public double DataCompletenessRate { get; set; }
+    public List<string> ApiFeatures { get; set; } = [];
 }
+
 /// <summary>
-/// 批量页面内查找结果
+/// 导航方式枚举
 /// </summary>
-public class BatchFindNotesResult
+public enum DiscoverNavigationMethod
 {
-    /// <summary>
-    /// 所有找到的笔记详情
-    /// </summary>
-    public List<NoteDetail> AllNotes { get; set; } = new();
-
-    /// <summary>
-    /// 按页面分组的结果
-    /// </summary>
-    public List<InPageFindResult> PageResults { get; set; } = new();
-
-    /// <summary>
-    /// 整体统计信息
-    /// </summary>
-    public BatchFindStatistics OverallStatistics { get; set; } = new();
-
-    /// <summary>
-    /// 查找关键词
-    /// </summary>
-    public List<string> SearchKeywords { get; set; } = new();
-
-    /// <summary>
-    /// 是否达到目标数量
-    /// </summary>
-    public bool TargetReached { get; set; }
+    /// <summary>通过点击发现按钮</summary>
+    ClickButton,
+    /// <summary>直接URL导航</summary>
+    DirectUrl,
+    /// <summary>JavaScript执行</summary>
+    JavaScript,
+    /// <summary>失败</summary>
+    Failed
 }
+
 /// <summary>
-/// 批量查找统计信息
+/// 智能收集结果
 /// </summary>
-public class BatchFindStatistics
+public record SmartCollectionResult
 {
-    /// <summary>
-    /// 处理的页面数量
-    /// </summary>
-    public int ProcessedPages { get; set; }
+    public bool Success { get; init; }
+    public List<NoteInfo> CollectedNotes { get; init; } = [];
+    public int CollectedCount { get; init; }
+    public int TargetCount { get; init; }
+    public int RequestCount { get; init; }
+    public TimeSpan Duration { get; init; }
+    public string? ErrorMessage { get; init; }
+    public CollectionPerformanceMetrics PerformanceMetrics { get; init; } = new();
+    public CollectionStatus CollectionDetails { get; init; } = new();
+    public bool ReachedTarget { get; init; }
+    public double EfficiencyScore { get; init; }
 
     /// <summary>
-    /// 总找到笔记数
+    /// 创建成功结果
     /// </summary>
-    public int TotalNotesFound { get; set; }
+    public static SmartCollectionResult CreateSuccess(
+        List<NoteInfo> collectedNotes, 
+        int targetCount, 
+        int requestCount, 
+        TimeSpan duration, 
+        CollectionPerformanceMetrics performanceMetrics)
+    {
+        return new SmartCollectionResult
+        {
+            Success = true,
+            CollectedNotes = collectedNotes,
+            CollectedCount = collectedNotes.Count,
+            TargetCount = targetCount,
+            RequestCount = requestCount,
+            Duration = duration,
+            PerformanceMetrics = performanceMetrics,
+            ReachedTarget = collectedNotes.Count >= targetCount,
+            EfficiencyScore = targetCount > 0 ? (double)collectedNotes.Count / targetCount : 1.0
+        };
+    }
 
     /// <summary>
-    /// 总处理时间
+    /// 创建失败结果
     /// </summary>
-    public TimeSpan TotalDuration { get; set; }
-
-    /// <summary>
-    /// 平均每页处理时间
-    /// </summary>
-    public TimeSpan AverageTimePerPage { get; set; }
-
-    /// <summary>
-    /// 整体成功率
-    /// </summary>
-    public double OverallSuccessRate { get; set; }
+    public static SmartCollectionResult CreateFailure(
+        string errorMessage, 
+        List<NoteInfo>? partialResults = null, 
+        int targetCount = 0, 
+        int requestCount = 0, 
+        TimeSpan duration = default)
+    {
+        var collected = partialResults ?? [];
+        return new SmartCollectionResult
+        {
+            Success = false,
+            ErrorMessage = errorMessage,
+            CollectedNotes = collected,
+            CollectedCount = collected.Count,
+            TargetCount = targetCount,
+            RequestCount = requestCount,
+            Duration = duration,
+            ReachedTarget = false,
+            EfficiencyScore = 0.0
+        };
+    }
 }
+
+/// <summary>
+/// 收集状态
+/// </summary>
+public class CollectionStatus
+{
+    public int TargetCount { get; set; }
+    public int CurrentCount { get; set; }
+    public double Progress { get; set; }
+    public RecommendCollectionMode CollectionMode { get; set; }
+    public CollectionPhase Phase { get; set; }
+    public DateTime StartTime { get; set; }
+    public DateTime LastUpdateTime { get; set; }
+}
+
+/// <summary>
+/// 收集阶段
+/// </summary>
+public enum CollectionPhase
+{
+    Initializing,
+    Navigating,
+    Collecting,
+    Completed,
+    Failed
+}
+
+/// <summary>
+/// 收集性能指标
+/// </summary>
+public class CollectionPerformanceMetrics
+{
+    public int RequestCount { get; set; }
+    public int SuccessfulRequests { get; set; }
+    public int FailedRequests { get; set; }
+    public int ScrollCount { get; set; }
+    public TimeSpan Duration { get; set; }
+    public double RequestSuccessRate => RequestCount > 0 ? (double)SuccessfulRequests / RequestCount : 0;
+    public double ScrollEfficiency => ScrollCount > 0 ? (double)SuccessfulRequests / ScrollCount : 0;
+
+    /// <summary>
+    /// 默认构造函数
+    /// </summary>
+    public CollectionPerformanceMetrics()
+    {
+    }
+
+    /// <summary>
+    /// 带参数的构造函数
+    /// </summary>
+    public CollectionPerformanceMetrics(int successfulRequests, int failedRequests, int scrollCount, TimeSpan duration)
+    {
+        SuccessfulRequests = successfulRequests;
+        FailedRequests = failedRequests;
+        RequestCount = successfulRequests + failedRequests;
+        ScrollCount = scrollCount;
+        Duration = duration;
+    }
+}
+
 #endregion
-#region MCP工具强类型返回值定义
+
+#region GetRecommendedNotes
+
+
 /// <summary>
-/// 用户资料获取结果
+/// 推荐笔记数据模型 - 基于API监听的完整笔记信息
+/// 包含从小红书搜索API中提取的所有可用数据
 /// </summary>
-public record UserProfileResult(
-    UserInfo? UserInfo,
-    bool Success,
-    string Message,
-    string? ErrorCode = null
+public class RecommendedNote : NoteInfo
+{
+    /// <summary>
+    /// 笔记描述/内容预览
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 图片列表信息
+    /// </summary>
+    public List<RecommendedImageInfo> Images { get; set; } = [];
+
+    /// <summary>
+    /// 视频信息（如果是视频笔记）
+    /// </summary>
+    public RecommendedVideoInfo? VideoInfo { get; set; }
+
+    /// <summary>
+    /// 封面图片详细信息
+    /// </summary>
+    public RecommendedCoverInfo? CoverInfo { get; set; }
+
+    /// <summary>
+    /// 互动信息详情
+    /// </summary>
+    public RecommendedInteractInfo? InteractInfo { get; set; }
+
+    /// <summary>
+    /// 用户信息详情
+    /// </summary>
+    public RecommendedUserInfo? UserInfo { get; set; }
+
+    /// <summary>
+    /// 是否已点赞
+    /// </summary>
+    public bool IsLiked { get; set; }
+
+    /// <summary>
+    /// 是否已收藏
+    /// </summary>
+    public bool IsCollected { get; set; }
+
+    /// <summary>
+    /// 分享数
+    /// </summary>
+    public int? ShareCount { get; set; }
+
+    /// <summary>
+    /// 页面令牌，用于后续操作
+    /// </summary>
+    public string? PageToken { get; set; }
+
+    /// <summary>
+    /// 搜索ID，用于跟踪
+    /// </summary>
+    public string? SearchId { get; set; }
+
+    /// <summary>
+    /// 视频URL（继承并添加视频相关属性）
+    /// </summary>
+    public string VideoUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 视频时长（秒）
+    /// </summary>
+    public int? VideoDuration { get; set; }
+
+    /// <summary>
+    /// 获取格式化的视频时长文本（重写基类方法以支持新的视频数据结构）
+    /// </summary>
+    public string GetFormattedVideoDurationEnhanced()
+    {
+        if (VideoInfo?.Duration > 0)
+        {
+            int minutes = VideoInfo.Duration / 60;
+            int seconds = VideoInfo.Duration % 60;
+            return $"{minutes}:{seconds:D2}";
+        }
+        
+        if (VideoDuration is > 0)
+        {
+            int minutes = VideoDuration.Value / 60;
+            int seconds = VideoDuration.Value % 60;
+            return $"{minutes}:{seconds:D2}";
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// 判断是否为视频笔记（增强版判断逻辑）
+    /// </summary>
+    public bool IsVideoEnhanced => VideoInfo?.Duration > 0 || !string.IsNullOrEmpty(VideoUrl) || VideoDuration.HasValue;
+}
+
+/// <summary>
+/// 推荐图片信息
+/// 基于API返回的图片数据结构
+/// </summary>
+public class RecommendedImageInfo
+{
+    /// <summary>
+    /// 图片URL
+    /// </summary>
+    public string Url { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 图片宽度
+    /// </summary>
+    public int Width { get; set; }
+
+    /// <summary>
+    /// 图片高度
+    /// </summary>
+    public int Height { get; set; }
+
+    /// <summary>
+    /// 图片场景信息列表（不同尺寸的图片URL）
+    /// </summary>
+    public List<ImageSceneInfo> Scenes { get; set; } = [];
+}
+
+/// <summary>
+/// 图片场景信息
+/// 对应不同尺寸和质量的图片版本
+/// </summary>
+public class ImageSceneInfo
+{
+    /// <summary>
+    /// 场景标识（如：WB_DFT, WB_PRV等）
+    /// </summary>
+    public string SceneType { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 场景对应的图片URL
+    /// </summary>
+    public string Url { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 推荐视频信息
+/// 基于API返回的视频数据结构
+/// </summary>
+public class RecommendedVideoInfo
+{
+    /// <summary>
+    /// 视频时长（秒）
+    /// </summary>
+    public int Duration { get; set; }
+
+    /// <summary>
+    /// 视频封面URL
+    /// </summary>
+    public string Cover { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 视频URL
+    /// </summary>
+    public string Url { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 视频宽度
+    /// </summary>
+    public int Width { get; set; }
+
+    /// <summary>
+    /// 视频高度
+    /// </summary>
+    public int Height { get; set; }
+}
+
+/// <summary>
+/// 推荐封面信息
+/// 基于API返回的封面数据结构
+/// </summary>
+public class RecommendedCoverInfo
+{
+    /// <summary>
+    /// 默认封面URL
+    /// </summary>
+    public string DefaultUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 预览封面URL
+    /// </summary>
+    public string PreviewUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 封面宽度
+    /// </summary>
+    public int Width { get; set; }
+
+    /// <summary>
+    /// 封面高度
+    /// </summary>
+    public int Height { get; set; }
+
+    /// <summary>
+    /// 文件ID
+    /// </summary>
+    public string FileId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 封面场景信息列表
+    /// </summary>
+    public List<ImageSceneInfo> Scenes { get; set; } = [];
+}
+
+/// <summary>
+/// 推荐互动信息
+/// 基于API返回的互动数据结构
+/// </summary>
+/// <summary>
+/// 推荐内容的交互信息（继承自BaseInteractInfo）
+/// </summary>
+public class RecommendedInteractInfo : BaseInteractInfo
+{
+    /// <summary>
+    /// 点赞数（原始字符串格式）
+    /// </summary>
+    public string LikedCountRaw { get; set; } = "0";
+
+    /// <summary>
+    /// 分享数
+    /// </summary>
+    public int ShareCount { get; set; }
+}
+
+/// <summary>
+/// 推荐用户信息
+/// 基于API返回的用户数据结构
+/// </summary>
+public class RecommendedUserInfo
+{
+    /// <summary>
+    /// 用户ID
+    /// </summary>
+    public string UserId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 昵称
+    /// </summary>
+    public string Nickname { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 头像URL
+    /// </summary>
+    public string Avatar { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 是否认证用户
+    /// </summary>
+    public bool IsVerified { get; set; }
+
+    /// <summary>
+    /// 用户简介
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+
+/// <summary>
+/// 搜索参数信息
+/// 记录本次搜索使用的所有参数
+/// </summary>
+/// <param name="Keyword">搜索关键词</param>
+/// <param name="SortBy">排序方式</param>
+/// <param name="NoteType">笔记类型</param>
+/// <param name="PublishTime">发布时间</param>
+/// <param name="MaxResults">最大结果数</param>
+/// <param name="RequestedAt">请求时间</param>
+public record SearchParametersInfo(
+    string Keyword,
+    string SortBy,
+    string NoteType,
+    string PublishTime,
+    int MaxResults,
+    DateTime RequestedAt
 );
+
+/// <summary>
+/// 搜索API监听器配置
+/// 用于配置网络请求监听的参数
+/// </summary>
+/// <summary>
+/// 搜索监听器配置类（继承自BaseMonitorConfig）
+/// </summary>
+public class SearchMonitorConfig : BaseMonitorConfig
+{
+    /// <summary>
+    /// 分页等待时间（毫秒）
+    /// </summary>
+    public int PageWaitMs { get; set; } = 2000;
+
+    public SearchMonitorConfig()
+    {
+        ApiUrlPattern = "https://edith.xiaohongshu.com/api/sns/web/v1/search/notes";
+        TimeoutMs = 15000;
+    }
+}
+
+#endregion
+
+#region MCP工具强类型返回值定义
 /// <summary>
 /// 浏览器连接结果
 /// </summary>
@@ -1197,4 +1763,966 @@ public record InteractionResult(
     string Message,
     string? ErrorCode = null
 );
+#endregion
+#region 推荐列表数据模型
+/// <summary>
+/// 推荐列表结果 - 集成统计分析和导出功能
+/// 参考 SearchResult 的设计模式
+/// </summary>
+/// <param name="Notes">推荐的笔记列表</param>
+/// <param name="TotalCollected">总收集数量</param>
+/// <param name="RequestCount">API请求次数</param>
+/// <param name="Duration">收集总耗时</param>
+/// <param name="Statistics">推荐统计数据</param>
+/// <param name="ExportInfo">导出信息（如果启用自动导出）</param>
+/// <param name="CollectionDetails">收集过程详细信息</param>
+public record RecommendListResult(
+    List<NoteInfo> Notes,
+    int TotalCollected,
+    int RequestCount,
+    TimeSpan Duration,
+    RecommendStatistics Statistics,
+    SimpleExportInfo? ExportInfo = null,
+    RecommendCollectionDetails? CollectionDetails = null
+);
+
+/// <summary>
+/// 推荐统计数据
+/// 基于 SearchStatistics 的设计模式
+/// </summary>
+/// <param name="VideoNotesCount">视频笔记数量</param>
+/// <param name="ImageNotesCount">图文笔记数量</param>
+/// <param name="AverageLikes">平均点赞数</param>
+/// <param name="AverageComments">平均评论数</param>
+/// <param name="AverageCollects">平均收藏数</param>
+/// <param name="TopCategories">热门分类统计</param>
+/// <param name="AuthorDistribution">作者分布统计</param>
+/// <param name="CalculatedAt">统计计算时间</param>
+public record RecommendStatistics(
+    int VideoNotesCount,
+    int ImageNotesCount,
+    double AverageLikes,
+    double AverageComments,
+    double AverageCollects,
+    Dictionary<string, int> TopCategories,
+    Dictionary<string, int> AuthorDistribution,
+    DateTime CalculatedAt
+);
+
+/// <summary>
+/// 推荐收集详细信息
+/// </summary>
+/// <param name="InterceptedRequests">监听的请求数量</param>
+/// <param name="SuccessfulRequests">成功处理的请求数量</param>
+/// <param name="FailedRequests">失败的请求数量</param>
+/// <param name="ScrollOperations">滚动操作次数</param>
+/// <param name="AverageScrollDelay">平均滚动延时（毫秒）</param>
+/// <param name="DataQuality">数据质量评估</param>
+/// <param name="CollectionMode">收集模式</param>
+public record RecommendCollectionDetails(
+    int InterceptedRequests,
+    int SuccessfulRequests,
+    int FailedRequests,
+    int ScrollOperations,
+    double AverageScrollDelay,
+    DataQuality DataQuality,
+    RecommendCollectionMode CollectionMode
+);
+
+/// <summary>
+/// 推荐收集模式
+/// </summary>
+public enum RecommendCollectionMode
+{
+    /// <summary>快速收集：最小延时，适用于小量数据</summary>
+    Fast,
+    /// <summary>标准收集：平衡性能和防检测</summary>
+    Standard,
+    /// <summary>谨慎收集：最大防检测，适用于大量数据</summary>
+    Careful
+}
+
+/// <summary>
+/// 网络监听器配置
+/// </summary>
+/// <summary>
+/// 基础监听器配置类，包含所有配置类的共同字段
+/// </summary>
+public abstract class BaseMonitorConfig
+{
+    /// <summary>
+    /// API URL 模式
+    /// </summary>
+    public string ApiUrlPattern { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 请求超时时间（毫秒）
+    /// </summary>
+    public int TimeoutMs { get; set; } = 15000;
+
+    /// <summary>
+    /// 最大重试次数
+    /// </summary>
+    public int MaxRetries { get; set; } = 3;
+
+    /// <summary>
+    /// 是否记录详细日志
+    /// </summary>
+    public bool EnableDetailedLogging { get; set; } = true;
+}
+
+/// <summary>
+/// 通用监听器配置类（继承自BaseMonitorConfig）
+/// </summary>
+public class MonitorConfig : BaseMonitorConfig
+{
+    /// <summary>
+    /// 目标URL模式
+    /// </summary>
+    public string UrlPattern { get; set; } = "https://edith.xiaohongshu.com/api/sns/web/v1/homefeed";
+
+    /// <summary>
+    /// 是否启用缓存
+    /// </summary>
+    public bool EnableCaching { get; set; } = true;
+
+    /// <summary>
+    /// 最大缓存大小
+    /// </summary>
+    public int MaxCacheSize { get; set; } = 1000;
+
+    /// <summary>
+    /// 请求超时时间
+    /// </summary>
+    public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(15);
+
+    public MonitorConfig()
+    {
+        ApiUrlPattern = UrlPattern;
+        TimeoutMs = 10000;
+    }
+}
+#endregion
+
+#region 小红书搜索API真实响应数据模型（用于拟人化操作+API监听）
+
+/// <summary>
+/// 小红书搜索API响应的根级数据结构
+/// 对应 /api/sns/web/v1/search/notes 接口的真实响应格式
+/// 用于拟人化操作与API监听结合的推荐笔记获取
+/// </summary>
+public class SearchNotesApiResponse
+{
+    /// <summary>
+    /// 响应状态码，0表示成功
+    /// </summary>
+    public int Code { get; set; }
+
+    /// <summary>
+    /// 响应消息
+    /// </summary>
+    public string Msg { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 是否成功
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// 搜索数据
+    /// </summary>
+    public SearchNotesData? Data { get; set; }
+}
+
+/// <summary>
+/// 搜索笔记API数据部分
+/// </summary>
+public class SearchNotesData
+{
+    /// <summary>
+    /// 笔记列表
+    /// </summary>
+    public List<SearchNoteItem> Items { get; set; } = [];
+
+    /// <summary>
+    /// 是否有更多数据
+    /// </summary>
+    public bool HasMore { get; set; }
+
+    /// <summary>
+    /// 游标，用于分页
+    /// </summary>
+    public string? Cursor { get; set; }
+
+    /// <summary>
+    /// 分页令牌
+    /// </summary>
+    public string? PageToken { get; set; }
+
+    /// <summary>
+    /// 搜索ID，用于跟踪
+    /// </summary>
+    public string? SearchId { get; set; }
+}
+
+/// <summary>
+/// 搜索笔记项目数据
+/// </summary>
+public class SearchNoteItem
+{
+    /// <summary>
+    /// 笔记ID
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 笔记类型（normal、video等）
+    /// </summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 笔记基础信息
+    /// </summary>
+    public SearchNoteInfo? NoteCard { get; set; }
+
+    /// <summary>
+    /// 跟踪ID
+    /// </summary>
+    public string? TrackId { get; set; }
+
+    /// <summary>
+    /// 安全令牌
+    /// </summary>
+    public string? XsecToken { get; set; }
+
+    /// <summary>
+    /// 显示标记
+    /// </summary>
+    public Dictionary<string, object> DisplayTags { get; set; } = new();
+}
+
+/// <summary>
+/// 搜索笔记基础信息
+/// </summary>
+public class SearchNoteInfo
+{
+    /// <summary>
+    /// 显示标题
+    /// </summary>
+    public string DisplayTitle { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 笔记描述
+    /// </summary>
+    public string Desc { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 封面信息
+    /// </summary>
+    public SearchCoverInfo? Cover { get; set; }
+
+    /// <summary>
+    /// 用户信息
+    /// </summary>
+    public SearchUserInfo? User { get; set; }
+
+    /// <summary>
+    /// 互动信息
+    /// </summary>
+    public SearchInteractInfo? InteractInfo { get; set; }
+
+    /// <summary>
+    /// 视频信息（如果是视频笔记）
+    /// </summary>
+    public SearchVideoInfo? Video { get; set; }
+
+    /// <summary>
+    /// 笔记类型
+    /// </summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 图片列表信息
+    /// </summary>
+    public List<SearchImageInfo> ImageList { get; set; } = [];
+}
+
+/// <summary>
+/// 搜索封面信息
+/// </summary>
+public class SearchCoverInfo
+{
+    /// <summary>
+    /// 封面URL
+    /// </summary>
+    public string Url { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 默认URL
+    /// </summary>
+    public string UrlDefault { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 预览URL
+    /// </summary>
+    public string UrlPre { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 图片宽度
+    /// </summary>
+    public int Width { get; set; }
+
+    /// <summary>
+    /// 图片高度
+    /// </summary>
+    public int Height { get; set; }
+
+    /// <summary>
+    /// 文件ID
+    /// </summary>
+    public string FileId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 图片场景列表
+    /// </summary>
+    public List<SearchImageSceneInfo> InfoList { get; set; } = [];
+}
+
+/// <summary>
+/// 搜索图片场景信息
+/// </summary>
+public class SearchImageSceneInfo
+{
+    /// <summary>
+    /// 图片场景标识
+    /// </summary>
+    public string ImageScene { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 场景对应的URL
+    /// </summary>
+    public string Url { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 搜索用户信息
+/// </summary>
+/// <summary>
+/// 搜索用户信息（继承自BaseUserInfo）
+/// </summary>
+public class SearchUserInfo : BaseUserInfo
+{
+    /// <summary>
+    /// 是否认证用户
+    /// </summary>
+    public bool Verified { get; set; }
+}
+
+/// <summary>
+/// 搜索互动信息
+/// </summary>
+/// <summary>
+/// 搜索结果的交互信息（继承自BaseInteractInfo）
+/// </summary>
+public class SearchInteractInfo : BaseInteractInfo
+{
+    /// <summary>
+    /// 点赞数（字符串格式，用于处理API返回）
+    /// </summary>
+    public string LikedCountRaw { get; set; } = "0";
+
+    /// <summary>
+    /// 分享数
+    /// </summary>
+    public int ShareCount { get; set; }
+}
+
+/// <summary>
+/// 搜索视频信息
+/// </summary>
+public class SearchVideoInfo
+{
+    /// <summary>
+    /// 视频时长（秒）
+    /// </summary>
+    public int Duration { get; set; }
+
+    /// <summary>
+    /// 视频封面URL
+    /// </summary>
+    public string Cover { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 视频URL
+    /// </summary>
+    public string Url { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 视频宽度
+    /// </summary>
+    public int Width { get; set; }
+
+    /// <summary>
+    /// 视频高度
+    /// </summary>
+    public int Height { get; set; }
+}
+
+/// <summary>
+/// 搜索图片信息
+/// </summary>
+public class SearchImageInfo
+{
+    /// <summary>
+    /// 图片URL
+    /// </summary>
+    public string Url { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 图片宽度
+    /// </summary>
+    public int Width { get; set; }
+
+    /// <summary>
+    /// 图片高度
+    /// </summary>
+    public int Height { get; set; }
+
+    /// <summary>
+    /// 图片场景信息列表
+    /// </summary>
+    public List<SearchImageSceneInfo> InfoList { get; set; } = [];
+}
+
+#endregion
+
+#region 小红书推荐API真实响应数据模型
+
+/// <summary>
+/// 小红书推荐API响应的根级数据结构
+/// 对应 /api/sns/web/v1/homefeed 接口的真实响应格式
+/// </summary>
+/// <param name="Code">响应状态码</param>
+/// <param name="Data">响应数据</param>
+/// <param name="Msg">响应消息</param>
+/// <param name="Success">是否成功</param>
+public record HomefeedResponse(
+    int Code,
+    HomefeedData? Data,
+    string Msg,
+    bool Success
+);
+
+/// <summary>
+/// 推荐API数据部分
+/// </summary>
+/// <param name="CursorScore">分页游标标识</param>
+/// <param name="Items">推荐项目列表</param>
+public record HomefeedData(
+    string CursorScore,
+    List<HomefeedItem> Items
+);
+
+/// <summary>
+/// 单个推荐项目数据
+/// </summary>
+/// <param name="Id">项目ID</param>
+/// <param name="Ignore">是否忽略</param>
+/// <param name="ModelType">模型类型，通常为"note"</param>
+/// <param name="NoteCard">笔记卡片数据</param>
+/// <param name="TrackId">跟踪ID，用于分析</param>
+/// <param name="XsecToken">安全令牌</param>
+public record HomefeedItem(
+    string Id,
+    bool Ignore,
+    string ModelType,
+    NoteCard? NoteCard,
+    string? TrackId,
+    string? XsecToken
+);
+
+/// <summary>
+/// 笔记卡片核心数据
+/// </summary>
+/// <param name="User">用户信息</param>
+/// <param name="Cover">封面图片信息</param>
+/// <param name="DisplayTitle">显示标题</param>
+/// <param name="InteractInfo">交互信息</param>
+/// <param name="Type">笔记类型，如"normal"、"video"</param>
+/// <param name="Video">视频信息（视频笔记专用）</param>
+/// <param name="NoteId">笔记ID</param>
+public record NoteCard(
+    UserCard User,
+    CoverInfo Cover,
+    string DisplayTitle,
+    InteractInfo InteractInfo,
+    string Type,
+    VideoInfo? Video = null,
+    string? NoteId = null
+);
+
+/// <summary>
+/// 视频信息 - 视频笔记专用数据模型
+/// </summary>
+/// <param name="Capa">视频能力信息，包含时长等元数据</param>
+public record VideoInfo(
+    VideoCapa Capa
+);
+
+/// <summary>
+/// 视频能力信息 - 包含视频时长等元数据
+/// </summary>
+/// <param name="Duration">视频时长（秒）</param>
+public record VideoCapa(
+    int Duration
+);
+
+/// <summary>
+/// 用户卡片信息
+/// </summary>
+/// <param name="Nickname">昵称</param>
+/// <param name="UserId">用户ID</param>
+/// <param name="XsecToken">用户安全令牌</param>
+/// <param name="Avatar">头像URL</param>
+public record UserCard(
+    string Nickname,
+    string UserId,
+    string? XsecToken,
+    string Avatar
+);
+
+/// <summary>
+/// 封面图片信息
+/// </summary>
+/// <param name="InfoList">图片信息列表，包含不同场景的图片</param>
+/// <param name="Url">默认URL（通常为空）</param>
+/// <param name="UrlDefault">默认URL</param>
+/// <param name="UrlPre">预览URL</param>
+/// <param name="Width">图片宽度</param>
+/// <param name="Height">图片高度</param>
+/// <param name="FileId">文件ID</param>
+public record CoverInfo(
+    List<ImageInfo> InfoList,
+    string Url,
+    string UrlDefault,
+    string UrlPre,
+    int Width,
+    int Height,
+    string FileId
+);
+
+/// <summary>
+/// 图片信息，包含不同场景的URL
+/// </summary>
+/// <param name="ImageScene">图片场景，如"WB_PRV"、"WB_DFT"</param>
+/// <param name="Url">图片URL</param>
+public record ImageInfo(
+    string ImageScene,
+    string Url
+);
+
+/// <summary>
+/// 基础交互信息类，包含所有交互信息的共同字段
+/// </summary>
+public abstract class BaseInteractInfo
+{
+    /// <summary>
+    /// 点赞数
+    /// </summary>
+    public int LikedCount { get; set; }
+
+    /// <summary>
+    /// 评论数
+    /// </summary>
+    public int CommentCount { get; set; }
+
+    /// <summary>
+    /// 收藏数
+    /// </summary>
+    public int CollectedCount { get; set; }
+
+    /// <summary>
+    /// 是否已点赞
+    /// </summary>
+    public bool Liked { get; set; }
+
+    /// <summary>
+    /// 是否已收藏
+    /// </summary>
+    public bool Collected { get; set; }
+}
+
+public record InteractInfo(
+    bool Liked,
+    string LikedCount
+);
+
+#endregion
+
+#region 数据转换器和映射逻辑
+
+/// <summary>
+/// 推荐API响应到NoteInfo的转换器
+/// 处理真实API数据到现有模型的映射
+/// </summary>
+public static class HomefeedConverter
+{
+
+    /// <summary>
+    /// 将单个推荐项目转换为NoteInfo - 增强视频数据支持
+    /// </summary>
+    /// <param name="item">推荐项目数据</param>
+    /// <returns>转换后的笔记信息</returns>
+    public static NoteInfo? ConvertToNoteInfo(HomefeedItem item)
+    {
+        if (item.NoteCard == null)
+            return null;
+
+        try
+        {
+            var noteCard = item.NoteCard;
+            var missingFields = new List<string>();
+
+            // 创建NoteInfo实例
+            var noteInfo = new NoteInfo
+            {
+                Id = item.Id,
+                Title = noteCard.DisplayTitle,
+                Author = !string.IsNullOrEmpty(noteCard.User.Nickname) 
+                    ? noteCard.User.Nickname 
+                    : "未知用户",
+                AuthorId = noteCard.User.UserId,
+                AuthorAvatar = noteCard.User.Avatar,
+                Url = $"https://www.xiaohongshu.com/explore/{item.Id}",
+                TrackId = item.TrackId,
+                XsecToken = item.XsecToken,
+                ExtractedAt = DateTime.UtcNow
+            };
+
+            // 解析点赞数
+            if (int.TryParse(noteCard.InteractInfo.LikedCount, out int likeCount))
+            {
+                noteInfo.LikeCount = likeCount;
+            }
+            else
+            {
+                missingFields.Add("LikeCount");
+            }
+
+            // 选择最佳封面图片
+            noteInfo.CoverImage = SelectBestCoverImage(noteCard.Cover);
+
+            // 缺失字段标记
+            if (noteInfo.CommentCount == null) missingFields.Add("CommentCount");
+            if (noteInfo.FavoriteCount == null) missingFields.Add("FavoriteCount");
+            if (noteInfo.PublishTime == null) missingFields.Add("PublishTime");
+
+            // 设置数据质量
+            noteInfo.Quality = missingFields.Count switch
+            {
+                0 => DataQuality.Complete,
+                <= 2 => DataQuality.Partial,
+                _ => DataQuality.Minimal
+            };
+
+            noteInfo.MissingFields = missingFields;
+
+            // 根据可用信息推断笔记类型（增强的视频识别）
+            noteInfo.Type = DetermineNoteType(noteCard);
+            
+            // 如果是NoteDetail，额外处理视频时长信息
+            if (noteInfo is NoteDetail noteDetail && noteCard.Video?.Capa.Duration > 0)
+            {
+                noteDetail.VideoDuration = noteCard.Video.Capa.Duration;
+            }
+
+            return noteInfo;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 从封面信息中选择最佳图片URL
+    /// 优先级：WB_DFT > WB_PRV > 第一个可用
+    /// </summary>
+    /// <param name="cover">封面信息</param>
+    /// <returns>最佳图片URL</returns>
+    private static string SelectBestCoverImage(CoverInfo cover)
+    {
+        if (cover.InfoList.Count == 0)
+            return cover.UrlDefault;
+
+        // 优先选择WB_DFT（默认场景）
+        var defaultImage = cover.InfoList.FirstOrDefault(x => x.ImageScene == "WB_DFT");
+        if (defaultImage != null && !string.IsNullOrEmpty(defaultImage.Url))
+            return defaultImage.Url;
+
+        // 其次选择WB_PRV（预览场景）
+        var previewImage = cover.InfoList.FirstOrDefault(x => x.ImageScene == "WB_PRV");
+        if (previewImage != null && !string.IsNullOrEmpty(previewImage.Url))
+            return previewImage.Url;
+
+        // 最后选择第一个可用的
+        var firstAvailable = cover.InfoList.FirstOrDefault(x => !string.IsNullOrEmpty(x.Url));
+        return firstAvailable?.Url ?? cover.UrlDefault;
+    }
+
+    /// <summary>
+    /// 根据笔记卡片信息推断笔记类型 - 增强视频识别逻辑
+    /// </summary>
+    /// <param name="noteCard">笔记卡片</param>
+    /// <returns>推断的笔记类型</returns>
+    private static NoteType DetermineNoteType(NoteCard noteCard)
+    {
+        // 优先级1：检查type字段是否明确标识为video
+        if (string.Equals(noteCard.Type, "video", StringComparison.OrdinalIgnoreCase))
+        {
+            return NoteType.Video;
+        }
+        
+        // 优先级2：检查是否包含视频信息（最可靠）
+        if (noteCard.Video?.Capa.Duration > 0)
+        {
+            return NoteType.Video;
+        }
+        
+        // 优先级3：基于type字段的其他值判断
+        if (string.Equals(noteCard.Type, "normal", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(noteCard.Type, "image", StringComparison.OrdinalIgnoreCase))
+        {
+            // 标准图文笔记
+            if (noteCard.Cover.InfoList.Count != 0)
+            {
+                return NoteType.Image;
+            }
+        }
+
+        // 优先级4：基于封面图片存在与否的后备判断
+        if (noteCard.Cover.InfoList.Count != 0)
+        {
+            // 有封面图片，在无法确定具体类型时，默认为图文笔记
+            return NoteType.Image;
+        }
+
+        // 无法确定类型时返回未知
+        return NoteType.Unknown;
+    }
+
+}
+#endregion
+
+#region 页面加载等待策略接口和配置
+
+/// <summary>
+/// 页面加载等待策略服务接口
+/// 提供多级等待策略，解决WaitForLoadStateAsync硬编码超时问题
+/// </summary>
+public interface IPageLoadWaitService
+{
+    /// <summary>
+    /// 执行多级页面加载等待策略
+    /// 按照 DOMContentLoaded → Load → NetworkIdle 的顺序依次尝试
+    /// 支持智能降级和重试机制
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>等待策略执行结果</returns>
+    Task<PageLoadWaitResult> WaitForPageLoadAsync(IPage page, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 执行指定的单一等待策略
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="strategy">等待策略类型</param>
+    /// <param name="timeout">自定义超时时间（可选）</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>等待策略执行结果</returns>
+    Task<PageLoadWaitResult> WaitForPageLoadAsync(IPage page, PageLoadStrategy strategy, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 快速模式页面加载等待
+    /// 仅使用DOMContentLoaded策略，适用于轻量级页面或性能要求较高的场景
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>等待策略执行结果</returns>
+    Task<PageLoadWaitResult> WaitForPageLoadFastAsync(IPage page, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 检查页面是否正在加载
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <returns>页面是否正在加载</returns>
+    Task<bool> IsPageLoadingAsync(IPage page);
+
+    /// <summary>
+    /// 等待页面加载完成
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="timeout">超时时间</param>
+    /// <returns>是否等待成功</returns>
+    Task<bool> WaitForLoadCompleteAsync(IPage page, TimeSpan timeout);
+}
+
+/// <summary>
+/// 页面加载等待策略枚举
+/// 定义不同级别的页面加载完成标准
+/// </summary>
+public enum PageLoadStrategy
+{
+    /// <summary>DOM内容加载完成，最快的等待策略</summary>
+    DOMContentLoaded,
+    
+    /// <summary>页面完全加载（包括图片、样式表等），平衡策略</summary>
+    Load,
+    
+    /// <summary>网络空闲状态，最严格的等待策略</summary>
+    NetworkIdle
+}
+
+/// <summary>
+/// 页面加载等待配置类
+/// 提供所有等待策略的超时时间和重试配置
+/// </summary>
+public class PageLoadWaitConfig
+{
+    /// <summary>
+    /// DOMContentLoaded 超时时间（毫秒）
+    /// </summary>
+    public int DOMContentLoadedTimeout { get; set; } = 15000;
+
+    /// <summary>
+    /// Load 超时时间（毫秒）
+    /// </summary>
+    public int LoadTimeout { get; set; } = 30000;
+
+    /// <summary>
+    /// NetworkIdle 超时时间（毫秒）
+    /// </summary>
+    public int NetworkIdleTimeout { get; set; } = 60000;
+
+    /// <summary>
+    /// 最大重试次数
+    /// </summary>
+    public int MaxRetries { get; set; } = 3;
+
+    /// <summary>
+    /// 重试间隔时间（毫秒）
+    /// </summary>
+    public int RetryDelayMs { get; set; } = 2000;
+
+    /// <summary>
+    /// 是否启用智能降级机制
+    /// 当高级策略失败时，自动降级到较低级别的策略
+    /// </summary>
+    public bool EnableDegradation { get; set; } = true;
+
+    /// <summary>
+    /// 快速模式超时时间（毫秒）
+    /// 用于WaitForPageLoadFastAsync方法
+    /// </summary>
+    public int FastModeTimeout { get; set; } = 10000;
+
+    /// <summary>
+    /// 自定义验证超时时间（毫秒）
+    /// 用于WaitForPageLoadWithValidationAsync方法
+    /// </summary>
+    public int CustomValidationTimeout { get; set; } = 5000;
+}
+
+/// <summary>
+/// 页面加载等待结果
+/// 包含等待策略执行的详细信息和结果
+/// </summary>
+public class PageLoadWaitResult
+{
+    /// <summary>
+    /// 等待操作是否成功
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// 实际使用的等待策略
+    /// </summary>
+    public PageLoadStrategy UsedStrategy { get; set; }
+
+    /// <summary>
+    /// 总耗时
+    /// </summary>
+    public TimeSpan Duration { get; set; }
+
+    /// <summary>
+    /// 重试次数
+    /// </summary>
+    public int RetryCount { get; set; }
+
+    /// <summary>
+    /// 是否发生了策略降级
+    /// </summary>
+    public bool WasDegraded { get; set; }
+
+    /// <summary>
+    /// 错误信息（如果失败）
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// 错误类型
+    /// </summary>
+    public ErrorType ErrorType { get; set; } = ErrorType.Unknown;
+
+    /// <summary>
+    /// 详细的执行日志
+    /// </summary>
+    public List<string> ExecutionLog { get; set; } = [];
+
+    /// <summary>
+    /// 自定义验证结果（如果使用了自定义验证）
+    /// </summary>
+    public bool? CustomValidationResult { get; set; }
+
+    /// <summary>
+    /// 创建成功结果
+    /// </summary>
+    /// <param name="strategy">使用的策略</param>
+    /// <param name="duration">耗时</param>
+    /// <param name="retryCount">重试次数</param>
+    /// <param name="wasDegraded">是否降级</param>
+    /// <returns>成功结果实例</returns>
+    public static PageLoadWaitResult CreateSuccess(PageLoadStrategy strategy, TimeSpan duration, int retryCount = 0, bool wasDegraded = false)
+    {
+        return new PageLoadWaitResult
+        {
+            Success = true,
+            UsedStrategy = strategy,
+            Duration = duration,
+            RetryCount = retryCount,
+            WasDegraded = wasDegraded
+        };
+    }
+
+    /// <summary>
+    /// 创建失败结果
+    /// </summary>
+    /// <param name="errorMessage">错误信息</param>
+    /// <param name="errorType">错误类型</param>
+    /// <param name="duration">耗时</param>
+    /// <param name="retryCount">重试次数</param>
+    /// <returns>失败结果实例</returns>
+    public static PageLoadWaitResult CreateFailure(string errorMessage, ErrorType errorType = ErrorType.Unknown, TimeSpan duration = default, int retryCount = 0)
+    {
+        return new PageLoadWaitResult
+        {
+            Success = false,
+            ErrorMessage = errorMessage,
+            ErrorType = errorType,
+            Duration = duration,
+            RetryCount = retryCount
+        };
+    }
+}
+
 #endregion

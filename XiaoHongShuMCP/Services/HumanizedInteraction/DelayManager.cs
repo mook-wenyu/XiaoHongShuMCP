@@ -51,7 +51,7 @@ public class DelayManager : IDelayManager
     /// <summary>
     /// 重试基础延时（毫秒）
     /// </summary>
-    private const int RetryBaseDelay = 500;
+    private const int RETRY_BASE_DELAY = 500;
     
     #endregion
     
@@ -87,7 +87,7 @@ public class DelayManager : IDelayManager
     
     /// <inheritdoc />
     public int GetRetryDelay(int attemptNumber) => 
-        RetryBaseDelay * attemptNumber;
+        RETRY_BASE_DELAY * attemptNumber;
     
     /// <inheritdoc />
     public int GetBetweenActionsDelay() => 

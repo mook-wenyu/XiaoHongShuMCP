@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Playwright;
-using System.Text.Json;
 
 namespace XiaoHongShuMCP.Services;
 
@@ -36,16 +34,6 @@ public class RecommendService : IRecommendService
         {
             _logger.LogInformation("开始获取推荐笔记，数量：{Limit}，超时：{Timeout}分钟", limit, timeout.Value.TotalMinutes);
 
-            // 1. 验证浏览器连接
-            var browserValidation = await ValidateBrowserConnectionAsync();
-            if (!browserValidation.Success)
-            {
-                return OperationResult<RecommendListResult>.Fail(
-                    $"浏览器连接验证失败：{browserValidation.ErrorMessage ?? "验证失败"}",
-                    ErrorType.BrowserError,
-                    "BROWSER_VALIDATION_FAILED");
-            }
-
             var context = await _browserManager.GetBrowserContextAsync();
             var page = context.Pages.FirstOrDefault() ?? await context.NewPageAsync();
 
@@ -60,9 +48,6 @@ public class RecommendService : IRecommendService
                     "NAVIGATION_FAILED");
             }
 
-            _logger.LogInformation("导航成功，方法：{Method}，API触发：{ApiTriggered}", 
-                navigationResult.Method, navigationResult.ApiTriggered);
-
             // 3. 执行智能收集
             var collectionMode = limit <= 10 
                 ? RecommendCollectionMode.Fast 
@@ -71,6 +56,7 @@ public class RecommendService : IRecommendService
                     : RecommendCollectionMode.Careful;
 
             var collectionResult = await _collectionController.ExecuteSmartCollectionAsync(
+                context, page,
                 limit, collectionMode, timeout);
 
             if (!collectionResult.Success)
@@ -102,42 +88,6 @@ public class RecommendService : IRecommendService
     }
 
     /// <summary>
-    /// 验证浏览器连接
-    /// </summary>
-    private async Task<OperationResult<bool>> ValidateBrowserConnectionAsync()
-    {
-        try
-        {
-            var context = await _browserManager.GetBrowserContextAsync();
-            if (context == null)
-            {
-                return OperationResult<bool>.Fail(
-                    "浏览器上下文为空",
-                    ErrorType.BrowserError,
-                    "BROWSER_CONTEXT_NULL");
-            }
-
-            var pages = context.Pages;
-            if (!pages.Any())
-            {
-                // 尝试创建新页面
-                await context.NewPageAsync();
-                _logger.LogDebug("创建新浏览器页面");
-            }
-
-            return OperationResult<bool>.Ok(true);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "验证浏览器连接时发生异常");
-            return OperationResult<bool>.Fail(
-                $"浏览器连接异常：{ex.Message}",
-                ErrorType.BrowserError,
-                "BROWSER_VALIDATION_EXCEPTION");
-        }
-    }
-
-    /// <summary>
     /// 转换收集结果为推荐结果格式
     /// </summary>
     private RecommendListResult ConvertToRecommendResult(
@@ -146,18 +96,39 @@ public class RecommendService : IRecommendService
     {
         // 直接使用 NoteInfo，不需要转换为 RecommendNote
         var notes = collectionResult.CollectedNotes;
+        
+        _logger.LogDebug("开始转换收集结果，笔记总数：{Count}", notes.Count);
 
-        // 创建统计数据
+        // 创建统计数据，使用安全的平均值计算
+        var notesWithLikes = notes.Where(n => n.LikeCount.HasValue && n.LikeCount > 0).ToList();
+        var notesWithComments = notes.Where(n => n.CommentCount.HasValue && n.CommentCount >= 0).ToList();
+        var notesWithCollects = notes.Where(n => n.FavoriteCount.HasValue && n.FavoriteCount >= 0).ToList();
+
+        _logger.LogDebug("统计数据过滤结果 - 有点赞数据：{LikeCount}，有评论数据：{CommentCount}，有收藏数据：{CollectCount}", 
+            notesWithLikes.Count, notesWithComments.Count, notesWithCollects.Count);
+
+        // 安全计算平均值，避免空序列异常
+        var avgLikes = notesWithLikes.Count > 0 ? notesWithLikes.Average(n => n.LikeCount ?? 0) : 0;
+        var avgComments = notesWithComments.Count > 0 ? notesWithComments.Average(n => n.CommentCount ?? 0) : 0;
+        var avgCollects = notesWithCollects.Count > 0 ? notesWithCollects.Average(n => n.FavoriteCount ?? 0) : 0;
+
         var statistics = new RecommendStatistics(
             VideoNotesCount: notes.Count(n => n.Type == NoteType.Video),
             ImageNotesCount: notes.Count(n => n.Type == NoteType.Image),
-            AverageLikes: notes.Where(n => n.LikeCount.HasValue).Average(n => n.LikeCount ?? 0),
-            AverageComments: notes.Where(n => n.CommentCount.HasValue).Average(n => n.CommentCount ?? 0),
-            AverageCollects: notes.Where(n => n.FavoriteCount.HasValue).Average(n => n.FavoriteCount ?? 0),
+            AverageLikes: avgLikes,
+            AverageComments: avgComments,
+            AverageCollects: avgCollects,
             TopCategories: new Dictionary<string, int>(),
-            AuthorDistribution: notes.GroupBy(n => n.Author).ToDictionary(g => g.Key, g => g.Count()),
+            AuthorDistribution: notes.Count != 0 ? 
+                notes.Where(n => !string.IsNullOrEmpty(n.Author))
+                     .GroupBy(n => n.Author)
+                     .ToDictionary(g => g.Key, g => g.Count()) : 
+                new Dictionary<string, int>(),
             CalculatedAt: DateTime.UtcNow
         );
+
+        _logger.LogDebug("统计数据计算完成 - 平均点赞：{AvgLikes:F1}，平均评论：{AvgComments:F1}，平均收藏：{AvgCollects:F1}", 
+            avgLikes, avgComments, avgCollects);
 
         // 创建收集详情
         var collectionDetails = new RecommendCollectionDetails(
@@ -180,77 +151,5 @@ public class RecommendService : IRecommendService
             ExportInfo: null,
             CollectionDetails: collectionDetails
         );
-    }
-
-    /// <inheritdoc />
-    public async Task<ApiConnectionStatus> ValidateApiConnectionAsync()
-    {
-        var status = new ApiConnectionStatus();
-        
-        try
-        {
-            _logger.LogDebug("开始验证API连接状态");
-
-            // 验证浏览器状态
-            try
-            {
-                var context = await _browserManager.GetBrowserContextAsync();
-                if (context != null)
-                {
-                    status.BrowserStatus = "已连接";
-                    status.Details.Add("浏览器上下文正常");
-
-                    var pages = context.Pages;
-                    if (pages.Any())
-                    {
-                        var page = pages.First();
-                        status.PageStatus = $"页面URL: {page.Url}";
-                        
-                        // 获取页面状态
-                        var pageStatus = await _navigationService.GetCurrentPageStatusAsync(page);
-                        status.Details.Add($"页面状态: {pageStatus.PageState}");
-                        status.Details.Add($"发现页面: {pageStatus.IsOnDiscoverPage}");
-                        status.Details.Add($"发现元素数量: {pageStatus.DiscoverElementsCount}");
-
-                        // 验证API触发
-                        status.ApiTriggered = await _navigationService.ValidateHomefeedApiTriggeredAsync(
-                            page, TimeSpan.FromSeconds(5));
-
-                        status.Details.Add($"API触发状态: {status.ApiTriggered}");
-                    }
-                    else
-                    {
-                        status.PageStatus = "无活动页面";
-                        status.Details.Add("浏览器无活动页面");
-                    }
-                }
-                else
-                {
-                    status.BrowserStatus = "未连接";
-                    status.Details.Add("浏览器上下文为空");
-                }
-            }
-            catch (Exception ex)
-            {
-                status.BrowserStatus = $"连接异常: {ex.Message}";
-                status.Details.Add($"浏览器验证异常: {ex.Message}");
-            }
-
-            // 综合评估连接状态
-            status.IsConnected = status.BrowserStatus == "已连接" && 
-                                !string.IsNullOrEmpty(status.PageStatus) && 
-                                !status.PageStatus.Contains("异常");
-
-            _logger.LogDebug("API连接状态验证完成，连接状态：{IsConnected}", status.IsConnected);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "验证API连接状态时发生异常");
-            status.IsConnected = false;
-            status.BrowserStatus = "验证异常";
-            status.Details.Add($"验证过程异常: {ex.Message}");
-        }
-
-        return status;
     }
 }

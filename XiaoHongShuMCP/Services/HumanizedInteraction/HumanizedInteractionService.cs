@@ -1,5 +1,5 @@
-using Microsoft.Playwright;
 using Microsoft.Extensions.Logging;
+using Microsoft.Playwright;
 
 namespace XiaoHongShuMCP.Services;
 
@@ -12,20 +12,20 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     private readonly IDelayManager _delayManager;
     private readonly IElementFinder _elementFinder;
     private readonly List<ITextInputStrategy> _inputStrategies;
-    private readonly ISelectorManager _selectorManager;
+    private readonly IDomElementManager _domElementManager;
     private readonly ILogger<HumanizedInteractionService>? _logger;
 
     public HumanizedInteractionService(
         IDelayManager delayManager,
         IElementFinder elementFinder,
         IEnumerable<ITextInputStrategy> inputStrategies,
-        ISelectorManager selectorManager,
+        IDomElementManager domElementManager,
         ILogger<HumanizedInteractionService>? logger = null)
     {
         _delayManager = delayManager;
         _elementFinder = elementFinder;
         _inputStrategies = inputStrategies.ToList();
-        _selectorManager = selectorManager;
+        _domElementManager = domElementManager;
         _logger = logger;
     }
 
@@ -277,7 +277,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     public async Task<IElementHandle?> FindElementAsync(IPage page, string selectorAlias, PageState pageState, int retries = 3, int timeout = 3000)
     {
         // 获取页面状态感知的选择器
-        var selectors = _selectorManager.GetSelectors(selectorAlias, pageState);
+        var selectors = _domElementManager.GetSelectors(selectorAlias, pageState);
         
         for (int attempt = 0; attempt < retries; attempt++)
         {
@@ -294,7 +294,6 @@ public class HumanizedInteractionService : IHumanizedInteractionService
                 catch
                 {
                     // 继续尝试下一个选择器
-                    continue;
                 }
             }
             
@@ -351,7 +350,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
             IElementHandle? activeButton = null;
 
             // 首先检查是否已经点赞
-            var likedButtonSelectors = _selectorManager.GetSelectors("likeButtonActive");
+            var likedButtonSelectors = _domElementManager.GetSelectors("likeButtonActive");
             foreach (var selector in likedButtonSelectors)
             {
                 try
@@ -367,7 +366,6 @@ public class HumanizedInteractionService : IHumanizedInteractionService
                 catch (Exception ex)
                 {
                     _logger?.LogDebug("检测已点赞状态选择器 {Selector} 失败: {Error}", selector, ex.Message);
-                    continue;
                 }
             }
 
@@ -375,7 +373,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
             IElementHandle? likeButton = activeButton;
             if (!isCurrentlyLiked)
             {
-                var likeButtonSelectors = _selectorManager.GetSelectors("likeButton");
+                var likeButtonSelectors = _domElementManager.GetSelectors("likeButton");
                 foreach (var selector in likeButtonSelectors)
                 {
                     try
@@ -389,7 +387,6 @@ public class HumanizedInteractionService : IHumanizedInteractionService
                     catch (Exception ex)
                     {
                         _logger?.LogDebug("查找点赞按钮选择器 {Selector} 失败: {Error}", selector, ex.Message);
-                        continue;
                     }
                 }
             }
@@ -433,7 +430,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
             string newState = previousState;
 
             // 检查是否出现加载状态
-            var loadingSelectors = _selectorManager.GetSelectors("likeButtonLoading");
+            var loadingSelectors = _domElementManager.GetSelectors("likeButtonLoading");
             bool isLoading = false;
             foreach (var selector in loadingSelectors)
             {
@@ -482,18 +479,15 @@ public class HumanizedInteractionService : IHumanizedInteractionService
                     Message: "点赞成功"
                 );
             }
-            else
-            {
-                _logger?.LogWarning("点赞操作可能失败，无法验证状态改变");
-                return new InteractionResult(
-                    Success: false,
-                    Action: "点赞",
-                    PreviousState: previousState,
-                    CurrentState: previousState,
-                    Message: "点赞操作失败或无法验证状态",
-                    ErrorCode: "LIKE_VERIFICATION_FAILED"
-                );
-            }
+            _logger?.LogWarning("点赞操作可能失败，无法验证状态改变");
+            return new InteractionResult(
+                Success: false,
+                Action: "点赞",
+                PreviousState: previousState,
+                CurrentState: previousState,
+                Message: "点赞操作失败或无法验证状态",
+                ErrorCode: "LIKE_VERIFICATION_FAILED"
+            );
         }
         catch (Exception ex)
         {
@@ -528,7 +522,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
             IElementHandle? activeButton = null;
 
             // 首先检查是否已经收藏
-            var favoritedButtonSelectors = _selectorManager.GetSelectors("favoriteButtonActive");
+            var favoritedButtonSelectors = _domElementManager.GetSelectors("favoriteButtonActive");
             foreach (var selector in favoritedButtonSelectors)
             {
                 try
@@ -544,7 +538,6 @@ public class HumanizedInteractionService : IHumanizedInteractionService
                 catch (Exception ex)
                 {
                     _logger?.LogDebug("检测已收藏状态选择器 {Selector} 失败: {Error}", selector, ex.Message);
-                    continue;
                 }
             }
 
@@ -552,7 +545,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
             IElementHandle? favoriteButton = activeButton;
             if (!isCurrentlyFavorited)
             {
-                var favoriteButtonSelectors = _selectorManager.GetSelectors("favoriteButton");
+                var favoriteButtonSelectors = _domElementManager.GetSelectors("favoriteButton");
                 foreach (var selector in favoriteButtonSelectors)
                 {
                     try
@@ -566,7 +559,6 @@ public class HumanizedInteractionService : IHumanizedInteractionService
                     catch (Exception ex)
                     {
                         _logger?.LogDebug("查找收藏按钮选择器 {Selector} 失败: {Error}", selector, ex.Message);
-                        continue;
                     }
                 }
             }
@@ -610,7 +602,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
             string newState = previousState;
 
             // 检查是否出现加载状态
-            var loadingSelectors = _selectorManager.GetSelectors("favoriteButtonLoading");
+            var loadingSelectors = _domElementManager.GetSelectors("favoriteButtonLoading");
             bool isLoading = false;
             foreach (var selector in loadingSelectors)
             {
@@ -659,18 +651,15 @@ public class HumanizedInteractionService : IHumanizedInteractionService
                     Message: "收藏成功"
                 );
             }
-            else
-            {
-                _logger?.LogWarning("收藏操作可能失败，无法验证状态改变");
-                return new InteractionResult(
-                    Success: false,
-                    Action: "收藏",
-                    PreviousState: previousState,
-                    CurrentState: previousState,
-                    Message: "收藏操作失败或无法验证状态",
-                    ErrorCode: "FAVORITE_VERIFICATION_FAILED"
-                );
-            }
+            _logger?.LogWarning("收藏操作可能失败，无法验证状态改变");
+            return new InteractionResult(
+                Success: false,
+                Action: "收藏",
+                PreviousState: previousState,
+                CurrentState: previousState,
+                Message: "收藏操作失败或无法验证状态",
+                ErrorCode: "FAVORITE_VERIFICATION_FAILED"
+            );
         }
         catch (Exception ex)
         {
@@ -702,6 +691,56 @@ public class HumanizedInteractionService : IHumanizedInteractionService
         }
         
         return null;
+    }
+
+    /// <summary>
+    /// 执行自然滚动操作
+    /// </summary>
+    /// <param name="page">页面对象</param>
+    /// <param name="distance">滚动距离</param>
+    /// <param name="duration">滚动时长</param>
+    public async Task PerformNaturalScrollAsync(IPage page, int distance, TimeSpan duration)
+    {
+        try
+        {
+            await page.EvaluateAsync(@"
+                (args) => {
+                    const { distance, duration } = args;
+                    return new Promise((resolve) => {
+                        const startTime = performance.now();
+                        const startScroll = window.pageYOffset;
+                        const endScroll = startScroll + distance;
+                        
+                        function smoothScroll() {
+                            const currentTime = performance.now();
+                            const elapsed = currentTime - startTime;
+                            const progress = Math.min(elapsed / duration, 1);
+                            
+                            // 使用easing函数使滚动更自然
+                            const easeProgress = 1 - Math.pow(1 - progress, 3);
+                            const currentScroll = startScroll + (distance * easeProgress);
+                            
+                            window.scrollTo(0, currentScroll);
+                            
+                            if (progress < 1) {
+                                requestAnimationFrame(smoothScroll);
+                            } else {
+                                resolve();
+                            }
+                        }
+                        
+                        smoothScroll();
+                    });
+                }
+            ", new { distance, duration = (int)duration.TotalMilliseconds });
+            
+            _logger?.LogDebug("执行自然滚动操作: 距离={Distance}px, 时长={Duration}ms", distance, duration.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "执行自然滚动操作失败");
+            throw;
+        }
     }
     
     #endregion

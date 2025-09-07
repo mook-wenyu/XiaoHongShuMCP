@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace XiaoHongShuMCP.Services;
@@ -38,10 +39,10 @@ public static class FeedApiConverter
         }
 
         // 设置图片信息
-        if (noteCard.ImageList?.Any() == true)
+        if (noteCard.ImageList.Count != 0)
         {
             noteDetail.Images = noteCard.ImageList
-                .Select(img => img.UrlDefault ?? img.UrlPre ?? img.Url)
+                .Select(img => img.UrlDefault)
                 .Where(url => !string.IsNullOrEmpty(url))
                 .ToList();
             
@@ -62,7 +63,7 @@ public static class FeedApiConverter
         }
 
         // 设置标签信息
-        if (noteCard.TagList?.Any() == true)
+        if (noteCard.TagList.Count != 0)
         {
             noteDetail.Tags = noteCard.TagList.Select(tag => tag.Name).ToList();
         }
@@ -89,12 +90,12 @@ public static class FeedApiConverter
         // 优先级：H265 > H264
         var allStreams = new List<FeedApiVideoStreamDetail>();
         
-        if (video.Media?.Stream?.H265?.Any() == true)
+        if (video.Media?.Stream?.H265.Count != 0)
         {
             allStreams.AddRange(video.Media.Stream.H265);
         }
         
-        if (video.Media?.Stream?.H264?.Any() == true)
+        if (video.Media?.Stream?.H264.Count != 0)
         {
             allStreams.AddRange(video.Media.Stream.H264);
         }
@@ -141,6 +142,37 @@ public static class FeedApiConverter
     }
 
     /// <summary>
+    /// 将FeedApiResponse转换为NoteDetail列表
+    /// </summary>
+    public static List<NoteDetail> ConvertToNoteDetails(FeedApiResponse response)
+    {
+        var noteDetails = new List<NoteDetail>();
+        
+        if (response?.Data?.Items == null)
+        {
+            return noteDetails;
+        }
+        
+        foreach (var item in response.Data.Items)
+        {
+            if (item.NoteCard != null)
+            {
+                try
+                {
+                    var noteDetail = ConvertToNoteDetail(item.NoteCard, item.Id ?? string.Empty);
+                    noteDetails.Add(noteDetail);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"转换笔记详情失败: {ex.Message}");
+                }
+            }
+        }
+        
+        return noteDetails;
+    }
+
+    /// <summary>
     /// 批量转换Feed API响应为NoteDetail列表
     /// </summary>
     public static List<NoteDetail> ConvertBatchToNoteDetails(List<MonitoredFeedResponse> monitoredResponses)
@@ -150,7 +182,7 @@ public static class FeedApiConverter
         foreach (var response in monitoredResponses)
         {
             if (response.ResponseData?.Success != true || 
-                response.ResponseData.Data?.Items?.Any() != true)
+                response.ResponseData.Data?.Items.Count != 0 != true)
             {
                 continue;
             }
@@ -167,7 +199,7 @@ public static class FeedApiConverter
                     catch (Exception ex)
                     {
                         // 记录转换失败但不中断处理
-                        System.Diagnostics.Debug.WriteLine($"转换笔记详情失败: {ex.Message}");
+                        Debug.WriteLine($"转换笔记详情失败: {ex.Message}");
                     }
                 }
             }
@@ -202,9 +234,7 @@ public static class FeedApiConverter
     /// </summary>
     public static bool IsValidFeedResponse(FeedApiResponse? response)
     {
-        return response != null && 
-               response.Success && 
-               response.Code == 0 &&
-               response.Data?.Items?.Any() == true;
+        return response is {Success: true, Code: 0} &&
+               response.Data?.Items.Count != 0;
     }
 }

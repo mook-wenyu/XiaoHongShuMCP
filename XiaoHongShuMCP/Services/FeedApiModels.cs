@@ -34,7 +34,7 @@ public class FeedApiData
     public string CursorScore { get; set; } = string.Empty;
     
     [JsonPropertyName("items")]
-    public List<FeedApiItem> Items { get; set; } = new();
+    public List<FeedApiItem> Items { get; set; } = [];
     
     [JsonPropertyName("current_time")]
     public long CurrentTime { get; set; }
@@ -88,16 +88,16 @@ public class FeedApiNoteCard
     public FeedApiInteractInfo? InteractInfo { get; set; }
     
     [JsonPropertyName("image_list")]
-    public List<FeedApiImage> ImageList { get; set; } = new();
+    public List<FeedApiImage> ImageList { get; set; } = [];
     
     [JsonPropertyName("video")]
     public FeedApiVideo? Video { get; set; }
     
     [JsonPropertyName("tag_list")]
-    public List<FeedApiTag> TagList { get; set; } = new();
+    public List<FeedApiTag> TagList { get; set; } = [];
     
     [JsonPropertyName("at_user_list")]
-    public List<FeedApiAtUser> AtUserList { get; set; } = new();
+    public List<FeedApiAtUser> AtUserList { get; set; } = [];
     
     [JsonPropertyName("share_info")]
     public FeedApiShareInfo? ShareInfo { get; set; }
@@ -193,7 +193,7 @@ public class FeedApiImage
     public bool LivePhoto { get; set; }
     
     [JsonPropertyName("info_list")]
-    public List<FeedApiImageInfo> InfoList { get; set; } = new();
+    public List<FeedApiImageInfo> InfoList { get; set; } = [];
     
     [JsonPropertyName("stream")]
     public object Stream { get; set; } = new();
@@ -262,7 +262,7 @@ public class FeedApiVideoDetail
     public int DrmType { get; set; }
     
     [JsonPropertyName("stream_types")]
-    public List<int> StreamTypes { get; set; } = new();
+    public List<int> StreamTypes { get; set; } = [];
     
     [JsonPropertyName("biz_name")]
     public int BizName { get; set; }
@@ -277,16 +277,16 @@ public class FeedApiVideoDetail
 public class FeedApiVideoStream
 {
     [JsonPropertyName("h264")]
-    public List<FeedApiVideoStreamDetail> H264 { get; set; } = new();
+    public List<FeedApiVideoStreamDetail> H264 { get; set; } = [];
     
     [JsonPropertyName("h265")]
-    public List<FeedApiVideoStreamDetail> H265 { get; set; } = new();
+    public List<FeedApiVideoStreamDetail> H265 { get; set; } = [];
     
     [JsonPropertyName("h266")]
-    public List<FeedApiVideoStreamDetail> H266 { get; set; } = new();
+    public List<FeedApiVideoStreamDetail> H266 { get; set; } = [];
     
     [JsonPropertyName("av1")]
-    public List<FeedApiVideoStreamDetail> Av1 { get; set; } = new();
+    public List<FeedApiVideoStreamDetail> Av1 { get; set; } = [];
 }
 
 /// <summary>
@@ -301,7 +301,7 @@ public class FeedApiVideoStreamDetail
     public string MasterUrl { get; set; } = string.Empty;
     
     [JsonPropertyName("backup_urls")]
-    public List<string> BackupUrls { get; set; } = new();
+    public List<string> BackupUrls { get; set; } = [];
     
     [JsonPropertyName("quality_type")]
     public string QualityType { get; set; } = string.Empty;

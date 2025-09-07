@@ -60,8 +60,8 @@ public class DataModelsTests
         // Act
         noteDetail.DetermineType();
 
-        // Assert
-        Assert.That(noteDetail.Type, Is.EqualTo(NoteType.Article));
+        // Assert - 长文内容现在统一归类为图文类型
+        Assert.That(noteDetail.Type, Is.EqualTo(NoteType.Image));
         Assert.That(noteDetail.GetTypeConfidence(), Is.EqualTo(TypeIdentificationConfidence.Medium));
     }
 

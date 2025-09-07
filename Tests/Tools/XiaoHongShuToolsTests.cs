@@ -11,7 +11,6 @@ namespace XiaoHongShuMCP.Tests.Tools;
 public class XiaoHongShuToolsTests
 {
     private Mock<IAccountManager> _mockAccountManager;
-    private Mock<ISearchDataService> _mockSearchDataService;
     private Mock<IXiaoHongShuService> _mockXiaoHongShuService;
     private IServiceProvider _serviceProvider;
 
@@ -19,12 +18,10 @@ public class XiaoHongShuToolsTests
     public void SetUp()
     {
         _mockAccountManager = new Mock<IAccountManager>();
-        _mockSearchDataService = new Mock<ISearchDataService>();
         _mockXiaoHongShuService = new Mock<IXiaoHongShuService>();
 
         var services = new ServiceCollection();
         services.AddSingleton(_mockAccountManager.Object);
-        services.AddSingleton(_mockSearchDataService.Object);
         services.AddSingleton(_mockXiaoHongShuService.Object);
 
         _serviceProvider = services.BuildServiceProvider();
@@ -87,112 +84,6 @@ public class XiaoHongShuToolsTests
         Assert.That(result.ErrorCode, Is.EqualTo("CONNECTION_EXCEPTION"));
     }
 
-    [Test]
-    public async Task SearchNotesEnhanced_WithValidParameters_ReturnsSearchResult()
-    {
-        // Arrange
-        var keyword = "测试关键词";
-        var expectedResult = new SearchResult(
-            new List<NoteInfo> 
-            { 
-                new NoteInfo 
-                { 
-                    Id = "1", 
-                    Title = "测试笔记", 
-                    Author = "测试作者",
-                    LikeCount = 100 
-                } 
-            },
-            1,
-            keyword,
-            TimeSpan.FromSeconds(2),
-            new SearchStatistics(1, 0, 0, 100, 5, DateTime.UtcNow),
-            null
-        );
-
-        _mockSearchDataService.Setup(x => x.SearchWithAnalyticsAsync(It.IsAny<SearchRequest>()))
-            .ReturnsAsync(OperationResult<SearchResult>.Ok(expectedResult));
-
-        // Act
-        var result = await XiaoHongShuTools.SearchNotes(
-            keyword, 10, "comprehensive", "all", "all", "all", "all", _serviceProvider);
-
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result.SearchKeyword, Is.EqualTo(keyword));
-        Assert.That(result.Notes, Has.Count.EqualTo(1));
-        Assert.That(result.TotalCount, Is.EqualTo(1));
-        Assert.That(result.Statistics, Is.Not.Null);
-    }
-
-    [Test]
-    public async Task SearchNotesEnhanced_WithServiceFailure_ReturnsEmptyResult()
-    {
-        // Arrange
-        var keyword = "测试关键词";
-        _mockSearchDataService.Setup(x => x.SearchWithAnalyticsAsync(It.IsAny<SearchRequest>()))
-            .ReturnsAsync(OperationResult<SearchResult>.Fail("搜索失败"));
-
-        // Act
-        var result = await XiaoHongShuTools.SearchNotes(
-            keyword, 10, "comprehensive", "all", "all", "all", "all", _serviceProvider);
-
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result.Notes, Is.Empty);
-        Assert.That(result.TotalCount, Is.EqualTo(0));
-        Assert.That(result.SearchKeyword, Is.EqualTo(keyword));
-    }
-
-    [Test]
-    [TestCase("comprehensive")]
-    [TestCase("latest")]
-    [TestCase("most_liked")]
-    public async Task SearchNotesEnhanced_WithDifferentSortOptions_CallsServiceWithCorrectParameters(string sortBy)
-    {
-        // Arrange
-        var keyword = "测试";
-        var emptyResult = new SearchResult(
-            new List<NoteInfo>(), 0, keyword, TimeSpan.Zero,
-            new SearchStatistics(0, 0, 0, 0, 0, DateTime.UtcNow), null
-        );
-
-        _mockSearchDataService.Setup(x => x.SearchWithAnalyticsAsync(It.IsAny<SearchRequest>()))
-            .ReturnsAsync(OperationResult<SearchResult>.Ok(emptyResult));
-
-        // Act
-        await XiaoHongShuTools.SearchNotes(
-            keyword, 10, sortBy, "all", "all", "all", "all", _serviceProvider);
-
-        // Assert
-        _mockSearchDataService.Verify(x => x.SearchWithAnalyticsAsync(
-            It.Is<SearchRequest>(req => req.SortBy == sortBy)), Times.Once);
-    }
-
-    [Test]
-    [TestCase("all")]
-    [TestCase("video")]
-    [TestCase("image")]
-    public async Task SearchNotesEnhanced_WithDifferentNoteTypes_CallsServiceWithCorrectParameters(string noteType)
-    {
-        // Arrange
-        var keyword = "测试";
-        var emptyResult = new SearchResult(
-            new List<NoteInfo>(), 0, keyword, TimeSpan.Zero,
-            new SearchStatistics(0, 0, 0, 0, 0, DateTime.UtcNow), null
-        );
-
-        _mockSearchDataService.Setup(x => x.SearchWithAnalyticsAsync(It.IsAny<SearchRequest>()))
-            .ReturnsAsync(OperationResult<SearchResult>.Ok(emptyResult));
-
-        // Act
-        await XiaoHongShuTools.SearchNotes(
-            keyword, 10, "comprehensive", noteType, "all", "all", "all", _serviceProvider);
-
-        // Assert
-        _mockSearchDataService.Verify(x => x.SearchWithAnalyticsAsync(
-            It.Is<SearchRequest>(req => req.NoteType == noteType)), Times.Once);
-    }
 
     [Test]
     public async Task BatchGetNoteDetailsOptimized_WithValidParameters_ReturnsEnhancedResult()
@@ -242,10 +133,10 @@ public class XiaoHongShuToolsTests
             CalculatedAt: DateTime.UtcNow
         );
 
-        var expectedResult = new EnhancedBatchNoteResult(
-            NoteDetails: expectedNoteDetails,
+        var expectedResult = new BatchNoteResult(
+            SuccessfulNotes: expectedNoteDetails,
             FailedNotes: new List<(string, string)>(),
-            TotalProcessed: 2,
+            ProcessedCount: 2,
             ProcessingTime: TimeSpan.FromSeconds(6),
             OverallQuality: DataQuality.Partial,
             Statistics: expectedStatistics,
@@ -254,7 +145,7 @@ public class XiaoHongShuToolsTests
 
         _mockXiaoHongShuService.Setup(x => x.BatchGetNoteDetailsAsync(
                 keywords, 10, false, true, null))
-            .ReturnsAsync(OperationResult<EnhancedBatchNoteResult>.Ok(expectedResult));
+            .ReturnsAsync(OperationResult<BatchNoteResult>.Ok(expectedResult));
 
         // Act
         var result = await XiaoHongShuTools.BatchGetNoteDetailsOptimized(
@@ -262,8 +153,8 @@ public class XiaoHongShuToolsTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.NoteDetails, Has.Count.EqualTo(2));
-        Assert.That(result.TotalProcessed, Is.EqualTo(2));
+        Assert.That(result.SuccessfulNotes, Has.Count.EqualTo(2));
+        Assert.That(result.ProcessedCount, Is.EqualTo(2));
         Assert.That(result.OverallQuality, Is.EqualTo(DataQuality.Partial));
         Assert.That(result.Statistics, Is.Not.Null);
         Assert.That(result.Statistics.CompleteDataCount, Is.EqualTo(1));
@@ -280,7 +171,7 @@ public class XiaoHongShuToolsTests
         var keywords = new List<string> { "测试关键词" };
         _mockXiaoHongShuService.Setup(x => x.BatchGetNoteDetailsAsync(
                 It.IsAny<List<string>>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>()))
-            .ReturnsAsync(OperationResult<EnhancedBatchNoteResult>.Fail("批量获取失败"));
+            .ReturnsAsync(OperationResult<BatchNoteResult>.Fail("批量获取失败"));
 
         // Act
         var result = await XiaoHongShuTools.BatchGetNoteDetailsOptimized(
@@ -324,7 +215,7 @@ public class XiaoHongShuToolsTests
     {
         // Arrange
         var keywords = new List<string> { "测试" };
-        var emptyResult = new EnhancedBatchNoteResult(
+        var emptyResult = new BatchNoteResult(
             new List<NoteDetail>(),
             new List<(string, string)>(),
             0,
@@ -337,7 +228,7 @@ public class XiaoHongShuToolsTests
 
         _mockXiaoHongShuService.Setup(x => x.BatchGetNoteDetailsAsync(
                 It.IsAny<List<string>>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>()))
-            .ReturnsAsync(OperationResult<EnhancedBatchNoteResult>.Ok(emptyResult));
+            .ReturnsAsync(OperationResult<BatchNoteResult>.Ok(emptyResult));
 
         // Act
         await XiaoHongShuTools.BatchGetNoteDetailsOptimized(
@@ -357,7 +248,6 @@ public class XiaoHongShuToolsTests
     public void TearDown()
     {
         _mockAccountManager = null!;
-        _mockSearchDataService = null!;
         _mockXiaoHongShuService = null!;
         (_serviceProvider as IDisposable)?.Dispose();
         _serviceProvider = null!;

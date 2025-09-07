@@ -120,87 +120,6 @@ public class PageLoadWaitService : IPageLoadWaitService
     }
 
     /// <summary>
-    /// 等待页面加载完成并进行自定义验证
-    /// </summary>
-    /// <param name="page">浏览器页面实例</param>
-    /// <param name="customValidator">自定义页面状态验证器</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>等待策略执行结果</returns>
-    public async Task<PageLoadWaitResult> WaitForPageLoadWithValidationAsync(IPage page, Func<IPage, Task<bool>>? customValidator = null, CancellationToken cancellationToken = default)
-    {
-        var startTime = DateTime.UtcNow;
-
-        _logger.LogDebug("开始执行带自定义验证的页面加载等待");
-
-        // 首先执行标准的多级等待策略
-        var loadResult = await WaitForPageLoadAsync(page, cancellationToken);
-
-        if (!loadResult.Success)
-        {
-            return loadResult; // 页面加载失败，直接返回
-        }
-
-        // 执行自定义验证
-        if (customValidator != null)
-        {
-            try
-            {
-                _logger.LogDebug("执行自定义页面验证");
-
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(_config.CustomValidationTimeout));
-                using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-
-                var validationResult = await customValidator(page);
-                
-                if (!validationResult)
-                {
-                    var duration = DateTime.UtcNow - startTime;
-                    _logger.LogWarning("自定义页面验证失败");
-
-                    return new PageLoadWaitResult
-                    {
-                        Success = false,
-                        UsedStrategy = loadResult.UsedStrategy,
-                        Duration = duration,
-                        RetryCount = loadResult.RetryCount,
-                        WasDegraded = loadResult.WasDegraded,
-                        ErrorMessage = "自定义页面验证失败",
-                        ErrorType = ErrorType.ValidationError,
-                        ExecutionLog = loadResult.ExecutionLog,
-                        CustomValidationResult = false
-                    };
-                }
-
-                _logger.LogInformation("自定义页面验证成功");
-                
-                loadResult.CustomValidationResult = true;
-                return loadResult;
-            }
-            catch (Exception ex)
-            {
-                var duration = DateTime.UtcNow - startTime;
-                _logger.LogError(ex, "执行自定义页面验证时发生异常");
-
-                return new PageLoadWaitResult
-                {
-                    Success = false,
-                    UsedStrategy = loadResult.UsedStrategy,
-                    Duration = duration,
-                    RetryCount = loadResult.RetryCount,
-                    WasDegraded = loadResult.WasDegraded,
-                    ErrorMessage = $"自定义页面验证异常: {ex.Message}",
-                    ErrorType = ErrorType.ValidationError,
-                    ExecutionLog = loadResult.ExecutionLog,
-                    CustomValidationResult = false
-                };
-            }
-        }
-
-        // 没有自定义验证器，直接返回加载结果
-        return loadResult;
-    }
-
-    /// <summary>
     /// 快速模式页面加载等待
     /// 仅使用DOMContentLoaded策略，适用于轻量级页面或性能要求较高的场景
     /// </summary>
@@ -343,6 +262,62 @@ public class PageLoadWaitService : IPageLoadWaitService
             PageLoadStrategy.NetworkIdle => LoadState.NetworkIdle,
             _ => LoadState.Load
         };
+    }
+
+    /// <summary>
+    /// 检查页面是否正在加载
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <returns>页面是否正在加载</returns>
+    public async Task<bool> IsPageLoadingAsync(IPage page)
+    {
+        try
+        {
+            var isLoading = await page.EvaluateAsync<bool>(@"
+                () => {
+                    return document.readyState === 'loading' ||
+                           window.performance.getEntriesByType('navigation')[0]?.loadEventEnd === 0;
+                }
+            ");
+            
+            _logger.LogDebug("页面加载状态检查: {IsLoading}", isLoading ? "正在加载" : "已完成");
+            return isLoading;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "检查页面加载状态失败");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 等待页面加载完成
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="timeout">超时时间</param>
+    /// <returns>是否等待成功</returns>
+    public async Task<bool> WaitForLoadCompleteAsync(IPage page, TimeSpan timeout)
+    {
+        try
+        {
+            await page.WaitForLoadStateAsync(LoadState.Load, new PageWaitForLoadStateOptions
+            {
+                Timeout = (float)timeout.TotalMilliseconds
+            });
+            
+            _logger.LogDebug("页面加载完成等待成功，超时时间: {Timeout}ms", timeout.TotalMilliseconds);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            _logger.LogWarning("等待页面加载完成超时: {Timeout}ms", timeout.TotalMilliseconds);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "等待页面加载完成失败");
+            return false;
+        }
     }
 
     #endregion

@@ -1,6 +1,6 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
-using System.Text.Json;
 
 namespace XiaoHongShuMCP.Services;
 
@@ -27,7 +27,7 @@ public class FeedApiMonitor : IDisposable
     public FeedApiMonitor(ILogger<FeedApiMonitor> logger)
     {
         _logger = logger;
-        _monitoredResponses = new List<MonitoredFeedResponse>();
+        _monitoredResponses = [];
     }
 
     /// <summary>
@@ -119,7 +119,7 @@ public class FeedApiMonitor : IDisposable
                 }
 
                 _logger.LogDebug("成功监听 Feed API 响应: 笔记数={Count}", 
-                    feedApiResponse.Data?.Items?.Count ?? 0);
+                    feedApiResponse.Data?.Items.Count ?? 0);
             }
         }
         catch (Exception ex)

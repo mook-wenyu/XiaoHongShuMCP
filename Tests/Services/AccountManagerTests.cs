@@ -13,14 +13,14 @@ public class AccountManagerTests
 {
     private Mock<ILogger<AccountManager>> _mockLogger;
     private Mock<PlaywrightBrowserManager> _mockBrowserManager;
-    private Mock<ISelectorManager> _mockSelectorManager;
+    private Mock<IDomElementManager> _mockDomElementManager;
 
     [SetUp]
     public void SetUp()
     {
         _mockLogger = new Mock<ILogger<AccountManager>>();
         _mockBrowserManager = new Mock<PlaywrightBrowserManager>();
-        _mockSelectorManager = new Mock<ISelectorManager>();
+        _mockDomElementManager = new Mock<IDomElementManager>();
     }
 
     [Test]
@@ -31,7 +31,7 @@ public class AccountManagerTests
         Assert.DoesNotThrow(() => {
             // 测试类的实例化不抛出异常的基本逻辑
             var mockLogger = new Mock<ILogger<AccountManager>>();
-            var mockSelectorManager = new Mock<ISelectorManager>();
+            var mockDomElementManager = new Mock<IDomElementManager>();
             
             // 这里不实际创建 AccountManager，而是测试相关的数据模型
             var userInfo = new UserInfo { Username = "test" };
@@ -78,6 +78,6 @@ public class AccountManagerTests
     {
         _mockLogger = null!;
         _mockBrowserManager = null!;
-        _mockSelectorManager = null!;
+        _mockDomElementManager = null!;
     }
 }

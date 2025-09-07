@@ -9,20 +9,23 @@ namespace XiaoHongShuMCP.Services;
 public class DiscoverPageNavigationService : IDiscoverPageNavigationService
 {
     private readonly ILogger<DiscoverPageNavigationService> _logger;
-    private readonly ISelectorManager _selectorManager;
+    private readonly IDomElementManager _domElementManager;
     private readonly IHumanizedInteractionService _humanizedInteraction;
+    private readonly IPageLoadWaitService _pageLoadWaitService;
 
     /// <summary>
     /// 构造函数
     /// </summary>
     public DiscoverPageNavigationService(
         ILogger<DiscoverPageNavigationService> logger,
-        ISelectorManager selectorManager,
-        IHumanizedInteractionService humanizedInteraction)
+        IDomElementManager domElementManager,
+        IHumanizedInteractionService humanizedInteraction,
+        IPageLoadWaitService pageLoadWaitService)
     {
         _logger = logger;
-        _selectorManager = selectorManager;
+        _domElementManager = domElementManager;
         _humanizedInteraction = humanizedInteraction;
+        _pageLoadWaitService = pageLoadWaitService;
     }
 
     /// <inheritdoc />
@@ -33,7 +36,7 @@ public class DiscoverPageNavigationService : IDiscoverPageNavigationService
         
         var result = new DiscoverNavigationResult
         {
-            NavigationLog = new List<string>()
+            NavigationLog = []
         };
 
         try
@@ -130,7 +133,7 @@ public class DiscoverPageNavigationService : IDiscoverPageNavigationService
         {
             log.Add("尝试方法1：点击发现按钮");
             
-            var discoverSelectors = _selectorManager.GetSelectors("SidebarDiscoverLink");
+            var discoverSelectors = _domElementManager.GetSelectors("SidebarDiscoverLink");
             log.Add($"获取到{discoverSelectors.Count}个发现按钮选择器");
 
             foreach (var selector in discoverSelectors)
@@ -156,8 +159,15 @@ public class DiscoverPageNavigationService : IDiscoverPageNavigationService
                             await _humanizedInteraction.HumanClickAsync(page, button);
                             log.Add("已执行拟人化点击");
                             
-                            // 等待页面响应
-                            await Task.Delay(3000);
+                            // 等待页面响应 - 使用新的等待策略
+                            var waitResult = await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                            if (!waitResult.Success)
+                            {
+                                log.Add($"页面加载等待失败：{waitResult.ErrorMessage}");
+                                log.AddRange(waitResult.ExecutionLog);
+                                continue;
+                            }
+                            log.AddRange(waitResult.ExecutionLog);
                             
                             // 验证导航结果
                             var currentUrl = page.Url;
@@ -182,7 +192,6 @@ public class DiscoverPageNavigationService : IDiscoverPageNavigationService
                 catch (Exception ex)
                 {
                     log.Add($"选择器{selector}处理失败：{ex.Message}");
-                    continue;
                 }
             }
             
@@ -221,8 +230,20 @@ public class DiscoverPageNavigationService : IDiscoverPageNavigationService
                     log.Add($"尝试导航到：{url}");
                     
                     await page.GotoAsync(url);
-                    await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = 10000 });
-                    await Task.Delay(2000);
+                    
+                    // 使用新的等待策略
+                    var waitResult = await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                    if (!waitResult.Success)
+                    {
+                        log.Add($"页面加载等待失败：{waitResult.ErrorMessage}");
+                        if (waitResult.WasDegraded)
+                        {
+                            log.Add("已使用降级策略");
+                        }
+                        log.AddRange(waitResult.ExecutionLog);
+                        continue;
+                    }
+                    log.AddRange(waitResult.ExecutionLog);
                     
                     var currentUrl = page.Url;
                     log.Add($"导航后页面URL：{currentUrl}");
@@ -238,7 +259,6 @@ public class DiscoverPageNavigationService : IDiscoverPageNavigationService
                 catch (Exception ex)
                 {
                     log.Add($"URL导航{url}失败：{ex.Message}");
-                    continue;
                 }
             }
             
@@ -277,7 +297,16 @@ public class DiscoverPageNavigationService : IDiscoverPageNavigationService
                     log.Add($"执行JavaScript：{script}");
                     
                     await page.EvaluateAsync(script);
-                    await Task.Delay(3000);
+                    
+                    // 使用新的等待策略
+                    var waitResult = await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                    if (!waitResult.Success)
+                    {
+                        log.Add($"页面加载等待失败：{waitResult.ErrorMessage}");
+                        log.AddRange(waitResult.ExecutionLog);
+                        continue;
+                    }
+                    log.AddRange(waitResult.ExecutionLog);
                     
                     var currentUrl = page.Url;
                     log.Add($"JavaScript执行后页面URL：{currentUrl}");
@@ -292,7 +321,6 @@ public class DiscoverPageNavigationService : IDiscoverPageNavigationService
                 catch (Exception ex)
                 {
                     log.Add($"JavaScript执行失败：{ex.Message}");
-                    continue;
                 }
             }
             
@@ -363,7 +391,7 @@ public class DiscoverPageNavigationService : IDiscoverPageNavigationService
             }
 
             // 页面状态检测
-            status.PageState = await _selectorManager.DetectPageStateAsync(page);
+            status.PageState = await _domElementManager.DetectPageStateAsync(page);
             if (status.PageState == PageState.Explore)
             {
                 status.IsOnDiscoverPage = true;
