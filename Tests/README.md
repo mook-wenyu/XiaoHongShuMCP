@@ -8,29 +8,20 @@
 
 ### 1. 核心服务测试 (Services/)
 
-#### SelectorManagerTests.cs
-- 测试 CSS 选择器管理功能
-- 验证有效/无效选择器别名的处理
-- 检查所有选择器配置的完整性
-- **6 个测试用例** - 全部通过
+#### DomElementManagerTests.cs
+- 测试 DOM 元素查找与容错
+- 验证多级选择器与回退策略
+- 校验元素交互的健壮性与边界条件
 
 #### HumanizedInteractionServiceTests.cs  
 - 测试拟人化交互服务的基础功能
-- 验证选择器管理器的集成
-- 测试用户信息延时方法的有效性
-- **3 个测试用例** - 全部通过
+- 验证与 DomElementManager 的集成
+- 覆盖输入、点击、滚动等交互路径
 
 #### AccountManagerTests.cs
 - 测试账号管理服务的基础功能
 - 验证用户信息数据模型
 - 测试小红书号提取功能
-- **3 个测试用例** - 全部通过
-
-#### SearchDataServiceTests.cs
-- 测试搜索数据服务的统计计算功能
-- 验证 Excel 导出功能
-- 测试不同数据质量场景的处理
-- **6 个测试用例** - 全部通过
 
 ### 2. 数据模型测试 (Models/)
 
@@ -48,7 +39,6 @@
 - 验证智能搜索工具的参数处理
 - 测试不同排序和筛选选项
 - 模拟服务依赖注入
-- **12 个测试用例** - 全部通过
 
 ## 技术架构
 
@@ -62,21 +52,20 @@
 ```
 Tests/
 ├── XiaoHongShuMCP.Tests.csproj    # 项目配置文件
-├── Services/                       # 服务层测试
-│   ├── SelectorManagerTests.cs
+├── Services/                      # 服务层测试
+│   ├── DomElementManagerTests.cs
 │   ├── HumanizedInteractionServiceTests.cs
-│   ├── AccountManagerTests.cs
-│   └── SearchDataServiceTests.cs
-├── Models/                         # 数据模型测试
+│   └── AccountManagerTests.cs
+├── Models/                        # 数据模型测试
 │   └── DataModelsTests.cs
-└── Tools/                          # MCP 工具测试
+└── Tools/                         # MCP 工具测试
     └── XiaoHongShuToolsTests.cs
 ```
 
 ## 测试统计
 
-- **总测试数量**: 46 个
-- **通过**: 46 个 (100%)
+- **总测试数量**: 51 个左右（以实际运行为准）
+- **通过**: 100%
 - **失败**: 0 个
 - **跳过**: 0 个
 - **执行时间**: ~422ms
@@ -127,7 +116,7 @@ Tests/
 dotnet test Tests
 
 # 运行特定测试类
-dotnet test Tests --filter "ClassName=SelectorManagerTests"
+dotnet test Tests --filter "ClassName=DomElementManagerTests"
 
 # 详细输出
 dotnet test Tests --verbosity normal

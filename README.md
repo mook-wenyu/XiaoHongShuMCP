@@ -4,7 +4,7 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![MCP](https://img.shields.io/badge/MCP-0.3.0--preview.4-FF6B6B)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/Tests-74%20✅-4CAF50)](./Tests/)
+[![Tests](https://img.shields.io/badge/Tests-51%20✅-4CAF50)](./Tests/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务器，通过智能自动化技术为用户提供安全、高效的小红书运营工具。
@@ -16,7 +16,7 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 - **🤖 智能搜索** - 支持多维度筛选的增强搜索功能，自动统计分析
 - **📊 数据分析** - 自动生成 Excel 报告，包含数据质量和互动统计
 - **👤 拟人化交互** - 模拟真人操作模式，智能防检测机制
-- **🧪 完整测试** - 74 个单元测试，100% 通过率，保证代码质量
+- **🧪 完整测试** - 51 个单元测试，100% 通过率，保证代码质量
 - **🔧 模块化架构** - 全新的UniversalApiMonitor和重构的SmartCollectionController
 - **📡 多端点监听** - 支持推荐、笔记详情、搜索等多个API端点监听
 - **⚡ 现代架构** - 基于最新 .NET 9.0，使用依赖注入和异步编程模式
@@ -181,14 +181,13 @@ dotnet run --project XiaoHongShuMCP --configuration Release
 - **ConnectToBrowser** - 连接浏览器并验证登录状态
 - **GetRecommendedNotes** - 获取推荐笔记流
 - **GetSearchNotes** - 搜索指定关键词笔记
-- **CollectSearchNotes** - 高级搜索笔记收集
-- **GetUserProfile** - 获取用户个人资料
-- **GetNoteDetail** - 获取笔记详细信息
-- **PostComment** - 发布评论
-- **TemporarySaveAndLeave** - 保存笔记为草稿
-- **BatchGetNoteDetailsOptimized** - 批量获取笔记详情
-- **GetDiscoverPageNotes** - 获取发现页笔记
-- **NavigateToUser** - 导航到用户主页
+- **GetNoteDetail** - 基于关键词列表获取笔记详情
+- **PostComment** - 基于关键词列表定位并发布评论
+- **LikeNote** - 基于关键词列表定位并点赞
+- **FavoriteNote** - 基于关键词列表定位并收藏
+- **SaveContentDraft** - 保存笔记为草稿（创作平台）
+- **BatchGetNoteDetailsOptimized** - 批量获取笔记详情（基于 SearchNotes 端点的纯监听实现，无 DOM 依赖）
+  
 
 ## 📋 主要功能
 
@@ -212,6 +211,7 @@ dotnet run --project XiaoHongShuMCP --configuration Release
 集成通用API监听器的智能收集控制器：
 
 - **API集成**: 完全集成UniversalApiMonitor，删除了内嵌的简陋监听系统
+- **纯监听化**: 移除了滚动策略、性能监控器与数据合并等 DOM 相关遗留代码
 - **依赖注入**: 使用现代依赖注入模式，提高代码可测试性
 - **收集策略**: 支持快速、标准、谨慎三种收集策略
 - **实时监控**: 实时监控API响应和数据收集进度
@@ -281,18 +281,15 @@ XiaoHongShuMCP/
 ├── XiaoHongShuMCP/           # 主项目
 │   ├── Services/             # 核心服务层
 │   │   ├── AccountManager.cs               # 账号管理
-│   │   ├── SearchDataService.cs            # 搜索数据服务
 │   │   ├── XiaoHongShuService.cs           # 小红书核心服务
 │   │   ├── PlaywrightBrowserManager.cs     # 浏览器管理
-│   │   ├── SelectorManager.cs              # 选择器管理
+│   │   ├── DomElementManager.cs            # DOM 元素与选择器管理
 │   │   ├── BrowserConnectionHostedService.cs # 后台连接服务
 │   │   ├── UniversalApiMonitor.cs          # 通用API监听器
 │   │   ├── SmartCollectionController.cs    # 智能收集控制器
 │   │   ├── FeedApiConverter.cs             # Feed API数据转换器
 │   │   ├── FeedApiModels.cs                # Feed API数据模型
-│   │   ├── FeedApiMonitor.cs               # Feed API监听器
-│   │   ├── RecommendService.cs             # 推荐服务
-│   │   ├── DiscoverPageNavigationService.cs # 发现页导航服务
+│   │   ├── SearchTimeoutsConfig.cs         # 搜索等待与收敛超时配置
 │   │   ├── HumanizedInteraction/           # 拟人化交互模块
 │   │   │   ├── HumanizedInteractionService.cs # 主交互服务
 │   │   │   ├── DelayManager.cs             # 智能延时管理
@@ -303,8 +300,8 @@ XiaoHongShuMCP/
 │   ├── Tools/               # MCP 工具集
 │   │   └── XiaoHongShuTools.cs            # MCP 工具定义
 │   ├── Program.cs           # 程序入口
-│   └── appsettings.json     # 配置文件
-├── Tests/                   # 单元测试 (74个测试)
+│   └── appsettings.json     # 配置文件（生产运行时使用）
+├── Tests/                   # 单元测试（约 51 个）
 │   ├── Services/           # 服务测试
 │   ├── Models/             # 模型测试  
 │   └── Tools/              # 工具测试
@@ -329,7 +326,7 @@ XiaoHongShuMCP/
 dotnet watch --project XiaoHongShuMCP
 
 # 运行特定测试
-dotnet test Tests --filter "ClassName=SearchDataServiceTests"
+dotnet test Tests --filter "ClassName=DomElementManagerTests"
 
 # 生成测试覆盖报告
 dotnet test Tests --collect:"XPlat Code Coverage"
@@ -337,18 +334,39 @@ dotnet test Tests --collect:"XPlat Code Coverage"
 
 ### 配置选项
 
-编辑 `appsettings.json` 文件：
+编辑 `XiaoHongShuMCP/appsettings.json` 文件（运行时读取）：
 
 ```json
 {
-  "XiaoHongShu": {
-    "BaseUrl": "https://www.xiaohongshu.com",
-    "DefaultTimeout": 30000,
+  "BaseUrl": "https://www.xiaohongshu.com/explore",
+  "DefaultTimeout": 180000,
+  "MaxRetries": 3,
+  "UniversalApiMonitor": {
+    "EnableDetailedLogging": true
+  },
+  "BrowserSettings": {
+    "Headless": false,
+    "RemoteDebuggingPort": 9222,
+    "ConnectionTimeoutSeconds": 30
+  },
+  "McpSettings": {
+    "EnableProgressReporting": true,
+    "MaxBatchSize": 10,
+    "DelayBetweenOperations": 1000,
+    "RequestTimeoutMinutes": 10
+  },
+  "PageLoadWaitConfig": {
+    "DOMContentLoadedTimeout": 15000,
+    "LoadTimeout": 30000,
+    "NetworkIdleTimeout": 600000,
     "MaxRetries": 3,
-    "BrowserSettings": {
-      "Headless": false,
-      "RemoteDebuggingPort": 9222
-    }
+    "RetryDelayMs": 2000,
+    "EnableDegradation": true,
+    "FastModeTimeout": 10000
+  },
+  "SearchTimeoutsConfig": {
+    "UiWaitMs": 12000,
+    "ApiCollectionMaxWaitMs": 60000
   }
 }
 ```
@@ -567,7 +585,7 @@ dotnet test Tests --logger trx --results-directory TestResults
 
 ### 测试覆盖
 
-- **总测试数**: 74 个测试用例
+- **总测试数**: 51 个测试用例
 - **通过率**: 100%
 - **测试覆盖**: 服务层、数据模型、MCP 工具集
 - **测试框架**: NUnit + Moq + Playwright
@@ -590,6 +608,50 @@ dotnet test Tests --logger trx --results-directory TestResults
 - 建议用户合理使用，避免频繁操作
 
 ## 📚 使用示例
+
+### CLI 自测试（callTool 封装）
+
+无需 MCP 客户端也可本地自测：
+
+```bash
+# 例：搜索
+dotnet run --project XiaoHongShuMCP -- callTool GetSearchNotes --json '{
+  "keyword": "健身餐",
+  "maxResults": 5,
+  "includeAnalytics": false,
+  "autoExport": false
+}'
+
+# 例：批量（纯监听）
+dotnet run --project XiaoHongShuMCP -- callTool BatchGetNoteDetailsOptimized --json '{
+  "keywords": ["健身餐", "教程"],
+  "maxCount": 5,
+  "includeComments": false,
+  "autoExport": false
+}'
+
+# 例：保存草稿（创作平台）
+dotnet run --project XiaoHongShuMCP -- callTool SaveContentDraft --json '{
+  "title": "我的美食分享",
+  "content": "今天尝试了一道新菜...",
+  "noteType": "Image",
+  "imagePaths": ["C:/pics/a.jpg"]
+}'
+```
+
+说明：`callTool` 模式会直接在本地构建依赖注入容器并调用对应工具的方法，输出 JSON 结果，便于脚本化自测。
+
+### 文档一致性核对（docs-verify）
+
+快速比对 README 中的 `callTool("ConnectToBrowser")` 用例与代码中的工具清单：
+
+```bash
+dotnet run --project XiaoHongShuMCP -- docs-verify
+dotnet run --project XiaoHongShuMCP -- tools-list   # 打印工具签名（名称/参数）
+
+# 也可用脚本
+scripts/callTool.sh GetSearchNotes --json '{"keyword":"测试"}'
+```
 
 ### 基础连接
 
@@ -620,7 +682,7 @@ await callTool("GetRecommendedNotes", {
 });
 ```
 
-### 高级搜索功能
+### 搜索功能（纯监听）
 
 **基础关键词搜索**：
 ```typescript
@@ -635,15 +697,14 @@ await callTool("GetSearchNotes", {
 });
 ```
 
-**高级筛选搜索**：
+**高级筛选搜索**（同 `GetSearchNotes`，通过参数控制）：
 ```typescript
-await callTool("CollectSearchNotes", {
+await callTool("GetSearchNotes", {
   keyword: "减脂餐",
-  limit: 50,
+  maxResults: 50,
   sortBy: "most_liked",
   noteType: "image",
   publishTime: "week",
-  timeoutMinutes: 10,
   includeAnalytics: true,
   autoExport: true,
   exportFileName: "减脂餐搜索结果"
@@ -655,47 +716,32 @@ await callTool("CollectSearchNotes", {
 - **noteType**: `all` (不限), `video` (视频), `image` (图文)
 - **publishTime**: `all` (不限), `day` (一天内), `week` (一周内), `half_year` (半年内)
 
-### 用户资料获取
-
-获取指定用户的完整资料信息：
-
-```typescript
-await callTool("GetUserProfile", {
-  userUrl: "https://www.xiaohongshu.com/user/profile/xxxxxxxxxx",
-  includeStats: true
-});
-```
-
-或通过用户ID：
-```typescript
-await callTool("GetUserProfile", {
-  userId: "xxxxxxxxxx",
-  includeStats: true
-});
-```
+> 注：旧版文档中的 GetUserProfile 工具已废弃。
 
 ### 笔记详情获取
 
-**单个笔记详情**：
+**单个笔记详情（基于关键词列表）**：
 ```typescript
 await callTool("GetNoteDetail", {
-  noteId: "xxxxxxxxxxxxxx",
-  includeComments: true,
-  includeInteractionData: true
+  keywords: ["健身餐", "低脂"],
+  includeComments: false
 });
 ```
 
-**批量笔记详情**：
+**批量笔记详情（纯监听，无 DOM 依赖）**：
 ```typescript
-await callTool("BatchGetNoteDetailsOptimized", {
-  noteIds: [
-    "noteId1",
-    "noteId2", 
-    "noteId3"
-  ],
-  includeComments: false,
-  batchSize: 5
+// 按关键词组触发 SearchNotes API，仅通过网络监听收集数据
+const result = await callTool("BatchGetNoteDetailsOptimized", {
+  keywords: ["健身餐", "增肌餐", "低脂"],
+  maxCount: 10,
+  includeComments: false,   // 纯监听下不抓取页面评论，返回空集合占位
+  autoExport: true,         // 自动导出为 Excel（/exports 目录）
+  exportFileName: "批量详情示例"
 });
+
+if (result.SuccessfulNotes.length > 0) {
+  // 仅来自 SearchNotes API 的结构化数据
+}
 ```
 
 ### 互动功能
@@ -703,49 +749,47 @@ await callTool("BatchGetNoteDetailsOptimized", {
 **发布评论**：
 ```typescript
 await callTool("PostComment", {
-  noteId: "xxxxxxxxxxxxxx",
-  comment: "很棒的分享！学到了很多实用技巧 👍",
-  replyToCommentId: null  // 可选：回复特定评论
+  keywords: ["健身餐", "教程"],
+  content: "很棒的分享！学到了很多实用技巧 👍"
 });
 ```
 
-**保存为草稿**：
+**点赞笔记**：
 ```typescript
-await callTool("TemporarySaveAndLeave", {
+await callTool("LikeNote", {
+  keywords: ["健身餐", "打卡"],
+  forceAction: false // 如已点赞则跳过；设为 true 将强制尝试
+});
+```
+
+**收藏笔记**：
+```typescript
+await callTool("FavoriteNote", {
+  keywords: ["健身餐", "教程"],
+  forceAction: false // 如已收藏则跳过；设为 true 将强制尝试
+});
+```
+
+**保存为草稿（创作平台）**：
+```typescript
+await callTool("SaveContentDraft", {
   title: "我的美食分享",
   content: "今天尝试了一道新菜...",
-  tags: ["美食", "家常菜", "分享"],
-  noteType: "image"  // 或 "video"
+  noteType: "Image", // 或 "Video"
+  imagePaths: ["C:/pics/a.jpg", "C:/pics/b.jpg"],
+  tags: ["美食", "家常菜", "分享"]
 });
 ```
 
-### 发现页面浏览
+### 发现页/导航
 
-获取发现页面的热门笔记：
+> 旧版的 GetDiscoverPageNotes / NavigateToUser 已废弃。探索/导航由服务内部处理，无需单独工具。
 
-```typescript
-await callTool("GetDiscoverPageNotes", {
-  limit: 30,
-  category: "all",  // 或指定分类
-  timeoutMinutes: 5
-});
-```
-
-### 页面导航
-
-导航到特定用户主页：
-
-```typescript
-await callTool("NavigateToUser", {
-  username: "用户名",
-  // 或使用用户ID
-  userId: "xxxxxxxxxx"
-});
-```
+ 
 
 ### 完整工作流示例
 
-一个完整的数据收集和分析工作流：
+一个完整的数据收集和分析工作流（示例）：
 
 ```typescript
 // 1. 连接浏览器
@@ -753,9 +797,9 @@ const connection = await callTool("ConnectToBrowser", {});
 
 if (connection.IsConnected && connection.IsLoggedIn) {
   // 2. 搜索相关笔记
-  const searchResult = await callTool("CollectSearchNotes", {
+  const searchResult = await callTool("GetSearchNotes", {
     keyword: "健身餐",
-    limit: 100,
+    maxResults: 100,
     sortBy: "most_liked",
     noteType: "image",
     publishTime: "week",
@@ -766,22 +810,14 @@ if (connection.IsConnected && connection.IsLoggedIn) {
 
   // 3. 获取详细信息（如有需要）
   if (searchResult.Success && searchResult.SearchResult.Notes.length > 0) {
-    const topNoteIds = searchResult.SearchResult.Notes
-      .slice(0, 10)
-      .map(note => note.NoteId);
-      
     const detailsResult = await callTool("BatchGetNoteDetailsOptimized", {
-      noteIds: topNoteIds,
-      includeComments: true,
-      batchSize: 5
+      keywords: ["健身餐", "教程"],
+      maxCount: 10,
+      includeComments: false
     });
   }
 
-  // 4. 分析用户资料（可选）
-  const userProfile = await callTool("GetUserProfile", {
-    userId: "热门博主ID",
-    includeStats: true
-  });
+  // 4. 用户资料相关工具已废弃
 }
 ```
 

@@ -12,7 +12,7 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 - **🤖 智能搜索**: 支持多维度筛选的增强搜索功能
 - **📊 数据分析**: 自动统计分析和 Excel 导出
 - **👤 拟人化交互**: 模拟真人操作模式，防检测机制
-- **🔧 完整测试**: 74 个单元测试，100% 通过率
+- **🔧 完整测试**: 51 个单元测试，100% 通过率
 - **🧩 通用API监听**: 全新的UniversalApiMonitor支持多端点监听
 - **🔄 智能数据转换**: 专门的API数据转换器和模型系统
 
@@ -38,14 +38,13 @@ XiaoHongShuMCP/
 │   │   ├── Interfaces.cs           # 接口定义和数据模型
 │   │   ├── AccountManager.cs       # 账号管理服务
 │   │   ├── PlaywrightBrowserManager.cs # 浏览器管理
-│   │   ├── SelectorManager.cs      # CSS 选择器管理
+│   │   ├── DomElementManager.cs    # DOM 选择器与元素管理
 │   │   ├── HumanizedInteraction/   # 拟人化交互模块
 │   │   │   ├── HumanizedInteractionService.cs # 主交互服务
 │   │   │   ├── DelayManager.cs     # 智能延时管理
 │   │   │   ├── ElementFinder.cs    # 高级元素查找
 │   │   │   ├── SmartTextSplitter.cs # 智能文本分割
 │   │   │   └── TextInputStrategies.cs # 文本输入策略
-│   │   ├── SearchDataService.cs    # 搜索和数据服务
 │   │   ├── BrowserConnectionHostedService.cs # 后台自动连接服务
 │   │   └── XiaoHongShuService.cs   # 小红书核心服务
 │   └── Tools/
@@ -79,15 +78,15 @@ XiaoHongShuMCP/
 ### 3. Feed API数据处理系统
 - **FeedApiConverter**: 专门的API数据转换器，处理时间戳、图片、交互数据转换
 - **FeedApiModels**: 完整的API响应数据模型，强类型和JSON映射支持
-- **FeedApiMonitor**: 专用的Feed API监听器，专注笔记详情数据获取
+- （已由 UniversalApiMonitor 统一接管专用监听逻辑）
 - **数据验证**: 内置数据有效性检查和错误处理机制
 
-### 4. 推荐服务系统 (RecommendService)
+### 4. 推荐服务系统 (RecommendService)（已合并至 XiaoHongShuService）
 - **智能推荐**: 基于用户行为和内容质量的智能推荐算法
 - **多渠道数据**: 综合首页推荐、热门内容等多渠道数据
 - **实时更新**: 实时获取最新推荐内容和趋势分析
 
-### 5. 发现页导航服务 (DiscoverPageNavigationService)
+### 5. 发现页导航服务 (DiscoverPageNavigationService)（已合并至 XiaoHongShuService）
 - **智能导航**: 自动识别和导航到发现页面的不同版块
 - **页面验证**: 验证导航结果和页面加载状态
 - **容错处理**: 处理页面结构变化和网络异常情况
@@ -178,7 +177,7 @@ dotnet run --project XiaoHongShuMCP --configuration Release
 dotnet test Tests
 
 # 运行特定测试
-dotnet test Tests --filter "ClassName=SelectorManagerTests"
+dotnet test Tests --filter "ClassName=DomElementManagerTests"
 
 # 详细测试输出
 dotnet test Tests --verbosity normal
@@ -286,7 +285,7 @@ dotnet publish -c Release -r osx-x64 --self-contained
 ## 🧪 测试体系
 
 ### 测试覆盖
-- **总测试数**: 46 个测试用例
+- **总测试数**: 51 个测试用例
 - **通过率**: 100%
 - **覆盖模块**: 服务层、数据模型、MCP 工具
 
@@ -394,6 +393,6 @@ await callTool("GetNoteDetail", {
 ---
 
 **项目状态**: ✅ 生产就绪  
-**最后更新**: 2025年9月4日  
+**最后更新**: 2025年9月7日  
 **版本**: 1.0.0  
 **维护者**: XiaoHongShuMCP Team

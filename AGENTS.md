@@ -50,12 +50,11 @@ update_plan: [ {step: 探索代码, in_progress}, {step: 实现修复, pending} 
 - `XiaoHongShuMCP/Services/`: core services including:
   - `UniversalApiMonitor.cs`: multi-endpoint API monitoring system
   - `SmartCollectionController.cs`: intelligent collection controller (refactored)
-  - `FeedApiConverter.cs`, `FeedApiModels.cs`, `FeedApiMonitor.cs`: Feed API data processing
-  - `RecommendService.cs`: recommendation service
-  - `DiscoverPageNavigationService.cs`: discover page navigation
+  - `FeedApiConverter.cs`, `FeedApiModels.cs`: Feed API data processing
+  - `SearchTimeoutsConfig.cs`: search wait and convergence timeouts
   - Browser, selectors, search, humanized interaction services
 - `XiaoHongShuMCP/Tools/`: MCP tool definitions (`XiaoHongShuTools.cs`).
-- `Tests/`: NUnit tests (74 tests total) covering `Services/`, `Models/`, `Tools/`.
+- `Tests/`: NUnit tests (~51 tests) covering `Services/`, `Models/`, `Tools/`.
 - `appsettings.json`: local configuration. Logs write to `XiaoHongShuMCP/logs/` via Serilog.
 
 ## Build, Test, Run
