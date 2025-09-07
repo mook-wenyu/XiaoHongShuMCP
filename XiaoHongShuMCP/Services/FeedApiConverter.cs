@@ -1,0 +1,210 @@
+using System.Text.Json;
+
+namespace XiaoHongShuMCP.Services;
+
+/// <summary>
+/// Feed API 数据转换器
+/// 将Feed API响应数据转换为现有的NoteDetail格式
+/// </summary>
+public static class FeedApiConverter
+{
+    /// <summary>
+    /// 将FeedApiNoteCard转换为NoteDetail
+    /// </summary>
+    public static NoteDetail ConvertToNoteDetail(FeedApiNoteCard noteCard, string sourceNoteId)
+    {
+        var noteDetail = new NoteDetail
+        {
+            Id = noteCard.NoteId,
+            Title = noteCard.Title,
+            Content = noteCard.Description,
+            Author = noteCard.User?.Nickname ?? "未知作者",
+            Url = $"https://www.xiaohongshu.com/explore/{sourceNoteId}",
+            ExtractedAt = DateTime.UtcNow
+        };
+
+        // 设置发布时间（时间戳转换）
+        if (noteCard.Time > 0)
+        {
+            noteDetail.PublishTime = DateTimeOffset.FromUnixTimeMilliseconds(noteCard.Time).DateTime;
+        }
+
+        // 设置交互信息
+        if (noteCard.InteractInfo != null)
+        {
+            noteDetail.LikeCount = noteCard.InteractInfo.LikedCount;
+            noteDetail.CommentCount = noteCard.InteractInfo.CommentCount;
+            noteDetail.FavoriteCount = noteCard.InteractInfo.CollectedCount;
+        }
+
+        // 设置图片信息
+        if (noteCard.ImageList?.Any() == true)
+        {
+            noteDetail.Images = noteCard.ImageList
+                .Select(img => img.UrlDefault ?? img.UrlPre ?? img.Url)
+                .Where(url => !string.IsNullOrEmpty(url))
+                .ToList();
+            
+            noteDetail.CoverImage = noteDetail.Images.FirstOrDefault() ?? string.Empty;
+        }
+
+        // 设置视频信息
+        if (noteCard.Video != null)
+        {
+            noteDetail.VideoDuration = noteCard.Video.Capa?.Duration ?? noteCard.Video.Media?.Video?.Duration;
+            
+            // 尝试获取视频URL
+            var videoUrl = GetBestVideoUrl(noteCard.Video);
+            if (!string.IsNullOrEmpty(videoUrl))
+            {
+                noteDetail.VideoUrl = videoUrl;
+            }
+        }
+
+        // 设置标签信息
+        if (noteCard.TagList?.Any() == true)
+        {
+            noteDetail.Tags = noteCard.TagList.Select(tag => tag.Name).ToList();
+        }
+
+        // 自动确定笔记类型
+        noteDetail.DetermineType();
+
+        // 设置数据质量
+        noteDetail.Quality = DetermineDataQuality(noteDetail, noteCard);
+
+        return noteDetail;
+    }
+
+    /// <summary>
+    /// 安全解析整数字符串
+    /// </summary>
+    
+
+    /// <summary>
+    /// 获取最佳视频URL
+    /// </summary>
+    private static string GetBestVideoUrl(FeedApiVideo video)
+    {
+        // 优先级：H265 > H264
+        var allStreams = new List<FeedApiVideoStreamDetail>();
+        
+        if (video.Media?.Stream?.H265?.Any() == true)
+        {
+            allStreams.AddRange(video.Media.Stream.H265);
+        }
+        
+        if (video.Media?.Stream?.H264?.Any() == true)
+        {
+            allStreams.AddRange(video.Media.Stream.H264);
+        }
+
+        // 选择最佳质量的流
+        var bestStream = allStreams
+            .Where(s => !string.IsNullOrEmpty(s.MasterUrl))
+            .OrderByDescending(s => s.Height) // 优先选择高分辨率
+            .ThenByDescending(s => s.VideoBitrate) // 然后选择高码率
+            .FirstOrDefault();
+
+        return bestStream?.MasterUrl ?? string.Empty;
+    }
+
+    /// <summary>
+    /// 确定数据质量
+    /// </summary>
+    private static DataQuality DetermineDataQuality(NoteDetail noteDetail, FeedApiNoteCard noteCard)
+    {
+        var completeFields = 0;
+        var totalFields = 8; // 定义总字段数
+
+        // 检查基础字段
+        if (!string.IsNullOrEmpty(noteDetail.Title)) completeFields++;
+        if (!string.IsNullOrEmpty(noteDetail.Content)) completeFields++;
+        if (!string.IsNullOrEmpty(noteDetail.Author)) completeFields++;
+        if (noteDetail.PublishTime.HasValue) completeFields++;
+        if (noteDetail.LikeCount.HasValue) completeFields++;
+        if (noteDetail.CommentCount.HasValue) completeFields++;
+        
+        // 检查媒体字段
+        if (noteDetail.Images.Count != 0 || !string.IsNullOrEmpty(noteDetail.VideoUrl)) completeFields++;
+        if (noteDetail.Tags.Count != 0) completeFields++;
+
+        // 根据完整度确定质量
+        var completionRatio = (double)completeFields / totalFields;
+        
+        return completionRatio switch
+        {
+            >= 0.8 => DataQuality.Complete,
+            >= 0.5 => DataQuality.Partial,
+            _ => DataQuality.Minimal
+        };
+    }
+
+    /// <summary>
+    /// 批量转换Feed API响应为NoteDetail列表
+    /// </summary>
+    public static List<NoteDetail> ConvertBatchToNoteDetails(List<MonitoredFeedResponse> monitoredResponses)
+    {
+        var noteDetails = new List<NoteDetail>();
+
+        foreach (var response in monitoredResponses)
+        {
+            if (response.ResponseData?.Success != true || 
+                response.ResponseData.Data?.Items?.Any() != true)
+            {
+                continue;
+            }
+
+            foreach (var item in response.ResponseData.Data.Items)
+            {
+                if (item.NoteCard != null)
+                {
+                    try
+                    {
+                        var noteDetail = ConvertToNoteDetail(item.NoteCard, response.SourceNoteId);
+                        noteDetails.Add(noteDetail);
+                    }
+                    catch (Exception ex)
+                    {
+                        // 记录转换失败但不中断处理
+                        System.Diagnostics.Debug.WriteLine($"转换笔记详情失败: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        return noteDetails;
+    }
+
+    /// <summary>
+    /// 从请求体中提取source_note_id
+    /// </summary>
+    public static string ExtractSourceNoteId(string requestBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(requestBody);
+            if (doc.RootElement.TryGetProperty("source_note_id", out var sourceNoteIdElement))
+            {
+                return sourceNoteIdElement.GetString() ?? string.Empty;
+            }
+        }
+        catch
+        {
+            // 解析失败时静默处理
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// 验证Feed API响应的有效性
+    /// </summary>
+    public static bool IsValidFeedResponse(FeedApiResponse? response)
+    {
+        return response != null && 
+               response.Success && 
+               response.Code == 0 &&
+               response.Data?.Items?.Any() == true;
+    }
+}

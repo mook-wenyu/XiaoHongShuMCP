@@ -13,6 +13,8 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 - **📊 数据分析**: 自动统计分析和 Excel 导出
 - **👤 拟人化交互**: 模拟真人操作模式，防检测机制
 - **🔧 完整测试**: 74 个单元测试，100% 通过率
+- **🧩 通用API监听**: 全新的UniversalApiMonitor支持多端点监听
+- **🔄 智能数据转换**: 专门的API数据转换器和模型系统
 
 ## 🏗️ 技术架构
 
@@ -60,37 +62,67 @@ XiaoHongShuMCP/
 
 ## 🔧 核心功能模块
 
-### 1. 账号管理 (AccountManager)
+### 1. 通用API监听系统 (UniversalApiMonitor)
+- **多端点支持**: 支持Homefeed(推荐)、Feed(笔记详情)、SearchNotes(搜索)三大API端点
+- **智能路由**: 根据URL模式自动识别API类型，路由到对应处理器
+- **响应处理**: HomefeedResponseProcessor、FeedResponseProcessor、SearchNotesResponseProcessor
+- **数据统一**: 将不同API格式统一转换为NoteDetail模型
+- **实时监控**: 支持实时监控API响应和数据提取
+
+### 2. 智能收集控制器 (SmartCollectionController)
+- **API集成**: 完全集成UniversalApiMonitor，删除了内嵌简陋监听系统
+- **依赖注入**: 使用现代DI模式，提高代码可测试性和维护性
+- **收集策略**: 支持快速、标准、谨慎三种模式，适应不同场景
+- **数据合并**: 智能合并API数据和页面数据，避免重复计数
+- **性能监控**: 内置性能监控和效率评分系统
+
+### 3. Feed API数据处理系统
+- **FeedApiConverter**: 专门的API数据转换器，处理时间戳、图片、交互数据转换
+- **FeedApiModels**: 完整的API响应数据模型，强类型和JSON映射支持
+- **FeedApiMonitor**: 专用的Feed API监听器，专注笔记详情数据获取
+- **数据验证**: 内置数据有效性检查和错误处理机制
+
+### 4. 推荐服务系统 (RecommendService)
+- **智能推荐**: 基于用户行为和内容质量的智能推荐算法
+- **多渠道数据**: 综合首页推荐、热门内容等多渠道数据
+- **实时更新**: 实时获取最新推荐内容和趋势分析
+
+### 5. 发现页导航服务 (DiscoverPageNavigationService)
+- **智能导航**: 自动识别和导航到发现页面的不同版块
+- **页面验证**: 验证导航结果和页面加载状态
+- **容错处理**: 处理页面结构变化和网络异常情况
+
+### 6. 账号管理 (AccountManager)
 - 浏览器会话连接和验证
 - **Cookie 登录检测**: 基于 `web_session` cookie 的可靠登录状态检测
 - 用户信息提取和验证
 - 支持个人页面完整数据获取
 
-### 2. 智能搜索 (SearchDataService)
+### 7. 智能搜索 (SearchDataService)
 - **多维度筛选**: 支持排序、类型、时间、范围等筛选
 - **统计分析**: 自动计算数据质量、平均互动等指标
 - **批量处理**: 智能批量获取笔记详情
 - **数据导出**: 自动生成 Excel 报告
 
-### 3. 内容管理 (XiaoHongShuService)
+### 8. 内容管理 (XiaoHongShuService)
 - **草稿保存**: 仅支持草稿模式，确保用户控制
 - **笔记详情**: 获取完整笔记信息（图片、视频、评论）
 - **评论功能**: 支持发布评论互动
 - **类型识别**: 自动识别图文、视频、长文类型
 
-### 4. 浏览器自动化 (PlaywrightBrowserManager)
+### 9. 浏览器自动化 (PlaywrightBrowserManager)
 - 连接现有浏览器会话 (端口 9222)
 - 无头/有头模式支持
 - 会话管理和资源释放
 - **Cookie 登录检测**: 通过 `web_session` cookie 验证登录状态
 
-### 5. 后台自动连接服务 (BrowserConnectionHostedService)
+### 10. 后台自动连接服务 (BrowserConnectionHostedService)
 - **启动时自动连接**: MCP服务器启动后自动尝试连接浏览器
 - **状态验证**: 自动检查浏览器连接和小红书登录状态
 - **友好反馈**: 提供详细的连接状态日志信息
 - **非阻塞启动**: 连接过程不影响MCP服务器正常启动
 
-### 6. 拟人化交互系统 (HumanizedInteraction)
+### 11. 拟人化交互系统 (HumanizedInteraction)
 全新重构的拟人化交互系统，采用模块化设计：
 - **HumanizedInteractionService**: 主交互服务协调者
 - **DelayManager**: 智能延时管理，提供多种延时策略
@@ -98,7 +130,7 @@ XiaoHongShuMCP/
 - **SmartTextSplitter**: 智能文本分割，模拟真人输入模式
 - **TextInputStrategies**: 多种自然文本输入策略
 
-### 7. 选择器管理 (SelectorManager)
+### 12. 选择器管理 (SelectorManager)
 - 多级容错 CSS 选择器
 - 动态选择器更新
 - 基于真实 HTML 结构优化
@@ -165,22 +197,34 @@ dotnet publish -c Release -r osx-x64 --self-contained
 
 项目通过 `XiaoHongShuTools` 类暴露以下 MCP 工具：
 
-### 账号管理工具
+### 浏览器连接工具
 - **ConnectToBrowser**: 连接浏览器并验证登录状态
 
+### 推荐和发现工具
+- **GetRecommendedNotes**: 获取推荐笔记流（集成UniversalApiMonitor）
+- **GetDiscoverPageNotes**: 获取发现页面笔记
+
 ### 搜索工具  
-- **SearchNotesEnhanced**: 智能搜索，支持完整筛选参数
+- **GetSearchNotes**: 基础搜索笔记功能，支持API监听和拟人化操作结合
+- **CollectSearchNotes**: 高级搜索笔记收集，支持完整筛选参数
   - 排序: comprehensive(综合), latest(最新), most_liked(最多点赞)
   - 类型: all(不限), video(视频), image(图文)  
   - 时间: all(不限), day(一天内), week(一周内), half_year(半年内)
-  - 范围: all(不限), viewed(已看过), unviewed(未看过)
-  - 位置: all(不限), same_city(同城), nearby(附近)
+  - 自动分析和Excel导出功能
 
-### 内容工具
-- **GetNoteDetail**: 获取笔记详情
-- **PostComment**: 发布评论
-- **TemporarySaveAndLeave**: 暂存笔记为草稿
-- **BatchGetNoteDetailsOptimized**: 批量获取笔记详情
+### 用户资料工具
+- **GetUserProfile**: 获取用户个人资料和统计信息
+- **NavigateToUser**: 导航到指定用户主页
+
+### 内容详情工具
+- **GetNoteDetail**: 获取单个笔记详细信息（集成Feed API监听）
+- **BatchGetNoteDetailsOptimized**: 批量获取笔记详情（优化版）
+
+### 互动工具
+- **PostComment**: 发布评论到指定笔记
+- **TemporarySaveAndLeave**: 保存内容为草稿（安全模式）
+
+> ✨ **架构升级亮点**: 所有数据获取工具现均集成了UniversalApiMonitor，提供更稳定、高效的API数据获取能力。
 
 ## ⚙️ 配置管理
 
@@ -242,7 +286,7 @@ dotnet publish -c Release -r osx-x64 --self-contained
 ## 🧪 测试体系
 
 ### 测试覆盖
-- **总测试数**: 74 个测试用例
+- **总测试数**: 46 个测试用例
 - **通过率**: 100%
 - **覆盖模块**: 服务层、数据模型、MCP 工具
 
@@ -286,10 +330,13 @@ dotnet test Tests --logger trx --results-directory TestResults
 - 完整的 XML 文档注释
 
 ### 架构原则
+- **通用API监听**: 使用UniversalApiMonitor统一管理多端点API监听
 - **依赖注入**: 使用 Microsoft.Extensions.DependencyInjection
+- **智能路由**: API响应根据URL模式自动路由到对应处理器
 - **接口隔离**: 清晰的接口定义和实现分离
 - **单一职责**: 每个服务类职责明确
 - **错误处理**: 统一的 OperationResult<T> 模式
+- **数据转换**: 专门的转换器处理API数据格式化
 
 ### 性能优化
 - **异步编程**: 全面使用 async/await 模式

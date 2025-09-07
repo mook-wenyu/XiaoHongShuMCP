@@ -17,6 +17,8 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 - **📊 数据分析** - 自动生成 Excel 报告，包含数据质量和互动统计
 - **👤 拟人化交互** - 模拟真人操作模式，智能防检测机制
 - **🧪 完整测试** - 74 个单元测试，100% 通过率，保证代码质量
+- **🔧 模块化架构** - 全新的UniversalApiMonitor和重构的SmartCollectionController
+- **📡 多端点监听** - 支持推荐、笔记详情、搜索等多个API端点监听
 - **⚡ 现代架构** - 基于最新 .NET 9.0，使用依赖注入和异步编程模式
 
 ## 🚀 快速开始
@@ -74,12 +76,17 @@ dotnet test Tests
 /Applications/Microsoft\ Edge.app/Contents/MacOS/Microsoft\ Edge --remote-debugging-port=9222
 ```
 
-### 3. 配置 Claude Desktop
+### 3. 配置 Claude Desktop (MCP 客户端)
 
-编辑 Claude Desktop 配置文件：
+#### 配置文件位置
 
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`  
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Linux**: `~/.config/claude/claude_desktop_config.json`
+
+#### 开发环境配置
+
+推荐在开发时使用此配置，便于调试和日志查看：
 
 ```json
 {
@@ -89,7 +96,46 @@ dotnet test Tests
       "args": [
         "run",
         "--project",
-        "D:\\path\\to\\XiaoHongShuMCP\\XiaoHongShuMCP"
+        "D:\\RiderProjects\\XiaoHongShuMCP\\XiaoHongShuMCP"
+      ],
+      "env": {
+        "DOTNET_ENVIRONMENT": "Development",
+        "DOTNET_CLI_TELEMETRY_OPTOUT": "1"
+      }
+    }
+  }
+}
+```
+
+#### 生产环境配置
+
+当项目编译发布后，使用可执行文件方式运行：
+
+```json
+{
+  "mcpServers": {
+    "xiaohongshu-mcp": {
+      "command": "D:\\RiderProjects\\XiaoHongShuMCP\\XiaoHongShuMCP\\bin\\Release\\net9.0\\XiaoHongShuMCP.exe",
+      "args": [],
+      "env": {
+        "DOTNET_ENVIRONMENT": "Production"
+      }
+    }
+  }
+}
+```
+
+#### macOS/Linux 配置示例
+
+```json
+{
+  "mcpServers": {
+    "xiaohongshu-mcp": {
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "/Users/yourname/Projects/XiaoHongShuMCP/XiaoHongShuMCP"
       ],
       "env": {
         "DOTNET_ENVIRONMENT": "Development"
@@ -98,6 +144,21 @@ dotnet test Tests
   }
 }
 ```
+
+#### 配置参数说明
+
+- **command**: 执行命令，开发环境用 `dotnet`，生产环境用可执行文件路径
+- **args**: 命令参数，开发环境需指定项目路径
+- **env**: 环境变量
+  - `DOTNET_ENVIRONMENT`: 运行环境（Development/Production）
+  - `DOTNET_CLI_TELEMETRY_OPTOUT`: 禁用.NET遥测（可选）
+
+#### 验证配置
+
+配置完成后，重启 Claude Desktop 并检查：
+1. 打开 Claude Desktop
+2. 查看是否显示 MCP 服务器连接状态
+3. 如有问题，查看 Claude Desktop 的错误日志
 
 ### 4. 启动服务
 
@@ -118,12 +179,43 @@ dotnet run --project XiaoHongShuMCP --configuration Release
 5. 现在可以使用以下 MCP 工具：
 
 - **ConnectToBrowser** - 连接浏览器并验证登录状态
-- **SearchNotesEnhanced** - 智能搜索小红书笔记
+- **GetRecommendedNotes** - 获取推荐笔记流
+- **GetSearchNotes** - 搜索指定关键词笔记
+- **CollectSearchNotes** - 高级搜索笔记收集
+- **GetUserProfile** - 获取用户个人资料
 - **GetNoteDetail** - 获取笔记详细信息
 - **PostComment** - 发布评论
 - **TemporarySaveAndLeave** - 保存笔记为草稿
+- **BatchGetNoteDetailsOptimized** - 批量获取笔记详情
+- **GetDiscoverPageNotes** - 获取发现页笔记
+- **NavigateToUser** - 导航到用户主页
 
 ## 📋 主要功能
+
+### 🚀 全新架构特性
+
+#### 通用API监听系统 (UniversalApiMonitor)
+
+全新设计的通用API监听器，支持多端点智能监听：
+
+- **多端点支持**: 
+  - Homefeed (推荐笔记) - `/api/sns/web/v1/homefeed`
+  - Feed (笔记详情) - `/api/sns/web/v1/feed`  
+  - SearchNotes (搜索笔记) - `/api/sns/web/v1/search/notes`
+- **智能路由**: 根据API端点类型自动路由到对应的响应处理器
+- **响应处理器**: HomefeedResponseProcessor、FeedResponseProcessor、SearchNotesResponseProcessor
+- **数据转换**: 自动将API响应转换为统一的NoteDetail格式
+- **性能监控**: 内置性能监控和错误处理机制
+
+#### 重构智能收集系统 (SmartCollectionController)
+
+集成通用API监听器的智能收集控制器：
+
+- **API集成**: 完全集成UniversalApiMonitor，删除了内嵌的简陋监听系统
+- **依赖注入**: 使用现代依赖注入模式，提高代码可测试性
+- **收集策略**: 支持快速、标准、谨慎三种收集策略
+- **实时监控**: 实时监控API响应和数据收集进度
+- **数据合并**: 智能合并API数据与页面数据，避免重复
 
 ### 🔍 智能搜索系统
 
@@ -161,6 +253,27 @@ dotnet run --project XiaoHongShuMCP --configuration Release
 - **多种输入策略** - `TextInputStrategies` 提供自然文本输入
 - **防检测机制** - 随机延时和行为模式，模拟真实用户操作
 
+### 📊 数据处理和转换系统
+
+#### Feed API数据转换器 (FeedApiConverter)
+
+专门处理Feed API响应数据的转换器：
+
+- **数据转换**: 将原始API数据转换为标准NoteDetail格式
+- **时间处理**: 自动处理Unix时间戳转换
+- **图片处理**: 提取和处理图片URL列表
+- **交互数据**: 处理点赞、评论、收藏等交互信息
+- **用户信息**: 处理作者信息和头像数据
+
+#### API数据模型 (FeedApiModels)
+
+完整的API响应数据模型定义：
+
+- **类型安全**: 强类型的API响应模型
+- **JSON映射**: 自动JSON序列化和反序列化
+- **数据验证**: 内置数据有效性验证
+- **扩展性**: 支持未来API结构变化
+
 ## 🏗️ 项目架构
 
 ```
@@ -173,6 +286,13 @@ XiaoHongShuMCP/
 │   │   ├── PlaywrightBrowserManager.cs     # 浏览器管理
 │   │   ├── SelectorManager.cs              # 选择器管理
 │   │   ├── BrowserConnectionHostedService.cs # 后台连接服务
+│   │   ├── UniversalApiMonitor.cs          # 通用API监听器
+│   │   ├── SmartCollectionController.cs    # 智能收集控制器
+│   │   ├── FeedApiConverter.cs             # Feed API数据转换器
+│   │   ├── FeedApiModels.cs                # Feed API数据模型
+│   │   ├── FeedApiMonitor.cs               # Feed API监听器
+│   │   ├── RecommendService.cs             # 推荐服务
+│   │   ├── DiscoverPageNavigationService.cs # 发现页导航服务
 │   │   ├── HumanizedInteraction/           # 拟人化交互模块
 │   │   │   ├── HumanizedInteractionService.cs # 主交互服务
 │   │   │   ├── DelayManager.cs             # 智能延时管理
@@ -235,16 +355,200 @@ dotnet test Tests --collect:"XPlat Code Coverage"
 
 ### 构建和部署
 
+#### 本地开发部署
+
 ```bash
-# 发布 Windows 版本
-dotnet publish -c Release -r win-x64 --self-contained
+# 克隆项目
+git clone https://github.com/your-repo/XiaoHongShuMCP.git
+cd XiaoHongShuMCP
 
-# 发布 macOS 版本  
-dotnet publish -c Release -r osx-x64 --self-contained
+# 恢复依赖
+dotnet restore
 
-# 发布 Linux 版本
-dotnet publish -c Release -r linux-x64 --self-contained
+# 构建项目
+dotnet build
+
+# 运行测试
+dotnet test Tests
+
+# 启动开发服务器
+dotnet run --project XiaoHongShuMCP
 ```
+
+#### 生产环境发布
+
+1. **Windows 平台发布**：
+```bash
+# 独立部署（包含 .NET 运行时）
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+
+# 框架依赖部署（需要目标机器安装 .NET）
+dotnet publish -c Release -r win-x64 --self-contained false
+```
+
+2. **macOS 平台发布**：
+```bash
+dotnet publish -c Release -r osx-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish -c Release -r osx-arm64 --self-contained true -p:PublishSingleFile=true
+```
+
+3. **Linux 平台发布**：
+```bash
+dotnet publish -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish -c Release -r linux-arm64 --self-contained true -p:PublishSingleFile=true
+```
+
+#### Docker 部署（可选）
+
+创建 `Dockerfile`：
+```dockerfile
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+WORKDIR /app
+
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+COPY ["XiaoHongShuMCP/XiaoHongShuMCP.csproj", "XiaoHongShuMCP/"]
+RUN dotnet restore "XiaoHongShuMCP/XiaoHongShuMCP.csproj"
+COPY . .
+WORKDIR "/src/XiaoHongShuMCP"
+RUN dotnet build "XiaoHongShuMCP.csproj" -c Release -o /app/build
+
+FROM build AS publish
+RUN dotnet publish "XiaoHongShuMCP.csproj" -c Release -o /app/publish
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "XiaoHongShuMCP.dll"]
+```
+
+构建和运行：
+```bash
+docker build -t xiaohongshu-mcp .
+docker run -d -p 9222:9222 --name xiaohongshu-mcp xiaohongshu-mcp
+```
+
+#### 生产环境配置
+
+1. **系统服务配置（Linux）**：
+
+创建 `/etc/systemd/system/xiaohongshu-mcp.service`：
+```ini
+[Unit]
+Description=XiaoHongShu MCP Server
+After=network.target
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/xiaohongshu-mcp
+ExecStart=/opt/xiaohongshu-mcp/XiaoHongShuMCP
+Restart=always
+RestartSec=10
+User=mcp
+Environment=DOTNET_ENVIRONMENT=Production
+Environment=DOTNET_URLS=http://localhost:5000
+
+[Install]
+WantedBy=multi-user.target
+```
+
+启动服务：
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable xiaohongshu-mcp
+sudo systemctl start xiaohongshu-mcp
+sudo systemctl status xiaohongshu-mcp
+```
+
+2. **Windows 服务配置**：
+
+使用 NSSM（Non-Sucking Service Manager）：
+```cmd
+# 下载并安装 NSSM
+nssm install XiaoHongShuMCP "C:\path\to\XiaoHongShuMCP.exe"
+nssm set XiaoHongShuMCP AppDirectory "C:\path\to\app\directory"
+nssm set XiaoHongShuMCP AppEnvironmentExtra "DOTNET_ENVIRONMENT=Production"
+nssm start XiaoHongShuMCP
+```
+
+#### 反向代理配置（可选）
+
+如需要通过 Web 访问，可配置 Nginx：
+
+```nginx
+server {
+    listen 80;
+    server_name xiaohongshu-mcp.your-domain.com;
+
+    location / {
+        proxy_pass http://localhost:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+#### 监控和日志
+
+1. **日志配置**：
+```json
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "System": "Warning"
+      }
+    },
+    "WriteTo": [
+      {
+        "Name": "File",
+        "Args": {
+          "path": "logs/xiaohongshu-mcp-.txt",
+          "rollingInterval": "Day",
+          "retainedFileCountLimit": 30,
+          "outputTemplate": "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}"
+        }
+      }
+    ]
+  }
+}
+```
+
+2. **性能监控**：
+```bash
+# 使用 htop 监控系统资源
+htop
+
+# 使用 journalctl 查看服务日志
+journalctl -u xiaohongshu-mcp -f
+
+# 检查端口占用
+netstat -tlnp | grep :9222
+```
+
+#### 安全建议
+
+1. **网络安全**：
+   - 仅在必要时开放端口 9222
+   - 使用防火墙限制访问来源
+   - 考虑使用 VPN 或内网部署
+
+2. **系统安全**：
+   - 使用专用用户运行服务
+   - 定期更新系统和依赖
+   - 启用系统日志审计
+
+3. **数据安全**：
+   - 定期备份配置文件
+   - 监控异常访问行为
+   - 实施访问控制策略
 
 ## 🧪 测试
 
@@ -267,6 +571,7 @@ dotnet test Tests --logger trx --results-directory TestResults
 - **通过率**: 100%
 - **测试覆盖**: 服务层、数据模型、MCP 工具集
 - **测试框架**: NUnit + Moq + Playwright
+- **详细说明**: 查看 [Tests/README.md](./Tests/README.md)
 
 ## 🔒 安全和合规
 
@@ -286,31 +591,229 @@ dotnet test Tests --logger trx --results-directory TestResults
 
 ## 📚 使用示例
 
-### 基础搜索
+### 基础连接
+
+首先连接浏览器并验证登录状态：
 
 ```typescript
 // 在 Claude Desktop 中调用
-await callTool("SearchNotesEnhanced", {
-  keyword: "美食推荐",
-  limit: 20,
-  sortBy: "most_liked",
-  noteType: "image"
-});
+await callTool("ConnectToBrowser", {});
 ```
 
-### 获取笔记详情
-
-```typescript  
-await callTool("GetNoteDetail", {
-  noteId: "xxxxxxxxxxxxxx",
-  includeComments: true
-});
+**预期输出**：
+```json
+{
+  "IsConnected": true,
+  "IsLoggedIn": true,
+  "Message": "浏览器连接成功，已检测到小红书登录状态"
+}
 ```
 
-### 连接浏览器
+### 推荐笔记获取
+
+获取小红书推荐流笔记：
 
 ```typescript
-await callTool("ConnectToBrowser", {});
+await callTool("GetRecommendedNotes", {
+  limit: 20,
+  timeoutMinutes: 5
+});
+```
+
+### 高级搜索功能
+
+**基础关键词搜索**：
+```typescript
+await callTool("GetSearchNotes", {
+  keyword: "美食推荐",
+  maxResults: 20,
+  sortBy: "comprehensive",
+  noteType: "all",
+  publishTime: "all",
+  includeAnalytics: true,
+  autoExport: true
+});
+```
+
+**高级筛选搜索**：
+```typescript
+await callTool("CollectSearchNotes", {
+  keyword: "减脂餐",
+  limit: 50,
+  sortBy: "most_liked",
+  noteType: "image",
+  publishTime: "week",
+  timeoutMinutes: 10,
+  includeAnalytics: true,
+  autoExport: true,
+  exportFileName: "减脂餐搜索结果"
+});
+```
+
+**可用搜索参数**：
+- **sortBy**: `comprehensive` (综合), `latest` (最新), `most_liked` (最多点赞)
+- **noteType**: `all` (不限), `video` (视频), `image` (图文)
+- **publishTime**: `all` (不限), `day` (一天内), `week` (一周内), `half_year` (半年内)
+
+### 用户资料获取
+
+获取指定用户的完整资料信息：
+
+```typescript
+await callTool("GetUserProfile", {
+  userUrl: "https://www.xiaohongshu.com/user/profile/xxxxxxxxxx",
+  includeStats: true
+});
+```
+
+或通过用户ID：
+```typescript
+await callTool("GetUserProfile", {
+  userId: "xxxxxxxxxx",
+  includeStats: true
+});
+```
+
+### 笔记详情获取
+
+**单个笔记详情**：
+```typescript
+await callTool("GetNoteDetail", {
+  noteId: "xxxxxxxxxxxxxx",
+  includeComments: true,
+  includeInteractionData: true
+});
+```
+
+**批量笔记详情**：
+```typescript
+await callTool("BatchGetNoteDetailsOptimized", {
+  noteIds: [
+    "noteId1",
+    "noteId2", 
+    "noteId3"
+  ],
+  includeComments: false,
+  batchSize: 5
+});
+```
+
+### 互动功能
+
+**发布评论**：
+```typescript
+await callTool("PostComment", {
+  noteId: "xxxxxxxxxxxxxx",
+  comment: "很棒的分享！学到了很多实用技巧 👍",
+  replyToCommentId: null  // 可选：回复特定评论
+});
+```
+
+**保存为草稿**：
+```typescript
+await callTool("TemporarySaveAndLeave", {
+  title: "我的美食分享",
+  content: "今天尝试了一道新菜...",
+  tags: ["美食", "家常菜", "分享"],
+  noteType: "image"  // 或 "video"
+});
+```
+
+### 发现页面浏览
+
+获取发现页面的热门笔记：
+
+```typescript
+await callTool("GetDiscoverPageNotes", {
+  limit: 30,
+  category: "all",  // 或指定分类
+  timeoutMinutes: 5
+});
+```
+
+### 页面导航
+
+导航到特定用户主页：
+
+```typescript
+await callTool("NavigateToUser", {
+  username: "用户名",
+  // 或使用用户ID
+  userId: "xxxxxxxxxx"
+});
+```
+
+### 完整工作流示例
+
+一个完整的数据收集和分析工作流：
+
+```typescript
+// 1. 连接浏览器
+const connection = await callTool("ConnectToBrowser", {});
+
+if (connection.IsConnected && connection.IsLoggedIn) {
+  // 2. 搜索相关笔记
+  const searchResult = await callTool("CollectSearchNotes", {
+    keyword: "健身餐",
+    limit: 100,
+    sortBy: "most_liked",
+    noteType: "image",
+    publishTime: "week",
+    includeAnalytics: true,
+    autoExport: true,
+    exportFileName: "健身餐分析报告"
+  });
+
+  // 3. 获取详细信息（如有需要）
+  if (searchResult.Success && searchResult.SearchResult.Notes.length > 0) {
+    const topNoteIds = searchResult.SearchResult.Notes
+      .slice(0, 10)
+      .map(note => note.NoteId);
+      
+    const detailsResult = await callTool("BatchGetNoteDetailsOptimized", {
+      noteIds: topNoteIds,
+      includeComments: true,
+      batchSize: 5
+    });
+  }
+
+  // 4. 分析用户资料（可选）
+  const userProfile = await callTool("GetUserProfile", {
+    userId: "热门博主ID",
+    includeStats: true
+  });
+}
+```
+
+### 数据导出和分析
+
+所有搜索工具都支持自动导出 Excel 报告，包含：
+
+- **笔记基本信息**：标题、作者、发布时间
+- **互动数据**：点赞、评论、收藏数
+- **质量分析**：数据完整性评分
+- **统计汇总**：平均互动数、热门时段等
+
+导出文件保存在项目的 `exports/` 目录中。
+
+### 错误处理
+
+所有工具调用都遵循统一的错误处理模式：
+
+```typescript
+const result = await callTool("GetSearchNotes", {
+  keyword: "测试关键词",
+  maxResults: 20
+});
+
+if (result.Success) {
+  console.log("操作成功:", result.Message);
+  // 处理结果数据
+} else {
+  console.error("操作失败:", result.Message);
+  console.error("错误代码:", result.ErrorCode);
+  // 根据错误代码进行相应处理
+}
 ```
 
 ## 🤝 贡献指南
@@ -334,31 +837,153 @@ await callTool("ConnectToBrowser", {});
 
 ## 🐛 故障排除
 
-### 常见问题
+### 常见问题及解决方案
 
-**Q: 无法连接到浏览器**  
-A: 确保浏览器以远程调试模式启动，端口 9222 可访问
+#### 浏览器连接问题
 
-**Q: 登录状态检查失败**  
-A: 手动在浏览器中登录小红书，确保登录状态有效
+**Q1: 无法连接到浏览器 (端口 9222)**
+```
+A: 解决步骤：
+1. 确认浏览器启动参数正确：--remote-debugging-port=9222
+2. 检查端口是否被占用：netstat -an | findstr 9222
+3. 确保防火墙允许端口 9222
+4. 尝试重新启动浏览器
+5. Windows 用户检查快捷方式目标路径是否正确
+```
 
-**Q: MCP 工具无法调用**  
-A: 检查 Claude Desktop 配置文件语法，重启 Claude Desktop
+**Q2: 连接成功但登录检测失败**
+```
+A: 解决步骤：
+1. 手动在浏览器中访问 https://www.xiaohongshu.com
+2. 完成登录流程（包括手机验证码等）
+3. 确认能正常浏览小红书内容
+4. 在 Claude 中重新调用 ConnectToBrowser 工具
+5. 如仍失败，清除浏览器 Cookie 后重新登录
+```
 
-**Q: 测试失败**  
-A: 确保已正确安装 .NET 9.0 SDK，运行 `dotnet restore`
+#### MCP 配置问题
 
-### 日志查看
+**Q3: MCP 服务器无法启动**
+```
+A: 诊断步骤：
+1. 检查 .NET 9.0 SDK 是否正确安装：dotnet --version
+2. 验证项目路径是否正确
+3. 运行 dotnet restore 恢复依赖
+4. 检查 claude_desktop_config.json 语法是否正确
+5. 查看 Claude Desktop 错误日志
+```
 
-项目日志保存在 `logs/` 目录：
+**Q4: MCP 工具调用失败**
+```
+A: 解决方案：
+1. 重启 Claude Desktop 应用
+2. 检查配置文件中的路径分隔符（Windows 使用 \\\\）
+3. 确认环境变量配置正确
+4. 手动测试命令：dotnet run --project <项目路径>
+5. 查看服务器启动日志确认无错误
+```
+
+#### 功能使用问题
+
+**Q5: 搜索结果为空**
+```
+A: 可能原因：
+1. 关键词可能被限制或敏感
+2. 网络连接不稳定
+3. 小红书接口响应超时
+4. 登录状态已过期，需重新登录
+```
+
+**Q6: 笔记详情获取失败**
+```
+A: 检查要点：
+1. 笔记 ID 是否正确
+2. 笔记是否已被删除或设为私密
+3. 是否存在地区访问限制
+4. 浏览器是否被检测到异常操作
+```
+
+### 高级故障排除
+
+#### 开发环境调试
+
+1. **启用详细日志**：
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Debug",
+      "XiaoHongShuMCP": "Trace"
+    }
+  }
+}
+```
+
+2. **使用开发模式运行**：
+```bash
+dotnet run --project XiaoHongShuMCP --environment Development
+```
+
+3. **查看实时日志**：
+```bash
+# Windows PowerShell
+Get-Content -Path "logs\xiaohongshu-mcp-*.txt" -Wait -Tail 10
+
+# Git Bash / WSL
+tail -f logs/xiaohongshu-mcp-*.txt
+```
+
+#### 性能优化建议
+
+1. **浏览器优化**：
+   - 关闭不必要的扩展程序
+   - 清理浏览器缓存和 Cookie
+   - 使用隐私模式避免干扰
+
+2. **系统优化**：
+   - 确保有足够内存（建议 4GB+）
+   - 关闭杀毒软件实时保护（临时）
+   - 使用有线网络连接提高稳定性
+
+#### 错误代码对照表
+
+| 错误代码 | 说明 | 解决方法 |
+|---------|------|---------|
+| `CONNECTION_TIMEOUT` | 连接超时 | 检查网络连接，增加超时时间 |
+| `LOGIN_REQUIRED` | 需要登录 | 在浏览器中完成登录 |
+| `RATE_LIMIT_EXCEEDED` | 请求频率过高 | 减少请求频率，等待后重试 |
+| `INVALID_SELECTOR` | 选择器失效 | 可能页面结构变化，需更新选择器 |
+| `ELEMENT_NOT_FOUND` | 元素未找到 | 页面加载未完成或结构变化 |
+
+### 日志分析
+
+#### 日志文件位置
+- **开发环境**: `logs/xiaohongshu-mcp-{date}.txt`
+- **生产环境**: 根据部署配置确定
+
+#### 常用日志分析命令
 
 ```bash
 # 查看最新日志
-tail -f logs/xiaohongshu-mcp-*.txt
+tail -n 50 logs/xiaohongshu-mcp-*.txt
 
-# 查看错误日志  
-grep -i "error" logs/xiaohongshu-mcp-*.txt
+# 搜索错误信息
+grep -i "error\|exception" logs/xiaohongshu-mcp-*.txt
+
+# 搜索特定功能日志
+grep -i "search\|connect" logs/xiaohongshu-mcp-*.txt
+
+# 按时间范围查看日志
+grep "2025-09-06" logs/xiaohongshu-mcp-*.txt
 ```
+
+#### 日志级别说明
+- **Trace**: 最详细的调试信息
+- **Debug**: 调试信息
+- **Information**: 一般信息
+- **Warning**: 警告信息
+- **Error**: 错误信息
+- **Critical**: 严重错误
 
 ## 📄 许可证
 
