@@ -4,7 +4,7 @@
 
 [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![MCP](https://img.shields.io/badge/MCP-0.3.0--preview.4-FF6B6B)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/Tests-51%20✅-4CAF50)](./Tests/)
+[![Tests](https://img.shields.io/badge/Tests-57%20✅-4CAF50)](./Tests/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务器，通过智能自动化技术为用户提供安全、高效的小红书运营工具。
@@ -33,7 +33,7 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-repo/XiaoHongShuMCP.git
+git clone https://github.com/mook-wenyu/XiaoHongShuMCP.git
 cd XiaoHongShuMCP
 
 # 恢复依赖
@@ -413,7 +413,7 @@ dotnet test Tests --collect:"XPlat Code Coverage"
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-repo/XiaoHongShuMCP.git
+git clone https://github.com/mook-wenyu/XiaoHongShuMCP.git
 cd XiaoHongShuMCP
 
 # 恢复依赖
@@ -1070,8 +1070,8 @@ grep "2025-09-06" logs/xiaohongshu-mcp-*.txt
 
 ## 📞 支持
 
-- 🐛 [报告问题](https://github.com/your-repo/XiaoHongShuMCP/issues)
-- 💡 [功能请求](https://github.com/your-repo/XiaoHongShuMCP/discussions)
+- 🐛 [报告问题](https://github.com/mook-wenyu/XiaoHongShuMCP/issues)
+- 💡 [功能请求](https://github.com/mook-wenyu/XiaoHongShuMCP/discussions)
 - 📧 [联系我们](mailto:your-email@example.com)
 
 ---
