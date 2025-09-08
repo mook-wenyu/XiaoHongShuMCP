@@ -4,7 +4,7 @@
 
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![MCP](https://img.shields.io/badge/MCP-0.3.0--preview.4-FF6B6B)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/Tests-57%20✅-4CAF50)](./Tests/)
+[![Tests](https://img.shields.io/badge/Tests-69%2B%20✅-4CAF50)](./Tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务器，通过智能自动化技术为用户提供安全、高效的小红书运营工具。
@@ -16,9 +16,9 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 - **🤖 智能搜索** - 支持多维度筛选的增强搜索功能，自动统计分析
 - **📊 数据分析** - 自动生成 Excel 报告，包含数据质量和互动统计
 - **👤 拟人化交互** - 模拟真人操作模式，智能防检测机制
-- **🧪 完整测试** - 65 个单元测试，100% 通过率，保证代码质量
+- **🧪 完整测试** - 69+ 个测试用例，100% 通过率，保证代码质量
 - **🔧 模块化架构** - 全新的UniversalApiMonitor和重构的SmartCollectionController
-- **📡 多端点监听** - 支持推荐、笔记详情、搜索等多个API端点监听
+- **📡 多端点监听** - 支持推荐、笔记详情、搜索、评论等多个API端点监听
 - **⚡ 现代架构** - 基于稳定的 .NET 8.0，使用依赖注入和异步编程模式
  - **自动导航** - 连接浏览器成功后自动跳转到 `BaseUrl`（默认探索页），不中断主流程
 
@@ -180,7 +180,7 @@ dotnet test Tests
   - 搜索：`GetSearchNotes`（最后一轮先跳主页→直接搜索，避免重复导航）
   - 推荐：`GetRecommendedNotes`（最后一轮强制回主页后直接等待 Homefeed 命中）
   - 详情：`GetNoteDetail`（最后一轮先跳主页→重新定位笔记并点击）
-  - 批量：`BatchGetNoteDetailsOptimized`（最后一轮先跳主页→触发 SearchNotes）
+  - 批量：`BatchGetNoteDetails`（最后一轮先跳主页→触发 SearchNotes）
   - 收集：`SmartCollectionController`（最后一轮强制主页导航后再等待 Homefeed）
 
 说明：上述行为提升了端点未命中时的“自愈”能力，减少 SPA 场景下的死等待与脏状态影响。
@@ -210,15 +210,15 @@ dotnet run --project XiaoHongShuMCP --configuration Release
 4. **启动服务器时会自动连接** - 查看控制台日志确认连接状态
 5. 现在可以使用以下 MCP 工具：
 
-- **ConnectToBrowser** - 连接浏览器并验证登录状态
-- **GetRecommendedNotes** - 获取推荐笔记流
-- **GetSearchNotes** - 搜索指定关键词笔记
-- **GetNoteDetail** - 基于关键词列表获取笔记详情
-- **PostComment** - 基于关键词列表定位并发布评论
-- **LikeNote** - 基于关键词列表定位并点赞
-- **FavoriteNote** - 基于关键词列表定位并收藏
-- **SaveContentDraft** - 保存笔记为草稿（创作平台）
-- **BatchGetNoteDetailsOptimized** - 批量获取笔记详情（基于 SearchNotes 端点的纯监听实现，无 DOM 依赖）
+- `ConnectToBrowser`：连接浏览器并验证登录状态
+- `GetRecommendedNotes`：获取推荐笔记流
+- `GetSearchNotes`：搜索指定关键词笔记
+- `GetNoteDetail`：基于单个关键词获取笔记详情
+- `PostComment`：基于单个关键词定位并发布评论
+- `LikeNote`：基于单个关键词定位并点赞
+- `FavoriteNote`：基于单个关键词定位并收藏
+- `SaveContentDraft`：保存笔记为草稿（创作平台）
+- `BatchGetNoteDetails`：批量获取笔记详情（基于 SearchNotes 端点的纯监听实现，无 DOM 依赖）
   
 #### 详情页关键词匹配增强
 
@@ -240,7 +240,7 @@ XHS__DetailMatchConfig__UsePinyin=true
 
 ### 6. 端到端演示脚本（E2E）
 
-我们提供了两个演示脚本，覆盖三种起点场景（错误详情页 / 个人页 / 首页），并演示阈值、模糊、拼音等参数对匹配与入口页自愈的影响：
+我们提供了两个演示脚本，覆盖三种起点场景（错误详情页 / 个人页 / 首页），并演示阈值、模糊、拼音等参数对匹配与入口页守护的影响：
 
 - Bash: `scripts/e2e_entry_match_demo.sh`
 - PowerShell: `scripts/e2e_entry_match_demo.ps1`
@@ -265,14 +265,21 @@ powershell -ExecutionPolicy Bypass -File scripts/e2e_entry_match_demo.ps1 -Scena
 
 全新设计的通用API监听器，支持多端点智能监听：
 
-- **多端点支持**: 
-  - Homefeed (推荐笔记) - `/api/sns/web/v1/homefeed`
-  - Feed (笔记详情) - `/api/sns/web/v1/feed`  
-  - SearchNotes (搜索笔记) - `/api/sns/web/v1/search/notes`
+- **多端点支持（版本无关）**:
+  - Homefeed (推荐) - `/api/sns/web/v{N}/homefeed`
+  - Feed (笔记详情) - `/api/sns/web/v{N}/feed`
+  - SearchNotes (搜索) - `/api/sns/web/v{N}/search/notes`
+  - Comments (评论列表) - `/api/sns/web/v{N}/comment/page`
 - **智能路由**: 根据API端点类型自动路由到对应的响应处理器
-- **响应处理器**: HomefeedResponseProcessor、FeedResponseProcessor、SearchNotesResponseProcessor
+- **响应处理器**: HomefeedResponseProcessor、FeedResponseProcessor、SearchNotesResponseProcessor、CommentsResponseProcessor
 - **数据转换**: 自动将API响应转换为统一的NoteDetail格式
 - **性能监控**: 内置性能监控和错误处理机制
+
+#### 入口页守护 (PageStateGuard)
+
+- 退出详情自愈：检测到详情页依次尝试关闭按钮→遮罩→ESC。
+- 入口就绪保障：不在发现/搜索入口时，点击侧栏“发现”；失败回退直达URL。
+- 统一接入：搜索/推荐/详情/批量流程操作前统一确保入口页就绪，减少 SPA 脏状态影响。
 
 #### 重构智能收集系统 (SmartCollectionController)
 
@@ -678,8 +685,8 @@ dotnet run --project XiaoHongShuMCP -- callTool GetSearchNotes --json '{
 }'
 
 # 例：批量（纯监听）
-dotnet run --project XiaoHongShuMCP -- callTool BatchGetNoteDetailsOptimized --json '{
-  "keywords": ["健身餐", "教程"],
+dotnet run --project XiaoHongShuMCP -- callTool BatchGetNoteDetails --json '{
+  "keyword": "健身餐",
   "maxCount": 5,
   "includeComments": false,
   "autoExport": false
@@ -775,10 +782,10 @@ await callTool("GetSearchNotes", {
 
 ### 笔记详情获取
 
-**单个笔记详情（基于关键词列表）**：
+**单个笔记详情（基于单一关键词）**：
 ```typescript
 await callTool("GetNoteDetail", {
-  keywords: ["健身餐", "低脂"],
+  keyword: "健身餐",
   includeComments: false
 });
 ```
@@ -786,10 +793,10 @@ await callTool("GetNoteDetail", {
 **批量笔记详情（纯监听，无 DOM 依赖）**：
 ```typescript
 // 按关键词组触发 SearchNotes API，仅通过网络监听收集数据
-const result = await callTool("BatchGetNoteDetailsOptimized", {
-  keywords: ["健身餐", "增肌餐", "低脂"],
+const result = await callTool("BatchGetNoteDetails", {
+  keyword: "健身餐",
   maxCount: 10,
-  includeComments: false,   // 纯监听下不抓取页面评论，返回空集合占位
+  includeComments: false,   // 纯监听下建议关闭评论抓取
   autoExport: true,         // 自动导出为 Excel（/exports 目录）
   exportFileName: "批量详情示例"
 });
@@ -804,7 +811,7 @@ if (result.SuccessfulNotes.length > 0) {
 **发布评论**：
 ```typescript
 await callTool("PostComment", {
-  keywords: ["健身餐", "教程"],
+  keyword: "健身餐",
   content: "很棒的分享！学到了很多实用技巧 👍"
 });
 ```
@@ -812,7 +819,7 @@ await callTool("PostComment", {
 **点赞笔记**：
 ```typescript
 await callTool("LikeNote", {
-  keywords: ["健身餐", "打卡"],
+  keyword: "健身餐",
   forceAction: false // 如已点赞则跳过；设为 true 将强制尝试
 });
 ```
@@ -820,7 +827,7 @@ await callTool("LikeNote", {
 **收藏笔记**：
 ```typescript
 await callTool("FavoriteNote", {
-  keywords: ["健身餐", "教程"],
+  keyword: "健身餐",
   forceAction: false // 如已收藏则跳过；设为 true 将强制尝试
 });
 ```
@@ -865,8 +872,8 @@ if (connection.IsConnected && connection.IsLoggedIn) {
 
   // 3. 获取详细信息（如有需要）
   if (searchResult.Success && searchResult.SearchResult.Notes.length > 0) {
-    const detailsResult = await callTool("BatchGetNoteDetailsOptimized", {
-      keywords: ["健身餐", "教程"],
+    const detailsResult = await callTool("BatchGetNoteDetails", {
+      keyword: "健身餐",
       maxCount: 10,
       includeComments: false
     });

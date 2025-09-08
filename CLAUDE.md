@@ -12,7 +12,7 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 - **🤖 智能搜索**: 支持多维度筛选的增强搜索功能
 - **📊 数据分析**: 自动统计分析和 Excel 导出
 - **👤 拟人化交互**: 模拟真人操作模式，防检测机制
-- **🔧 完整测试**: 65 个单元测试，100% 通过率
+- **🔧 完整测试**: 69+ 个测试用例，100% 通过率
 - **🧩 通用API监听**: 全新的UniversalApiMonitor支持多端点监听
 - **🔄 智能数据转换**: 专门的API数据转换器和模型系统
 
@@ -62,9 +62,9 @@ XiaoHongShuMCP/
 ## 🔧 核心功能模块
 
 ### 1. 通用API监听系统 (UniversalApiMonitor)
-- **多端点支持**: 支持Homefeed(推荐)、Feed(笔记详情)、SearchNotes(搜索)三大API端点
+- **多端点支持（版本无关）**: Homefeed(推荐) `/api/sns/web/v{N}/homefeed`、Feed(笔记详情) `/api/sns/web/v{N}/feed`、SearchNotes(搜索) `/api/sns/web/v{N}/search/notes`、Comments(评论) `/api/sns/web/v{N}/comment/page`
 - **智能路由**: 根据URL模式自动识别API类型，路由到对应处理器
-- **响应处理**: HomefeedResponseProcessor、FeedResponseProcessor、SearchNotesResponseProcessor
+- **响应处理**: HomefeedResponseProcessor、FeedResponseProcessor、SearchNotesResponseProcessor、CommentsResponseProcessor
 - **数据统一**: 将不同API格式统一转换为NoteDetail模型
 - **实时监控**: 支持实时监控API响应和数据提取
 
@@ -86,7 +86,7 @@ XiaoHongShuMCP/
 - **多渠道数据**: 综合首页推荐、热门内容等多渠道数据
 - **实时更新**: 实时获取最新推荐内容和趋势分析
 
-### 5. 发现页导航服务 (DiscoverPageNavigationService)（已合并至 XiaoHongShuService）
+### 5. 入口页守护 (PageStateGuard)
 - **智能导航**: 自动识别和导航到发现页面的不同版块
 - **页面验证**: 验证导航结果和页面加载状态
 - **容错处理**: 处理页面结构变化和网络异常情况
@@ -143,7 +143,7 @@ XiaoHongShuMCP/
 - 搜索：`GetSearchNotes`
 - 推荐：`GetRecommendedNotes`
 - 详情：`GetNoteDetail`
-- 批量：`BatchGetNoteDetailsOptimized`
+- 批量：`BatchGetNoteDetails`
 - 收集：`SmartCollectionController.ExecuteSmartCollectionAsync`
 
 配置项（`EndpointRetry`）：
@@ -225,25 +225,23 @@ dotnet publish -c Release -r osx-x64 --self-contained
 ### 浏览器连接工具
 - **ConnectToBrowser**: 连接浏览器并验证登录状态
 
-### 推荐和发现工具
+### 推荐与搜索
 - **GetRecommendedNotes**: 获取推荐笔记流（集成UniversalApiMonitor）
-- **GetDiscoverPageNotes**: 获取发现页面笔记
 
 ### 搜索工具  
 - **GetSearchNotes**: 基础搜索笔记功能，支持API监听和拟人化操作结合
-- **CollectSearchNotes**: 高级搜索笔记收集，支持完整筛选参数
+  - 高级筛选：排序、类型、时间范围、是否导出等参数
   - 排序: comprehensive(综合), latest(最新), most_liked(最多点赞)
   - 类型: all(不限), video(视频), image(图文)  
   - 时间: all(不限), day(一天内), week(一周内), half_year(半年内)
   - 自动分析和Excel导出功能
 
-### 用户资料工具
-- **GetUserProfile**: 获取用户个人资料和统计信息
-- **NavigateToUser**: 导航到指定用户主页
+### 用户资料工具（已废弃）
+- 相关工具已移除；如需导航或进入发现页，由服务内部自动处理
 
 ### 内容详情工具
-- **GetNoteDetail**: 获取单个笔记详细信息（集成Feed API监听）
-- **BatchGetNoteDetailsOptimized**: 批量获取笔记详情（优化版）
+- **GetNoteDetail**: 基于单个关键词定位并获取详细信息（集成Feed/Comments API监听）
+- **BatchGetNoteDetails**: 批量获取笔记详情（纯监听与拟人化操作结合）
 
 ### 互动工具
 - **PostComment**: 发布评论到指定笔记
@@ -326,7 +324,7 @@ dotnet publish -c Release -r osx-x64 --self-contained
 ## 🧪 测试体系
 
 ### 测试覆盖
-- **总测试数**: 51 个测试用例
+- **总测试数**: 69+ 个测试用例
 - **通过率**: 100%
 - **覆盖模块**: 服务层、数据模型、MCP 工具
 
@@ -414,9 +412,9 @@ await callTool("ConnectToBrowser", {});
 
 ### 智能搜索
 ```typescript
-await callTool("SearchNotesEnhanced", {
+await callTool("GetSearchNotes", {
   keyword: "美食推荐",
-  limit: 20,
+  maxResults: 20,
   sortBy: "most_liked",
   noteType: "image",
   publishTime: "week"
@@ -426,7 +424,7 @@ await callTool("SearchNotesEnhanced", {
 ### 获取笔记详情
 ```typescript
 await callTool("GetNoteDetail", {
-  noteId: "xxxxxx",
+  keyword: "健身餐",
   includeComments: true
 });
 ```

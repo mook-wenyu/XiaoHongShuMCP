@@ -256,7 +256,7 @@ update_plan: [ {step: 探索代码, in_progress}, {step: 实现修复, pending} 
   - `SearchTimeoutsConfig.cs`: search wait and convergence timeouts
   - Browser, selectors, search, humanized interaction services
 - `XiaoHongShuMCP/Tools/`: MCP tool definitions (`XiaoHongShuTools.cs`).
-- `Tests/`: NUnit tests (~57 tests) covering `Services/`, `Models/`, `Tools/`.
+- `Tests/`: NUnit tests (~69+ tests) covering `Services/`, `Models/`, `Tools/`.
 - 配置：采用代码内默认配置；使用环境变量 `XHS__...` 或命令行参数覆盖。日志输出到 `XiaoHongShuMCP/logs/`（Serilog）。
   - 支持“命名空间级覆盖”：`Logging:Overrides:<Namespace>=<Level>`；示例 env `XHS__Logging__Overrides__XiaoHongShuMCP.Services.UniversalApiMonitor=Debug`。
 
