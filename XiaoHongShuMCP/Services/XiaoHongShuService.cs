@@ -23,6 +23,8 @@ public class XiaoHongShuService : IXiaoHongShuService
     private readonly ISmartCollectionController _smartCollectionController;
     private readonly IUniversalApiMonitor _universalApiMonitor;
     private readonly SearchTimeoutsConfig _timeouts;
+    private readonly DetailMatchConfig _detailMatch;
+    private readonly McpSettings _mcpSettings;
 
     /// <summary>
     /// URL构建常量和默认参数
@@ -41,7 +43,9 @@ public class XiaoHongShuService : IXiaoHongShuService
         IPageLoadWaitService pageLoadWaitService,
         ISmartCollectionController smartCollectionController,
         IUniversalApiMonitor universalApiMonitor,
-        IOptions<SearchTimeoutsConfig> timeouts)
+        IOptions<SearchTimeoutsConfig> timeouts,
+        IOptions<DetailMatchConfig> detailMatch,
+        IOptions<McpSettings> mcpSettings)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
@@ -53,6 +57,8 @@ public class XiaoHongShuService : IXiaoHongShuService
         _smartCollectionController = smartCollectionController;
         _universalApiMonitor = universalApiMonitor;
         _timeouts = timeouts.Value ?? new SearchTimeoutsConfig();
+        _detailMatch = detailMatch.Value ?? new DetailMatchConfig();
+        _mcpSettings = mcpSettings.Value ?? new McpSettings();
     }
 
     /// <summary>
@@ -81,6 +87,16 @@ public class XiaoHongShuService : IXiaoHongShuService
             }
 
             var page = await _browserManager.GetPageAsync();
+
+            // 1.1 操作前环境校验：确保位于探索/发现/搜索页面；如在详情页则先退出
+            var ensured = await EnsureOnExploreRecommendOrSearchAsync(page);
+            if (!ensured)
+            {
+                return OperationResult<NoteDetail>.Fail(
+                    "无法导航至探索/发现/搜索页面",
+                    ErrorType.NavigationError,
+                    "ENTRY_PAGE_NOT_AVAILABLE");
+            }
 
             // 2. 设置Feed端点监听（用于笔记详情）
             _browserManager.BeginOperation();
@@ -1318,6 +1334,50 @@ public class XiaoHongShuService : IXiaoHongShuService
 
             var page = await _browserManager.GetPageAsync();
 
+            // 2.1 若已在详情页，优先尝试直接匹配并操作
+            var status = await GetCurrentPageStatusAsync(page);
+            if (status.PageType == PageType.NoteDetail)
+            {
+                _logger.LogDebug("检测到当前已在笔记详情页，尝试匹配关键词...");
+                var matches = await DoesCurrentDetailMatchKeywords(page, keywords);
+                if (matches)
+                {
+                    _logger.LogInformation("当前详情页与关键词匹配，直接执行操作");
+                    var detailEl = await page.QuerySelectorAsync(
+                        _domElementManager.GetSelectors("NoteDetailModal").FirstOrDefault() ?? "body");
+                    if (detailEl == null)
+                    {
+                        detailEl = await page.QuerySelectorAsync("body");
+                    }
+                    if (detailEl != null)
+                    {
+                        return await operation(detailEl);
+                    }
+                }
+                else
+                {
+                    _logger.LogDebug("当前详情页与关键词不匹配，尝试关闭并回到列表页");
+                    var closed = await TryExitNoteDetailAsync(page);
+                    if (!closed)
+                    {
+                        return OperationResult<T>.Fail(
+                            "无法退出当前详情页",
+                            ErrorType.NavigationError,
+                            "CANNOT_EXIT_DETAIL");
+                    }
+                }
+            }
+
+            // 2.2 统一入口页保障：确保在探索/发现/搜索页面
+            var ensured = await EnsureOnExploreRecommendOrSearchAsync(page);
+            if (!ensured)
+            {
+                return OperationResult<T>.Fail(
+                    "无法导航至探索/发现/搜索页面",
+                    ErrorType.NavigationError,
+                    "ENTRY_PAGE_NOT_AVAILABLE");
+            }
+
             // 3. 使用现有的FindVisibleMatchingNotesAsync方法查找匹配的笔记（限制为1个结果）
             _logger.LogDebug("搜索匹配关键词的笔记: {Keywords}", string.Join(", ", keywords));
             var matchingNotesResult = await FindVisibleMatchingNotesAsync(keywords, 1);
@@ -1381,6 +1441,237 @@ public class XiaoHongShuService : IXiaoHongShuService
                 ErrorType.BrowserError,
                 "LOCATE_OPERATE_EXCEPTION");
         }
+    }
+    #endregion
+
+    #region 关键词匹配辅助（详情页）
+    /// <summary>
+    /// 判断当前打开的笔记详情页是否与关键词匹配
+    /// </summary>
+    private async Task<bool> DoesCurrentDetailMatchKeywords(IPage page, List<string> keywords)
+    {
+        try
+        {
+            var options = new KeywordMatchOptions
+            {
+                UseFuzzy = _detailMatch.UseFuzzy,
+                MaxDistanceCap = _detailMatch.MaxDistanceCap,
+                TokenCoverageThreshold = _detailMatch.TokenCoverageThreshold,
+                IgnoreSpaces = _detailMatch.IgnoreSpaces
+            };
+
+            // 提取字段
+            var (title, author, content, hashtags, imageAlts) = await ExtractDetailFieldsAsync(page);
+
+            double score = 0;
+            double total = _detailMatch.TitleWeight + _detailMatch.AuthorWeight + _detailMatch.ContentWeight +
+                           _detailMatch.HashtagWeight + _detailMatch.ImageAltWeight;
+
+            bool TitleHit() => !string.IsNullOrWhiteSpace(title) && KeywordMatcher.Matches(title, keywords, options);
+            bool AuthorHit() => !string.IsNullOrWhiteSpace(author) && KeywordMatcher.Matches(author, keywords, options);
+            bool ContentHit() => !string.IsNullOrWhiteSpace(content) && KeywordMatcher.Matches(content, keywords, options);
+            bool TagsHit() => !string.IsNullOrWhiteSpace(hashtags) && KeywordMatcher.Matches(hashtags, keywords, options);
+            bool AltHit() => !string.IsNullOrWhiteSpace(imageAlts) && KeywordMatcher.Matches(imageAlts, keywords, options);
+
+            if (TitleHit()) score += _detailMatch.TitleWeight;
+            if (AuthorHit()) score += _detailMatch.AuthorWeight;
+            if (ContentHit()) score += _detailMatch.ContentWeight;
+            if (TagsHit()) score += _detailMatch.HashtagWeight;
+            if (AltHit()) score += _detailMatch.ImageAltWeight;
+
+            // 拼音首字母匹配（可选，主要针对 ASCII 关键字）
+            if (_detailMatch.UsePinyin)
+            {
+                var asciiKeywords = keywords.Where(IsAsciiLettersOrDigits).ToList();
+                if (asciiKeywords.Count > 0)
+                {
+                    var initialTitle = ToPinyinInitials(title);
+                    var initialAuthor = ToPinyinInitials(author);
+                    var initialContent = ToPinyinInitials(content);
+                    var initialTags = ToPinyinInitials(hashtags);
+
+                    bool PinyinMatch(string src) =>
+                        !string.IsNullOrWhiteSpace(src) && asciiKeywords.Any(kw => src.Contains(NormalizeAscii(kw)));
+
+                    if (string.IsNullOrEmpty(title) == false && PinyinMatch(initialTitle)) score += _detailMatch.TitleWeight * 0.6;
+                    if (string.IsNullOrEmpty(author) == false && PinyinMatch(initialAuthor)) score += _detailMatch.AuthorWeight * 0.6;
+                    if (string.IsNullOrEmpty(content) == false && PinyinMatch(initialContent)) score += _detailMatch.ContentWeight * 0.5;
+                    if (string.IsNullOrEmpty(hashtags) == false && PinyinMatch(initialTags)) score += _detailMatch.HashtagWeight * 0.5;
+                }
+            }
+
+            var ratio = total <= 0 ? 0 : score / total;
+            _logger.LogDebug("详情页匹配评分: {Score}/{Total} ({Ratio:P1})", score, total, ratio);
+            return ratio >= _detailMatch.WeightedThreshold;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "详情页关键词匹配检测异常");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 从详情页提取用于关键词匹配的文本（标题/作者/描述）
+    /// </summary>
+    private async Task<(string Title, string Author, string Content, string Hashtags, string ImageAlts)> ExtractDetailFieldsAsync(IPage page)
+    {
+        string title = string.Empty, author = string.Empty, content = string.Empty, tags = string.Empty, alts = string.Empty;
+
+        async Task<string> FirstTextBySelectors(string alias)
+        {
+            foreach (var sel in _domElementManager.GetSelectors(alias))
+            {
+                try
+                {
+                    var el = await page.QuerySelectorAsync(sel);
+                    if (el == null) continue;
+                    var t = (await el.InnerTextAsync())?.Trim();
+                    if (!string.IsNullOrWhiteSpace(t)) return t!;
+                }
+                catch { }
+            }
+            return string.Empty;
+        }
+
+        title = await FirstTextBySelectors("NoteDetailTitle");
+        author = await FirstTextBySelectors("NoteDetailAuthor");
+
+        // 内容/描述（整块）
+        foreach (var sel in _domElementManager.GetSelectors("NoteContent").Concat(new[] {"#detail-desc", ".desc", ".note-text", ".note-content", "#note-content", "article"}))
+        {
+            try
+            {
+                var el = await page.QuerySelectorAsync(sel);
+                if (el == null) continue;
+                var t = (await el.InnerTextAsync())?.Trim();
+                if (!string.IsNullOrWhiteSpace(t)) { content = t!; break; }
+            }
+            catch { }
+        }
+
+        // 解析正文中的话题标签（#话题 或 #word#）
+        if (!string.IsNullOrWhiteSpace(content))
+        {
+            try
+            {
+                var matches = System.Text.RegularExpressions.Regex.Matches(content, "#([\\p{L}\\p{N}_\\-]+)#?");
+                if (matches.Count > 0)
+                {
+                    var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (System.Text.RegularExpressions.Match m in matches)
+                    {
+                        var val = m.Groups[1].Value?.Trim();
+                        if (!string.IsNullOrWhiteSpace(val)) set.Add(val!);
+                    }
+                    if (set.Count > 0) tags = string.Join(' ', set);
+                }
+            }
+            catch { }
+        }
+
+        // 图片 alt 文本
+        try
+        {
+            var imgs = await page.QuerySelectorAllAsync("img[alt]");
+            if (imgs.Count > 0)
+            {
+                var list = new List<string>();
+                foreach (var img in imgs)
+                {
+                    try
+                    {
+                        var alt = await img.GetAttributeAsync("alt");
+                        if (!string.IsNullOrWhiteSpace(alt)) list.Add(alt!.Trim());
+                    }
+                    catch { }
+                }
+                if (list.Count > 0) alts = string.Join(' ', list);
+            }
+        }
+        catch { }
+
+        return (title, author, content, tags, alts);
+    }
+
+    private static bool IsAsciiLettersOrDigits(string s) => !string.IsNullOrWhiteSpace(s) && s.All(ch => ch <= 127 && (char.IsLetterOrDigit(ch)));
+
+    private static string NormalizeAscii(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
+        var sb = new StringBuilder(s.Length);
+        foreach (var ch in s)
+        {
+            if (char.IsLetterOrDigit(ch)) sb.Append(char.ToLowerInvariant(ch));
+        }
+        return sb.ToString();
+    }
+
+    // 简易拼音首字母映射：基于 GB2312 分段（启发式，非严格 全量）。
+    private static string ToPinyinInitials(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var sb = new StringBuilder(text.Length);
+        Encoding? gb2312 = null;
+        try { gb2312 = Encoding.GetEncoding("GB2312"); }
+        catch { /* 平台不支持则跳过 */ }
+
+        foreach (var ch in text)
+        {
+            if (ch <= 127)
+            {
+                if (char.IsLetterOrDigit(ch)) sb.Append(char.ToLowerInvariant(ch));
+                continue;
+            }
+
+            if (gb2312 == null)
+            {
+                // 无 GB2312 支持时，跳过该字符
+                continue;
+            }
+
+            try
+            {
+                var bytes = gb2312.GetBytes(new[] { ch });
+                if (bytes.Length < 2) continue;
+                int code = bytes[0] << 8 | bytes[1];
+                sb.Append(MapGb2312CodeToInitial(code));
+            }
+            catch { }
+        }
+
+        return sb.ToString();
+    }
+
+    private static char MapGb2312CodeToInitial(int code)
+    {
+        return code switch
+        {
+            >= 0xB0A1 and <= 0xB0C4 => 'a',
+            >= 0xB0C5 and <= 0xB2C0 => 'b',
+            >= 0xB2C1 and <= 0xB4ED => 'c',
+            >= 0xB4EE and <= 0xB6E9 => 'd',
+            >= 0xB6EA and <= 0xB7A1 => 'e',
+            >= 0xB7A2 and <= 0xB8C0 => 'f',
+            >= 0xB8C1 and <= 0xB9FD => 'g',
+            >= 0xB9FE and <= 0xBBF6 => 'h',
+            >= 0xBBF7 and <= 0xBFA5 => 'j',
+            >= 0xBFA6 and <= 0xC0AB => 'k',
+            >= 0xC0AC and <= 0xC2E7 => 'l',
+            >= 0xC2E8 and <= 0xC4C2 => 'm',
+            >= 0xC4C3 and <= 0xC5B5 => 'n',
+            >= 0xC5B6 and <= 0xC5BD => 'o',
+            >= 0xC5BE and <= 0xC6D9 => 'p',
+            >= 0xC6DA and <= 0xC8BA => 'q',
+            >= 0xC8BB and <= 0xC8F5 => 'r',
+            >= 0xC8F6 and <= 0xCBF9 => 's',
+            >= 0xCBFA and <= 0xCDD9 => 't',
+            >= 0xCDDA and <= 0xCEF3 => 'w',
+            >= 0xCEF4 and <= 0xD188 => 'x',
+            >= 0xD1B9 and <= 0xD4D0 => 'y',
+            >= 0xD4D1 and <= 0xD7F9 => 'z',
+            _ => ' '
+        };
     }
     #endregion
 
@@ -3349,12 +3640,14 @@ public class XiaoHongShuService : IXiaoHongShuService
     /// <returns>推荐结果</returns>
     public async Task<OperationResult<RecommendListResult>> GetRecommendedNotesAsync(int limit = 20, TimeSpan? timeout = null)
     {
-        timeout ??= TimeSpan.FromMinutes(5);
+        // 统一 MCP 等待超时（默认 10 分钟）；若未指定则取 McpSettings.WaitTimeoutMs
+        var cfgMs = _mcpSettings.WaitTimeoutMs;
+        timeout ??= TimeSpan.FromMilliseconds(cfgMs > 0 ? cfgMs : 600_000);
         var startTime = DateTime.UtcNow;
 
         try
         {
-            _logger.LogInformation("开始获取推荐笔记，数量：{Limit}，超时：{Timeout}分钟", limit, timeout.Value.TotalMinutes);
+            _logger.LogInformation("开始获取推荐笔记，数量：{Limit}，超时：{Timeout}ms", limit, timeout.Value.TotalMilliseconds);
 
             // 检查登录状态
             if (!await _accountManager.IsLoggedInAsync())
@@ -3587,7 +3880,7 @@ public class XiaoHongShuService : IXiaoHongShuService
             result.NavigationLog.Add($"开始导航到发现页面，超时时间：{timeout.Value.TotalSeconds}秒");
 
             // 方法1：尝试点击发现按钮
-            var buttonClickResult = await TryClickDiscoverButtonAsync(page);
+            var buttonClickResult = await TryClickRecommendButtonAsync(page);
             if (buttonClickResult.Success)
             {
                 result.Success = true;
@@ -3704,10 +3997,10 @@ public class XiaoHongShuService : IXiaoHongShuService
     /// </summary>
     /// <param name="page">浏览器页面实例</param>
     /// <returns>发现页面状态</returns>
-    [Obsolete("请使用 GetCurrentPageStatusAsync(IPage, PageType?) 方法替代，传入 PageType.Discover 作为期望类型")]
+    [Obsolete("请使用 GetCurrentPageStatusAsync(IPage, PageType?) 方法替代，传入 PageType.Recommend 作为期望类型")]
     public async Task<DiscoverPageStatus> GetDiscoverPageStatusAsync(IPage page)
     {
-        var generalStatus = await GetCurrentPageStatusAsync(page, PageType.Discover);
+        var generalStatus = await GetCurrentPageStatusAsync(page, PageType.Recommend);
 
         // 转换为DiscoverPageStatus以保持向后兼容
         var discoverStatus = new DiscoverPageStatus
@@ -3723,7 +4016,7 @@ public class XiaoHongShuService : IXiaoHongShuService
         };
 
         // 设置兼容性属性
-        discoverStatus.IsOnDiscoverPage = discoverStatus.IsPageType(PageType.Discover);
+        discoverStatus.IsOnDiscoverPage = discoverStatus.IsPageType(PageType.Recommend);
 
         return discoverStatus;
     }
@@ -3742,9 +4035,9 @@ public class XiaoHongShuService : IXiaoHongShuService
         var query = uri.Query.ToLowerInvariant();
 
         // 发现页面检测
-        if (path.Contains("/explore") && query.Contains("channel_id=homefeed_recommend"))
+        if (path.Contains("/explore?") && query.Contains("channel_id=homefeed_recommend"))
         {
-            return PageType.Discover;
+            return PageType.Recommend;
         }
 
         // 搜索页面检测
@@ -3763,6 +4056,12 @@ public class XiaoHongShuService : IXiaoHongShuService
         if (path.Contains("/explore/") && path.Length > 10)
         {
             return PageType.NoteDetail;
+        }
+
+        // 探索页面检测
+        if (path.Contains("/explore"))
+        {
+            return PageType.Home;
         }
 
         // 首页检测
@@ -3786,14 +4085,14 @@ public class XiaoHongShuService : IXiaoHongShuService
         {
             switch (expectedType)
             {
-                case PageType.Discover:
+                case PageType.Recommend:
                     var discoverElements = await CountElements(page, [
                         "#exploreFeeds",
                         "[data-testid='explore-page']",
                         ".channel-container",
                         ".note-item"
                     ]);
-                    return discoverElements > 0 ? PageType.Discover : PageType.Unknown;
+                    return discoverElements > 0 ? PageType.Recommend : PageType.Unknown;
 
                 case PageType.Search:
                     var searchElements = await CountElements(page, [
@@ -3839,7 +4138,7 @@ public class XiaoHongShuService : IXiaoHongShuService
     {
         switch (status.PageType)
         {
-            case PageType.Discover:
+            case PageType.Recommend:
                 var discoverElements = await CountElements(page, [
                     "#exploreFeeds",
                     "[data-testid='explore-page']",
@@ -3942,7 +4241,7 @@ public class XiaoHongShuService : IXiaoHongShuService
         // 基于页面类型和检测到的元素数量确定就绪状态
         switch (status.PageType)
         {
-            case PageType.Discover:
+            case PageType.Recommend:
                 return status.GetElementCount("discover_elements") > 0 ||
                        status.GetElementCount("note_items") > 0;
 
@@ -3968,9 +4267,8 @@ public class XiaoHongShuService : IXiaoHongShuService
 
     /// <summary>
     /// 尝试通过点击发现按钮导航
-    /// 合并自 DiscoverPageNavigationService.TryClickDiscoverButtonAsync
     /// </summary>
-    private async Task<(bool Success, List<string> Log)> TryClickDiscoverButtonAsync(IPage page)
+    private async Task<(bool Success, List<string> Log)> TryClickRecommendButtonAsync(IPage page)
     {
         var log = new List<string>();
 
@@ -4018,7 +4316,7 @@ public class XiaoHongShuService : IXiaoHongShuService
                             var currentUrl = page.Url;
                             log.Add($"点击后页面URL：{currentUrl}");
 
-                            if (currentUrl.Contains("/explore") || currentUrl.Contains("channel_id=homefeed_recommend"))
+                            if (currentUrl.Contains("/explore") && currentUrl.Contains("channel_id=homefeed_recommend"))
                             {
                                 log.Add("通过URL验证导航成功");
                                 return (true, log);
@@ -4119,8 +4417,8 @@ public class XiaoHongShuService : IXiaoHongShuService
                     log.Add($"导航后页面URL：{currentUrl}");
 
                     // 验证页面状态
-                    var pageStatus = await GetCurrentPageStatusAsync(page, PageType.Discover);
-                    if (pageStatus.IsPageType(PageType.Discover))
+                    var pageStatus = await GetCurrentPageStatusAsync(page, PageType.Recommend);
+                    if (pageStatus.IsPageType(PageType.Recommend))
                     {
                         log.Add("通过页面状态验证导航成功");
                         return (true, log);
@@ -4142,5 +4440,144 @@ public class XiaoHongShuService : IXiaoHongShuService
         }
     }
     #endregion
+
+    /// <summary>
+    /// 确保当前位于探索/发现/搜索页面；
+    /// - 如在详情页则尝试点击关闭按钮或遮罩退出
+    /// - 若不在任一入口页则点击“发现”按钮（必要时回退为直接URL导航）
+    /// </summary>
+    private async Task<bool> EnsureOnExploreRecommendOrSearchAsync(IPage page)
+    {
+        try
+        {
+            // 初次检测
+            var status = await GetCurrentPageStatusAsync(page);
+            _logger.LogDebug("入口页校验：当前类型={PageType}, URL={Url}", status.PageType, status.CurrentUrl);
+
+            // 若在详情页，先尝试退出
+            if (status.PageType == PageType.NoteDetail)
+            {
+                _logger.LogDebug("检测到详情页，尝试退出详情页...");
+                var closed = await TryExitNoteDetailAsync(page);
+                if (!closed)
+                {
+                    _logger.LogWarning("无法退出详情页");
+                    return false;
+                }
+
+                await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                status = await GetCurrentPageStatusAsync(page);
+            }
+
+            // 如已在探索/发现/搜索任一页面，则通过
+            if (status.PageType is PageType.Home or PageType.Recommend or PageType.Search)
+            {
+                _logger.LogDebug("已在探索/发现/搜索页面，无需导航");
+                return true;
+            }
+
+            // 不在入口页：点击发现按钮进入发现页
+            _logger.LogDebug("不在入口页，尝试点击发现按钮导航");
+            var (ok, log) = await TryClickRecommendButtonAsync(page);
+            foreach (var l in log) _logger.LogDebug("[发现导航] {Line}", l);
+
+            if (!ok)
+            {
+                _logger.LogWarning("点击发现按钮失败，尝试URL导航兜底");
+                var (ok2, log2) = await TryDirectUrlNavigationAsync(page);
+                foreach (var l in log2) _logger.LogDebug("[URL导航] {Line}", l);
+                if (!ok2) return false;
+            }
+
+            await _pageLoadWaitService.WaitForPageLoadAsync(page);
+            status = await GetCurrentPageStatusAsync(page, PageType.Recommend);
+            var pass = status.IsPageType(PageType.Recommend) || status.IsPageType(PageType.Search);
+            _logger.LogDebug("导航后页面校验：{Pass}", pass);
+            return pass;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "入口页校验异常");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 退出笔记详情：优先点击关闭按钮，其次点击遮罩，最后按 ESC
+    /// 成功判定：页面类型不再为 NoteDetail
+    /// </summary>
+    private async Task<bool> TryExitNoteDetailAsync(IPage page)
+    {
+        try
+        {
+            // 1) 关闭按钮集合（详情页专用 + 通用关闭）
+            var selectors = new List<string>();
+            selectors.AddRange(_domElementManager.GetSelectors("NoteDetailCloseButton"));
+            selectors.AddRange(_domElementManager.GetSelectors("CloseButton"));
+
+            foreach (var sel in selectors.Distinct())
+            {
+                try
+                {
+                    var el = await page.QuerySelectorAsync(sel);
+                    if (el == null) continue;
+                    var visible = await el.IsVisibleAsync();
+                    var enabled = await el.IsEnabledAsync();
+                    if (!visible || !enabled) continue;
+
+                    await _humanizedInteraction.HumanClickAsync(page, el);
+                    await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                    var st = await GetCurrentPageStatusAsync(page);
+                    if (st.PageType != PageType.NoteDetail) return true;
+                }
+                catch
+                {
+                    /* try next */
+                }
+            }
+
+            // 2) 点击遮罩区域
+            try
+            {
+                var masks = _domElementManager.GetSelectors("NoteDetailModal");
+                foreach (var maskSel in masks)
+                {
+                    var mask = await page.QuerySelectorAsync(maskSel);
+                    if (mask == null) continue;
+                    var visible = await mask.IsVisibleAsync();
+                    if (!visible) continue;
+                    // 点遮罩边缘，避免点到内容
+                    try
+                    {
+                        await mask.ClickAsync(new ElementHandleClickOptions {Position = new() {X = 5, Y = 5}});
+                    }
+                    catch
+                    {
+                        await _humanizedInteraction.HumanClickAsync(page, mask);
+                    }
+
+                    await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                    var st2 = await GetCurrentPageStatusAsync(page);
+                    if (st2.PageType != PageType.NoteDetail) return true;
+                }
+            }
+            catch
+            {
+                /* ignore */
+            }
+
+            // 3) ESC 兜底
+            try { await page.Keyboard.PressAsync("Escape"); }
+            catch { }
+            await _pageLoadWaitService.WaitForPageLoadAsync(page);
+            var st3 = await GetCurrentPageStatusAsync(page);
+            return st3.PageType != PageType.NoteDetail;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "退出详情页失败");
+            return false;
+        }
+    }
 
 }

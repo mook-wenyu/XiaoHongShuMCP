@@ -13,6 +13,7 @@ namespace XiaoHongShuMCP.Services;
 public class UniversalApiMonitor : IUniversalApiMonitor
 {
     private readonly ILogger<UniversalApiMonitor> _logger;
+    private readonly McpSettings _mcpSettings;
     private readonly Dictionary<ApiEndpointType, List<MonitoredApiResponse>> _monitoredResponses;
     private readonly Dictionary<ApiEndpointType, IApiResponseProcessor> _processors;
     private readonly object _lock = new();
@@ -21,9 +22,10 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     private HashSet<ApiEndpointType> _activeEndpoints;
     private long _responseEventSeq;
 
-    public UniversalApiMonitor(ILogger<UniversalApiMonitor> logger)
+    public UniversalApiMonitor(ILogger<UniversalApiMonitor> logger, Microsoft.Extensions.Options.IOptions<McpSettings> mcp)
     {
         _logger = logger;
+        _mcpSettings = mcp.Value ?? new McpSettings();
         _monitoredResponses = new Dictionary<ApiEndpointType, List<MonitoredApiResponse>>();
         _processors = new Dictionary<ApiEndpointType, IApiResponseProcessor>();
         _activeEndpoints = [];
@@ -198,14 +200,21 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     /// <summary>
     /// 等待指定端点的API响应
     /// </summary>
+    /// <summary>
+    /// 等待指定端点的 API 响应（中文文档注释）
+    /// 使用 McpSettings.WaitTimeoutMs 作为统一等待时长（默认 10 分钟），不做上限限制。
+    /// </summary>
     public async Task<bool> WaitForResponsesAsync(ApiEndpointType endpointType,
         int expectedCount = 1)
     {
-        var timeout = TimeSpan.FromMinutes(5); // 默认5分钟
+        // 统一 MCP 等待超时（默认 10 分钟）；若配置 <=0 则回退到默认 10 分钟
+        var cfgMs = _mcpSettings.WaitTimeoutMs;
+        var waitMs = cfgMs > 0 ? cfgMs : 600_000;
+        var timeout = TimeSpan.FromMilliseconds(waitMs);
         var startTime = DateTime.UtcNow;
 
-        _logger.LogDebug("等待 {EndpointType} API响应: 期望数量={ExpectedCount}, 超时={Timeout}分钟",
-            endpointType, expectedCount, timeout.TotalMinutes);
+        _logger.LogDebug("等待 {EndpointType} API响应: 期望数量={ExpectedCount}, 超时={Timeout}ms",
+            endpointType, expectedCount, timeout.TotalMilliseconds);
 
         while (DateTime.UtcNow - startTime < timeout)
         {

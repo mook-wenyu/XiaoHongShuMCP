@@ -237,6 +237,21 @@ dotnet publish -c Release -r osx-x64 --self-contained
 
 默认键见 `Program.cs` 的 `CreateDefaultSettings()`：`Serilog`, `UniversalApiMonitor`, `BrowserSettings`, `McpSettings`, `PageLoadWaitConfig`, `SearchTimeoutsConfig`。
 
+### 统一等待超时配置（MCP）
+
+- 键名：`McpSettings:WaitTimeoutMs`
+- 默认：`600000`（10 分钟）
+- 覆盖：环境变量 `XHS__McpSettings__WaitTimeoutMs` 或命令行 `McpSettings:WaitTimeoutMs`
+- 说明：作为所有长耗时操作的统一等待时长，不限制上限。
+
+### 详情页匹配参数（权重/模糊/拼音）
+
+- `DetailMatchConfig:WeightedThreshold`（默认 0.5）
+- `DetailMatchConfig:UseFuzzy`（默认 true）
+- `DetailMatchConfig:MaxDistanceCap`（默认 3）
+- `DetailMatchConfig:UsePinyin`（默认 true，首字母启发式）
+
+
 ### 按命名空间覆盖日志等级
 - 键格式：`Logging:Overrides:<Namespace>=<Level>`（如 `Debug`/`Information`/`Warning`/`Error`）
 - 环境变量：`XHS__Logging__Overrides__XiaoHongShuMCP.Services.UniversalApiMonitor=Debug`

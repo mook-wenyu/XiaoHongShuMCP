@@ -57,13 +57,18 @@ public static class XiaoHongShuTools
     [Description("获取小红书推荐笔记")]
     public static async Task<RecommendResultMcp> GetRecommendedNotes(
         [Description("获取数量限制，默认20")] int limit = 20,
-        [Description("超时时间（分钟），默认5分钟")] int timeoutMinutes = 5,
+        [Description("超时时间（分钟），默认10分钟")] int timeoutMinutes = 10,
         IServiceProvider serviceProvider = null!)
     {
         try
         {
             var xiaohongShuService = serviceProvider.GetRequiredService<IXiaoHongShuService>();
-            var timeout = TimeSpan.FromMinutes(timeoutMinutes);
+            var mcp = serviceProvider.GetService<Microsoft.Extensions.Options.IOptions<McpSettings>>();
+            // 统一策略：CLI 明确给定则优先使用；否则回退 McpSettings；再否则回退 10 分钟
+            var cfgMs = mcp?.Value?.WaitTimeoutMs ?? 600_000;
+            var cliMs = (int)TimeSpan.FromMinutes(timeoutMinutes).TotalMilliseconds;
+            var effectiveMs = cliMs > 0 ? cliMs : (cfgMs > 0 ? cfgMs : 600_000);
+            var timeout = TimeSpan.FromMilliseconds(effectiveMs);
 
             var result = await xiaohongShuService.GetRecommendedNotesAsync(limit, timeout);
 
@@ -205,7 +210,7 @@ public static class XiaoHongShuTools
     /// </summary>
     [McpServerTool]
     [Description("基于关键词列表批量获取笔记详情，集成统计分析和自动导出功能。")]
-    public static async Task<BatchNoteResult> BatchGetNoteDetailsOptimized(
+    public static async Task<BatchNoteResult> BatchGetNoteDetails(
         [Description("关键词列表，用于在当前页面查找匹配的笔记，匹配任意关键词即可。系统会智能滚动搜索更多内容")] List<string> keywords,
         [Description("最大获取数量，默认10")] int maxCount = 10,
         [Description("是否包含评论信息，默认false")] bool includeComments = false,

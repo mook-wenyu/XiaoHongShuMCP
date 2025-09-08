@@ -123,6 +123,14 @@ try
     builder.Services.Configure<SearchTimeoutsConfig>(
         builder.Configuration.GetSection("SearchTimeoutsConfig"));
 
+    // 配置详情匹配（权重/阈值/拼音）
+    builder.Services.Configure<DetailMatchConfig>(
+        builder.Configuration.GetSection("DetailMatchConfig"));
+
+    // MCP 统一等待超时配置
+    builder.Services.Configure<McpSettings>(
+        builder.Configuration.GetSection("McpSettings"));
+
     // 配置服务依赖注入
     builder.Services
         .AddSingleton<IBrowserManager, PlaywrightBrowserManager>()
@@ -210,6 +218,7 @@ static Dictionary<string, string?> CreateDefaultSettings()
         ["McpSettings:EnableProgressReporting"] = "true",
         ["McpSettings:MaxBatchSize"] = "10",
         ["McpSettings:DelayBetweenOperations"] = "1000",
+        ["McpSettings:WaitTimeoutMs"] = "600000",
 
         // 页面加载等待配置
         ["PageLoadWaitConfig:DOMContentLoadedTimeout"] = "15000",
@@ -222,7 +231,21 @@ static Dictionary<string, string?> CreateDefaultSettings()
 
         // 搜索超时
         ["SearchTimeoutsConfig:UiWaitMs"] = "12000",
-        ["SearchTimeoutsConfig:ApiCollectionMaxWaitMs"] = "60000"
+        ["SearchTimeoutsConfig:ApiCollectionMaxWaitMs"] = "60000",
+
+        // 详情匹配（权重/阈值/拼音）
+        ["DetailMatchConfig:WeightedThreshold"] = "0.5",
+        ["DetailMatchConfig:TitleWeight"] = "4",
+        ["DetailMatchConfig:AuthorWeight"] = "3",
+        ["DetailMatchConfig:ContentWeight"] = "2",
+        ["DetailMatchConfig:HashtagWeight"] = "2",
+        ["DetailMatchConfig:ImageAltWeight"] = "1",
+        ["DetailMatchConfig:UseFuzzy"] = "true",
+        ["DetailMatchConfig:MaxDistanceCap"] = "3",
+        ["DetailMatchConfig:TokenCoverageThreshold"] = "0.7",
+        ["DetailMatchConfig:IgnoreSpaces"] = "true",
+        ["DetailMatchConfig:UsePinyin"] = "true",
+        ["DetailMatchConfig:PinyinInitialsOnly"] = "true"
     };
 }
 
@@ -269,6 +292,8 @@ static async Task<bool> TryHandleCallTool(string[] args, IConfiguration configur
             .AddCommandLine(args);
         builder.Services.Configure<PageLoadWaitConfig>(builder.Configuration.GetSection("PageLoadWaitConfig"));
         builder.Services.Configure<SearchTimeoutsConfig>(builder.Configuration.GetSection("SearchTimeoutsConfig"));
+        builder.Services.Configure<McpSettings>(builder.Configuration.GetSection("McpSettings"));
+        builder.Services.Configure<DetailMatchConfig>(builder.Configuration.GetSection("DetailMatchConfig"));
 
         builder.Services
             .AddSingleton<IBrowserManager, PlaywrightBrowserManager>()

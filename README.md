@@ -153,6 +153,18 @@ dotnet test Tests
   - `DOTNET_ENVIRONMENT`: 运行环境（Development/Production）
   - `DOTNET_CLI_TELEMETRY_OPTOUT`: 禁用.NET遥测（可选）
 
+#### 统一等待超时配置（MCP）
+
+项目将所有长耗时等待统一为单一配置键：
+
+- 键名：`McpSettings:WaitTimeoutMs`
+- 默认：`600000`（10 分钟）
+- 覆盖方式：
+  - 环境变量：`XHS__McpSettings__WaitTimeoutMs=600000`
+  - 命令行：`McpSettings:WaitTimeoutMs=600000`
+
+说明：默认值为 10 分钟；如需更长/更短，请直接设置毫秒值；不再限制上限。
+
 #### 验证配置
 
 配置完成后，重启 Claude Desktop 并检查：
@@ -188,6 +200,42 @@ dotnet run --project XiaoHongShuMCP --configuration Release
 - **SaveContentDraft** - 保存笔记为草稿（创作平台）
 - **BatchGetNoteDetailsOptimized** - 批量获取笔记详情（基于 SearchNotes 端点的纯监听实现，无 DOM 依赖）
   
+#### 详情页关键词匹配增强
+
+详情页匹配采用“字段加权 + 模糊 +（可选）拼音首字母”的综合策略：
+
+- 权重默认：标题(4)、作者(3)、正文(2)、话题(2)、图片alt(1)
+- 阈值：`DetailMatchConfig:WeightedThreshold`（默认 0.5）
+- 模糊：`DetailMatchConfig:UseFuzzy`（默认 true），最大编辑距离上限 `DetailMatchConfig:MaxDistanceCap`（默认 3）
+- 拼音：`DetailMatchConfig:UsePinyin`（默认 true，首字母启发式）
+
+环境变量示例：
+
+```
+XHS__DetailMatchConfig__WeightedThreshold=0.6
+XHS__DetailMatchConfig__UseFuzzy=true
+XHS__DetailMatchConfig__MaxDistanceCap=2
+XHS__DetailMatchConfig__UsePinyin=true
+```
+
+### 6. 端到端演示脚本（E2E）
+
+我们提供了两个演示脚本，覆盖三种起点场景（错误详情页 / 个人页 / 首页），并演示阈值、模糊、拼音等参数对匹配与入口页自愈的影响：
+
+- Bash: `scripts/e2e_entry_match_demo.sh`
+- PowerShell: `scripts/e2e_entry_match_demo.ps1`
+
+使用示例：
+
+```
+chmod +x scripts/e2e_entry_match_demo.sh
+scripts/e2e_entry_match_demo.sh wrong-detail '["iPhone 15","苹果"]'
+
+powershell -ExecutionPolicy Bypass -File scripts/e2e_entry_match_demo.ps1 -Scenario profile -KeywordsJson '["美食","杭州"]'
+```
+
+脚本会分三轮执行（严格/模糊/拼音），每轮分别调用 LikeNote / FavoriteNote / PostComment，并打印当前参数与结果。
+
 
 ## 📋 主要功能
 

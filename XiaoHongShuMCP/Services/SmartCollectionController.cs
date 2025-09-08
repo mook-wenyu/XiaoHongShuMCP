@@ -15,6 +15,7 @@ public class SmartCollectionController : ISmartCollectionController
     private readonly IPageLoadWaitService _pageLoadWaitService;
     private readonly IBrowserManager _browserManager;
     private readonly IUniversalApiMonitor _universalApiMonitor;
+    private readonly McpSettings _mcpSettings;
 
     // 智能收集状态管理
     private readonly List<NoteInfo> _collectedNotes;
@@ -29,13 +30,15 @@ public class SmartCollectionController : ISmartCollectionController
         IHumanizedInteractionService humanizedInteraction,
         IPageLoadWaitService pageLoadWaitService,
         IBrowserManager browserManager,
-        IUniversalApiMonitor universalApiMonitor)
+        IUniversalApiMonitor universalApiMonitor,
+        Microsoft.Extensions.Options.IOptions<McpSettings> mcpSettings)
     {
         _logger = logger;
         _humanizedInteraction = humanizedInteraction;
         _pageLoadWaitService = pageLoadWaitService;
         _browserManager = browserManager;
         _universalApiMonitor = universalApiMonitor;
+        _mcpSettings = mcpSettings.Value ?? new McpSettings();
 
         _collectedNotes = [];
         _seenNoteIds = [];
@@ -52,10 +55,12 @@ public class SmartCollectionController : ISmartCollectionController
         CancellationToken cancellationToken = default)
     {
         var startTime = DateTime.UtcNow;
-        timeout ??= TimeSpan.FromMinutes(5);
+        // 统一等待时长：若未传入 timeout，则使用 McpSettings.WaitTimeoutMs（默认 10 分钟）。
+        var cfgMs = _mcpSettings.WaitTimeoutMs;
+        timeout ??= TimeSpan.FromMilliseconds(cfgMs > 0 ? cfgMs : 600_000);
         
-        _logger.LogInformation("开始智能收集（统一架构模式）：目标={TargetCount}, 模式={Mode}, 超时={Timeout}分钟", 
-            targetCount, mode, timeout.Value.TotalMinutes);
+        _logger.LogInformation("开始智能收集（统一架构模式）：目标={TargetCount}, 模式={Mode}, 超时={Timeout}ms", 
+            targetCount, mode, timeout.Value.TotalMilliseconds);
         
         _logger.LogDebug("智能收集使用统一架构：API监听由调用方管理，此方法专注API数据收集");
 
