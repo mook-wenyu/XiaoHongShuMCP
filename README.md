@@ -5,7 +5,7 @@
 [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![MCP](https://img.shields.io/badge/MCP-0.3.0--preview.4-FF6B6B)](https://modelcontextprotocol.io/)
 [![Tests](https://img.shields.io/badge/Tests-57%20✅-4CAF50)](./Tests/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务器，通过智能自动化技术为用户提供安全、高效的小红书运营工具。
 
@@ -1059,7 +1059,7 @@ grep "2025-09-06" logs/xiaohongshu-mcp-*.txt
 
 ## 📄 许可证
 
-本项目采用 [MIT 许可证](./LICENSE)。
+本项目采用 [Apache-2.0 许可证](./LICENSE)。
 
 ## 🔗 相关链接
 
@@ -1072,7 +1072,8 @@ grep "2025-09-06" logs/xiaohongshu-mcp-*.txt
 
 - 🐛 [报告问题](https://github.com/mook-wenyu/XiaoHongShuMCP/issues)
 - 💡 [功能请求](https://github.com/mook-wenyu/XiaoHongShuMCP/discussions)
-- 📧 [联系我们](mailto:your-email@example.com)
+- 👤 维护者：文聿
+- 📧 联系我们：<mailto:1317578863@qq.com>
 
 ---
 
