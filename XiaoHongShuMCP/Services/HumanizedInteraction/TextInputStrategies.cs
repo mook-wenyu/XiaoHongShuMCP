@@ -3,7 +3,10 @@ using Microsoft.Playwright;
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
-/// 文本输入策略基础类
+/// 文本输入策略基础类。
+/// - 职责：定义“是否适用”的探测与“如何输入”的具体实现；
+/// - 约定：输入过程统一遵循“思考停顿 → 输入字符（带间隔） → 语义单位检查停顿”的节奏；
+/// - 扩展：可按需要新增更多策略（如 iframe 内输入、第三方富文本等）。
 /// </summary>
 public abstract class BaseTextInputStrategy : ITextInputStrategy
 {
@@ -41,8 +44,8 @@ public abstract class BaseTextInputStrategy : ITextInputStrategy
 }
 
 /// <summary>
-/// 普通输入框策略
-/// 适用于 input、textarea 等标准表单元素
+/// 普通输入框策略。
+/// 适用于 input、textarea 等标准表单元素（非 contenteditable）。
 /// </summary>
 public class RegularInputStrategy : BaseTextInputStrategy
 {
@@ -114,8 +117,8 @@ public class RegularInputStrategy : BaseTextInputStrategy
 }
 
 /// <summary>
-/// 富文本编辑器输入策略
-/// 适用于 contenteditable 元素，如 TipTap 富文本编辑器
+/// 富文本编辑器输入策略。
+/// 适用于 contenteditable 元素（例如 TipTap/ProseMirror 等），通过 Keyboard.Type 实现更自然的事件序列。
 /// </summary>
 public class ContentEditableInputStrategy : BaseTextInputStrategy
 {

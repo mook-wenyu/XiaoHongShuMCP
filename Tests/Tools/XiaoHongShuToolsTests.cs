@@ -141,7 +141,7 @@ public class XiaoHongShuToolsTests
             .ReturnsAsync(OperationResult<BatchNoteResult>.Ok(expectedResult));
 
         // Act
-        var result = await XiaoHongShuTools.BatchGetNoteDetailsOptimized(
+        var result = await XiaoHongShuTools.BatchGetNoteDetails(
             keywords, 10, false, true, null, _serviceProvider);
 
         // Assert
@@ -167,7 +167,7 @@ public class XiaoHongShuToolsTests
             .ReturnsAsync(OperationResult<BatchNoteResult>.Fail("批量获取失败"));
 
         // Act
-        var result = await XiaoHongShuTools.BatchGetNoteDetailsOptimized(
+        var result = await XiaoHongShuTools.BatchGetNoteDetails(
             keywords, 10, false, true, null, _serviceProvider);
 
         // Assert
@@ -189,7 +189,7 @@ public class XiaoHongShuToolsTests
             .ThrowsAsync(new Exception("测试异常"));
 
         // Act
-        var result = await XiaoHongShuTools.BatchGetNoteDetailsOptimized(
+        var result = await XiaoHongShuTools.BatchGetNoteDetails(
             keywords, 10, false, true, null, _serviceProvider);
 
         // Assert
@@ -224,7 +224,7 @@ public class XiaoHongShuToolsTests
             .ReturnsAsync(OperationResult<BatchNoteResult>.Ok(emptyResult));
 
         // Act
-        await XiaoHongShuTools.BatchGetNoteDetailsOptimized(
+        await XiaoHongShuTools.BatchGetNoteDetails(
             keywords, 10, false, autoExport, null, _serviceProvider);
 
         // Assert

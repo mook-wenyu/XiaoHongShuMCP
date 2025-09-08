@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Playwright;
 
 namespace XiaoHongShuMCP.Services;
 
@@ -58,6 +60,7 @@ public class BrowserConnectionHostedService : BackgroundService
                 if (result.Data)
                 {
                     await SetupUserInfoApiMonitoringAsync(browserManager);
+                    await NavigateToHomePageAsync(browserManager);
                 }
             }
             else
@@ -172,6 +175,68 @@ public class BrowserConnectionHostedService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "设置用户信息API监听失败（不影响主功能）");
+        }
+    }
+
+    /// <summary>
+    /// 连接浏览器成功后，自动导航到小红书主页（可由配置项 BaseUrl 覆盖，默认探索页）。
+    /// </summary>
+    private async Task NavigateToHomePageAsync(IBrowserManager browserManager)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+            var pageLoadWaitService = scope.ServiceProvider.GetRequiredService<IPageLoadWaitService>();
+
+            // 允许通过配置覆盖默认主页地址；默认跳转到探索页以便后续功能可用
+            var targetUrl = configuration["BaseUrl"] ?? "https://www.xiaohongshu.com/explore";
+
+            var page = await browserManager.GetPageAsync();
+            var currentUrl = page.Url ?? string.Empty;
+
+            if (currentUrl.Contains("xiaohongshu.com") && currentUrl.Contains("/explore"))
+            {
+                _logger.LogInformation("已位于小红书探索/主页，无需跳转。当前: {Url}", currentUrl);
+                return;
+            }
+
+            _logger.LogInformation("浏览器连接成功，正在导航到小红书主页: {Target}", targetUrl);
+
+            browserManager.BeginOperation();
+            try
+            {
+                try
+                {
+                    await page.GotoAsync(targetUrl, new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.DOMContentLoaded,
+                        Timeout = 15000
+                    });
+                }
+                catch (Microsoft.Playwright.PlaywrightException)
+                {
+                    _logger.LogWarning("页面在导航主页时关闭，尝试重新获取页面并重试");
+                    page = await browserManager.GetPageAsync();
+                    await page.GotoAsync(targetUrl, new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.DOMContentLoaded,
+                        Timeout = 15000
+                    });
+                }
+
+                // 统一的页面加载等待（具备重试/降级）
+                await pageLoadWaitService.WaitForPageLoadAsync(page);
+                _logger.LogInformation("已导航到小红书主页: {FinalUrl}", page.Url);
+            }
+            finally
+            {
+                browserManager.EndOperation();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "导航到小红书主页失败（不影响主功能）");
         }
     }
 }

@@ -5,9 +5,20 @@ using Microsoft.Playwright;
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
-/// 页面加载等待策略服务实现
-/// 提供多级等待策略，解决WaitForLoadStateAsync硬编码超时问题
-/// 支持智能降级、重试机制和详细的错误处理
+/// 页面加载等待策略服务实现。
+/// - 目标：在不同页面与网络条件下，可靠地判定“页面可用”，避免对 <see cref="IPage.WaitForLoadStateAsync"/> 的固定超时硬编码。
+/// - 核心能力：多级等待（DOMContentLoaded → Load → NetworkIdle）、线性重试退避、可选降级与详尽日志。
+/// - 适用场景：页面导航后需要等待合适的就绪点；触发 API 后希望等到更稳定的网络空闲；对“只需可交互”有更快诉求时使用快速模式。
+/// 配置项（配置键均位于节 PageLoadWaitConfig）：
+/// - DOMContentLoadedTimeout：DOMContentLoaded 阶段超时（毫秒）
+/// - LoadTimeout：Load 阶段超时（毫秒）
+/// - NetworkIdleTimeout：NetworkIdle 阶段超时（毫秒）
+/// - MaxRetries：单策略最大重试次数（>=0）
+/// - RetryDelayMs：线性退避的基准延时（毫秒），实际延时 = 基准 × 当前重试序号
+/// - EnableDegradation：是否允许从严格策略向宽松策略降级
+/// - FastModeTimeout：快速模式的专用超时（毫秒）
+/// 线程安全：该服务为无状态（仅读取配置与记录日志），可在多处并发复用。
+/// 返回值：<see cref="PageLoadWaitResult"/>，包含成功与否、采用的策略、耗时、重试次数、是否降级及错误描述。
 /// </summary>
 public class PageLoadWaitService : IPageLoadWaitService
 {
@@ -26,9 +37,9 @@ public class PageLoadWaitService : IPageLoadWaitService
     }
 
     /// <summary>
-    /// 执行多级页面加载等待策略
-    /// 按照 DOMContentLoaded → Load → NetworkIdle 的顺序依次尝试
-    /// 支持智能降级和重试机制
+    /// 执行多级页面加载等待策略。
+    /// 按 NetworkIdle → Load → DOMContentLoaded 的严格度顺序依次尝试；当 <c>EnableDegradation=true</c> 时，
+    /// 上一策略失败会降级到下一策略；每种策略内部采用“线性退避重试”。
     /// </summary>
     /// <param name="page">浏览器页面实例</param>
     /// <param name="cancellationToken">取消令牌</param>
@@ -120,8 +131,8 @@ public class PageLoadWaitService : IPageLoadWaitService
     }
 
     /// <summary>
-    /// 快速模式页面加载等待
-    /// 仅使用DOMContentLoaded策略，适用于轻量级页面或性能要求较高的场景
+    /// 快速模式页面加载等待。
+    /// 仅使用 DOMContentLoaded 策略，适用于轻量页面或性能要求较高、对“网络完全空闲”无强依赖的场景。
     /// </summary>
     /// <param name="page">浏览器页面实例</param>
     /// <param name="cancellationToken">取消令牌</param>
@@ -138,7 +149,8 @@ public class PageLoadWaitService : IPageLoadWaitService
     #region 私有方法
 
     /// <summary>
-    /// 执行单一策略的核心实现
+    /// 执行单一策略的核心实现。
+    /// 注意：该方法内部创建超时 CTS，并与外部传入的 <paramref name="cancellationToken"/> 链接，确保可外部取消。
     /// </summary>
     /// <param name="page">浏览器页面实例</param>
     /// <param name="strategy">等待策略</param>
@@ -160,7 +172,8 @@ public class PageLoadWaitService : IPageLoadWaitService
             if (attempt > 0)
             {
                 retryCount = attempt;
-                var delayMs = _config.RetryDelayMs * attempt; // 指数退避
+                // 线性退避：随着尝试次数 i 增加，等待 i × RetryDelayMs 毫秒。
+                var delayMs = _config.RetryDelayMs * attempt; 
                 
                 _logger.LogDebug("第 {Attempt} 次重试，延时 {Delay}ms", attempt, delayMs);
                 
@@ -177,6 +190,7 @@ public class PageLoadWaitService : IPageLoadWaitService
                 using var timeoutCts = new CancellationTokenSource(timeout);
                 using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
+                // 使用 Playwright 原生等待并传入毫秒级超时；若命中超时将抛出 TimeoutException。
                 await page.WaitForLoadStateAsync(loadState, new PageWaitForLoadStateOptions
                 {
                     Timeout = (float)timeout.TotalMilliseconds

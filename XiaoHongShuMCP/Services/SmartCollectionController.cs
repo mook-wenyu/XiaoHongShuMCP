@@ -2,11 +2,20 @@ using System.Text.Json;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
+using Microsoft.Extensions.Options;
 
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
-/// 智能收集控制器
+/// 智能收集控制器（统一架构版）。
+/// - 职责：在“发现页（Explore）→ 触发 Homefeed API → 监听与汇总”的流程中，
+///         调用通用 API 监听器聚合推荐数据，产出结构化的 NoteInfo 列表；
+///         不再抓取 DOM，避免前端重构导致的不稳定。
+/// - 协作：<see cref="IUniversalApiMonitor"/>（API 监听）、<see cref="IPageLoadWaitService"/>（导航等待）、
+///         <see cref="IHumanizedInteractionService"/>（必要的人机交互节奏）、<see cref="IBrowserManager"/>（页面管理）。
+/// - 超时：统一使用 <see cref="McpSettings.WaitTimeoutMs"/> 作为兜底等待，亦可通过参数显式传入。
+/// - 线程安全：内部仅对收集状态容器做锁保护，适合单任务串行采集；并发任务请按实例或外部同步拆分。
+/// 使用建议：在调用前确保账号已登录且浏览器上下文可用；采集完成后可按需 Clear/Reset 状态。
 /// </summary>
 public class SmartCollectionController : ISmartCollectionController
 {
@@ -16,6 +25,7 @@ public class SmartCollectionController : ISmartCollectionController
     private readonly IBrowserManager _browserManager;
     private readonly IUniversalApiMonitor _universalApiMonitor;
     private readonly McpSettings _mcpSettings;
+    private readonly EndpointRetryConfig _endpointRetry;
 
     // 智能收集状态管理
     private readonly List<NoteInfo> _collectedNotes;
@@ -31,7 +41,8 @@ public class SmartCollectionController : ISmartCollectionController
         IPageLoadWaitService pageLoadWaitService,
         IBrowserManager browserManager,
         IUniversalApiMonitor universalApiMonitor,
-        Microsoft.Extensions.Options.IOptions<McpSettings> mcpSettings)
+        IOptions<McpSettings> mcpSettings,
+        IOptions<EndpointRetryConfig> endpointRetry)
     {
         _logger = logger;
         _humanizedInteraction = humanizedInteraction;
@@ -39,16 +50,20 @@ public class SmartCollectionController : ISmartCollectionController
         _browserManager = browserManager;
         _universalApiMonitor = universalApiMonitor;
         _mcpSettings = mcpSettings.Value ?? new McpSettings();
+        _endpointRetry = endpointRetry.Value ?? new EndpointRetryConfig();
 
         _collectedNotes = [];
         _seenNoteIds = [];
     }
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// 此方法已重构为统一架构模式，仅通过 API 监听器获取数据。
-    /// 不再从页面 DOM 收集数据；必要的 API 监听在此方法内部设置。
-    /// </remarks>
+    /// <summary>
+    /// 执行一次“推荐数据”的智能收集。
+    /// - 入口：持有 <paramref name="context"/> 与 <paramref name="page"/>；
+    /// - 步骤：设置 Homefeed 监听 → 导航到发现页 → 等待至少一次响应 → 汇总并裁剪到目标数量；
+    /// - 结果：返回包含 NoteInfo 集合、原始响应数等信息的 <see cref="SmartCollectionResult"/>。
+    /// - 超时：默认取 <see cref="McpSettings.WaitTimeoutMs"/>（10 分钟），也可通过 <paramref name="timeout"/> 指定；
+    /// - 失败面向：监听器设置失败、导航失败、响应超时等，将返回失败结果并包含错误信息。
+    /// </summary>
     public async Task<SmartCollectionResult> ExecuteSmartCollectionAsync(
         IBrowserContext context, IPage page,
         int targetCount, RecommendCollectionMode mode, TimeSpan? timeout,
@@ -80,20 +95,63 @@ public class SmartCollectionController : ISmartCollectionController
                     DateTime.UtcNow - startTime);
             }
 
-            // 2) 导航以触发 API
-            var navigationResult = await DirectNavigateToDiscoverAsync(page);
-            if (!navigationResult.Success)
+            // 2/3) 导航以触发 API + 等待端点（可配置重试）
+            var maxRetries = Math.Max(0, _endpointRetry.MaxRetries);
+            var perAttemptTimeout = TimeSpan.FromMilliseconds(Math.Max(1, _endpointRetry.AttemptTimeoutMs));
+            var attempt = 0;
+            var waitOk = false;
+            while (attempt <= maxRetries)
+            {
+                var isLastRetry = maxRetries > 0 && attempt == maxRetries;
+                (bool Success, string? ErrorMessage) navigationResult;
+                if (isLastRetry)
+                {
+                    _logger.LogInformation("最后一次重试：先强制跳转到主页再执行导航");
+                    navigationResult = await DirectNavigateToDiscoverAsync(page);
+                    if (!navigationResult.Success)
+                    {
+                        return SmartCollectionResult.CreateFailure(
+                            navigationResult.ErrorMessage ?? "强制导航失败",
+                            null,
+                            targetCount,
+                            0,
+                            DateTime.UtcNow - startTime);
+                    }
+                    await _humanizedInteraction.HumanWaitAsync(HumanWaitType.PageLoading);
+                }
+                else
+                {
+                    navigationResult = await DirectNavigateToDiscoverAsync(page);
+                }
+                if (!navigationResult.Success)
+                {
+                    return SmartCollectionResult.CreateFailure(
+                        navigationResult.ErrorMessage ?? "导航失败",
+                        null,
+                        targetCount,
+                        0,
+                        DateTime.UtcNow - startTime);
+                }
+
+                waitOk = await _universalApiMonitor.WaitForResponsesAsync(ApiEndpointType.Homefeed, perAttemptTimeout, 1);
+                if (waitOk) break;
+
+                attempt++;
+                if (attempt > maxRetries) break;
+
+                _logger.LogWarning("SmartCollection Homefeed 未命中端点，准备重试（第 {Attempt} 次重试）...", attempt);
+                _universalApiMonitor.ClearMonitoredData(ApiEndpointType.Homefeed);
+                await _humanizedInteraction.HumanWaitAsync(HumanWaitType.ThinkingPause);
+            }
+            if (!waitOk)
             {
                 return SmartCollectionResult.CreateFailure(
-                    navigationResult.ErrorMessage ?? "导航失败",
+                    "等待Homefeed API响应超时，重试已达上限",
                     null,
                     targetCount,
                     0,
                     DateTime.UtcNow - startTime);
             }
-
-            // 3) 等待至少一次 Homefeed 响应
-            await _universalApiMonitor.WaitForResponsesAsync(ApiEndpointType.Homefeed, 1);
 
             // 4) 从监听器获取数据并裁剪到目标数量
             var details = _universalApiMonitor.GetMonitoredNoteDetails(ApiEndpointType.Homefeed);
@@ -156,7 +214,10 @@ public class SmartCollectionController : ISmartCollectionController
     }
 
     /// <summary>
-    /// 直接导航到发现页面
+    /// 直接导航到发现页面（Explore）。
+    /// - 使用 DOMContentLoaded 而非 NetworkIdle，避免 SPA/懒加载导致的长期不达成；
+    /// - 捕获导航期间的 PlaywrightException：若页面关闭则自动重取 page 后重试；
+    /// - 导航后使用 <see cref="IPageLoadWaitService"/> 进行多级等待（具备重试/降级）。
     /// </summary>
     private async Task<(bool Success, string? ErrorMessage)> DirectNavigateToDiscoverAsync(IPage page)
     {
@@ -217,7 +278,7 @@ public class SmartCollectionController : ISmartCollectionController
     // 统一架构后不再需要滚动策略/效率评分等逻辑
 
     /// <summary>
-    /// 获取当前状态
+    /// 获取当前收集状态快照（用于外部展示或健康检查）。
     /// </summary>
     public CollectionStatus GetCurrentStatus() 
     {
@@ -241,7 +302,8 @@ public class SmartCollectionController : ISmartCollectionController
     }
 
     /// <summary>
-    /// 重置收集状态
+    /// 重置收集状态：清空已收集集合/去重集，并将控制器状态置为 Idle。
+    /// 适用于一次采集流程结束后的复位。
     /// </summary>
     public void ResetCollectionState()
     {

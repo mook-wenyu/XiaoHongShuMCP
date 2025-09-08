@@ -16,10 +16,11 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 - **🤖 智能搜索** - 支持多维度筛选的增强搜索功能，自动统计分析
 - **📊 数据分析** - 自动生成 Excel 报告，包含数据质量和互动统计
 - **👤 拟人化交互** - 模拟真人操作模式，智能防检测机制
-- **🧪 完整测试** - 51 个单元测试，100% 通过率，保证代码质量
+- **🧪 完整测试** - 65 个单元测试，100% 通过率，保证代码质量
 - **🔧 模块化架构** - 全新的UniversalApiMonitor和重构的SmartCollectionController
 - **📡 多端点监听** - 支持推荐、笔记详情、搜索等多个API端点监听
 - **⚡ 现代架构** - 基于稳定的 .NET 8.0，使用依赖注入和异步编程模式
+ - **自动导航** - 连接浏览器成功后自动跳转到 `BaseUrl`（默认探索页），不中断主流程
 
 ## 🚀 快速开始
 
@@ -164,6 +165,25 @@ dotnet test Tests
   - 命令行：`McpSettings:WaitTimeoutMs=600000`
 
 说明：默认值为 10 分钟；如需更长/更短，请直接设置毫秒值；不再限制上限。
+
+#### 端点监听与重试策略（重要）
+
+对需要“监听 API 端点”的操作，已引入统一的“单次等待 + 最大重试”机制，并在最后一次重试前强制回到主页以刷新上下文。
+
+- 配置键：
+  - `EndpointRetry:AttemptTimeoutMs`（默认 `120000` 毫秒）
+  - `EndpointRetry:MaxRetries`（默认 `3` 次；不含首次尝试）
+- 覆盖方式：
+  - 环境变量：`XHS__EndpointRetry__AttemptTimeoutMs=90000`、`XHS__EndpointRetry__MaxRetries=2`
+  - 命令行：`--EndpointRetry:AttemptTimeoutMs=90000 --EndpointRetry:MaxRetries=2`
+- 适用范围：
+  - 搜索：`GetSearchNotes`（最后一轮先跳主页→直接搜索，避免重复导航）
+  - 推荐：`GetRecommendedNotes`（最后一轮强制回主页后直接等待 Homefeed 命中）
+  - 详情：`GetNoteDetail`（最后一轮先跳主页→重新定位笔记并点击）
+  - 批量：`BatchGetNoteDetailsOptimized`（最后一轮先跳主页→触发 SearchNotes）
+  - 收集：`SmartCollectionController`（最后一轮强制主页导航后再等待 Homefeed）
+
+说明：上述行为提升了端点未命中时的“自愈”能力，减少 SPA 场景下的死等待与脏状态影响。
 
 #### 验证配置
 
@@ -347,7 +367,6 @@ XiaoHongShuMCP/
 │   │   └── Interfaces.cs                   # 接口定义
 │   ├── Tools/               # MCP 工具集
 │   │   └── XiaoHongShuTools.cs            # MCP 工具定义
-│   ├── Program.cs           # 程序入口
 │   └── Program.cs           # 程序入口（内置默认配置 + 覆盖机制）
 ├── Tests/                   # 单元测试（约 51 个）
 │   ├── Services/           # 服务测试
@@ -456,10 +475,10 @@ dotnet publish -c Release -r linux-arm64 --self-contained true -p:PublishSingleF
 
 创建 `Dockerfile`：
 ```dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY ["XiaoHongShuMCP/XiaoHongShuMCP.csproj", "XiaoHongShuMCP/"]
 RUN dotnet restore "XiaoHongShuMCP/XiaoHongShuMCP.csproj"

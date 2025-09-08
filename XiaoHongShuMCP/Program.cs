@@ -123,6 +123,10 @@ try
     builder.Services.Configure<SearchTimeoutsConfig>(
         builder.Configuration.GetSection("SearchTimeoutsConfig"));
 
+    // 配置端点等待重试（来源于内存配置）
+    builder.Services.Configure<EndpointRetryConfig>(
+        builder.Configuration.GetSection("EndpointRetry"));
+
     // 配置详情匹配（权重/阈值/拼音）
     builder.Services.Configure<DetailMatchConfig>(
         builder.Configuration.GetSection("DetailMatchConfig"));
@@ -233,6 +237,10 @@ static Dictionary<string, string?> CreateDefaultSettings()
         ["SearchTimeoutsConfig:UiWaitMs"] = "12000",
         ["SearchTimeoutsConfig:ApiCollectionMaxWaitMs"] = "60000",
 
+        // 端点等待重试（默认：2分钟 + 最多3次重试）
+        ["EndpointRetry:AttemptTimeoutMs"] = "120000",
+        ["EndpointRetry:MaxRetries"] = "3",
+
         // 详情匹配（权重/阈值/拼音）
         ["DetailMatchConfig:WeightedThreshold"] = "0.5",
         ["DetailMatchConfig:TitleWeight"] = "4",
@@ -292,6 +300,7 @@ static async Task<bool> TryHandleCallTool(string[] args, IConfiguration configur
             .AddCommandLine(args);
         builder.Services.Configure<PageLoadWaitConfig>(builder.Configuration.GetSection("PageLoadWaitConfig"));
         builder.Services.Configure<SearchTimeoutsConfig>(builder.Configuration.GetSection("SearchTimeoutsConfig"));
+        builder.Services.Configure<EndpointRetryConfig>(builder.Configuration.GetSection("EndpointRetry"));
         builder.Services.Configure<McpSettings>(builder.Configuration.GetSection("McpSettings"));
         builder.Services.Configure<DetailMatchConfig>(builder.Configuration.GetSection("DetailMatchConfig"));
 

@@ -7,8 +7,20 @@ using Microsoft.Playwright;
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
-/// 通用API监听器 - 支持多端点动态监听
-/// 支持推荐、笔记详情、搜索等不同功能的API端点
+/// 通用 API 监听器（实现 IUniversalApiMonitor）。
+/// - 职责：在单页应用场景下，基于 Playwright 的 Response 事件被动捕获目标端点的响应，
+///         同时保留“原始响应”和“结构化处理结果”，供上层统一的数据通道使用。
+/// - 端点：支持推荐（Homefeed）、详情（Feed）、搜索（SearchNotes）等核心 API；可按需扩展处理器。
+/// - 线程安全：内部通过 <see cref="_lock"/> 保护响应容器，事件回调与查询操作可并发；
+///             等待方法按 MCP 统一超时（<see cref="McpSettings.WaitTimeoutMs"/>）。
+/// - 生命周期：调用 <see cref="SetupMonitor"/> 绑定 <see cref="IBrowserContext.Response"/> 事件，
+///             <see cref="StopMonitoringAsync"/> 负责解绑；<see cref="Dispose"/> 中做兜底清理。
+/// - 日志：对敏感字段（如 xsec_token）进行日志脱敏（仅日志，不影响内存中数据）。
+/// 使用方式建议：
+/// 1) SetupMonitor(page, {Endpoints});
+/// 2) 触发导航/滚动等行为使 API 发起；
+/// 3) WaitForResponsesAsync(endpointType, count);
+/// 4) GetMonitoredNoteDetails/GetRawResponses；必要时 ClearMonitoredData。
 /// </summary>
 public class UniversalApiMonitor : IUniversalApiMonitor
 {
@@ -51,7 +63,11 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     }
 
     /// <summary>
-    /// 设置通用API监听器
+    /// 设置通用 API 监听器并开始监听。
+    /// - 将当前 <paramref name="page"/> 的 <see cref="IBrowserContext"/> 保持在本实例中；
+    /// - 绑定 <see cref="IBrowserContext.Response"/> 事件；
+    /// - 仅对 <paramref name="endpointsToMonitor"/> 指定的端点进行处理。
+    /// 重复调用将覆盖活跃端点集合（不会重复绑定事件）。
     /// </summary>
     /// <param name="page">浏览器页面实例</param>
     /// <param name="endpointsToMonitor">要监听的端点类型</param>
@@ -83,52 +99,40 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     }
 
     /// <summary>
-    /// 处理响应事件 - 智能路由到不同端点处理器
+    /// 响应事件处理：识别端点 → 只处理 200 成功 → 调用端点处理器 → 写入容器。
+    /// 注意：此回调在 Playwright 事件线程触发，内部仅做必要处理并写入内存，避免耗时阻塞。
     /// </summary>
     private async void OnResponseReceived(object? sender, IResponse response)
     {
         try
         {
-            var seq = Interlocked.Increment(ref _responseEventSeq);
-            _logger.LogDebug(
-                "[Resp#{Seq}] 事件触发 | url={Url} status={Status} method={Method}",
-                seq,
-                response.Url,
-                response.Status,
-                response.Request?.Method);
-
             // 识别API端点类型
             var endpointType = IdentifyApiEndpoint(response.Url);
             if (endpointType == null)
             {
-                _logger.LogDebug("[Resp#{Seq}] 非目标端点，跳过 | url={Url}", seq, response.Url);
                 return;
             }
             if (!_activeEndpoints.Contains(endpointType.Value))
             {
-                _logger.LogDebug("[Resp#{Seq}] 端点未启用，跳过 | endpoint={Endpoint}", seq, endpointType);
                 return;
             }
 
-            _logger.LogDebug("[Resp#{Seq}] 命中端点 {Endpoint} | url={Url}", seq, endpointType, response.Url);
+            _logger.LogDebug("[Resp] 命中端点 {Endpoint} | url={Url}", endpointType, response.Url);
 
             // 只处理成功的响应
             if (response.Status != 200)
             {
-                _logger.LogDebug("[Resp#{Seq}] 状态码非200，跳过 | endpoint={Endpoint} status={Status}",
-                    seq, endpointType, response.Status);
                 return;
             }
 
-            _logger.LogDebug("[Resp#{Seq}] 开始读取响应正文...", seq);
+            _logger.LogDebug("[Resp] 开始读取响应正文...");
             var responseBody = await response.TextAsync();
             var sanitized = SanitizeResponseBodyForLog(responseBody);
-            _logger.LogDebug("[Resp#{Seq}] 正文已读取 | content={Content}", seq, sanitized);
 
             // 使用对应的处理器处理响应
             if (_processors.TryGetValue(endpointType.Value, out var processor))
             {
-                _logger.LogDebug("[Resp#{Seq}] 调用处理器 {Processor}...", seq, processor.GetType().Name);
+                _logger.LogDebug("[Resp] 调用处理器 {Processor}...", processor.GetType().Name);
                 var processedResponse = await processor.ProcessResponseAsync(response.Url, responseBody);
                 if (processedResponse != null)
                 {
@@ -137,17 +141,16 @@ public class UniversalApiMonitor : IUniversalApiMonitor
                         _monitoredResponses[endpointType.Value].Add(processedResponse);
                     }
 
-                    _logger.LogDebug("[Resp#{Seq}] 处理完成 | endpoint={Endpoint} items={Count}",
-                        seq, endpointType, processedResponse.ProcessedDataCount);
+                    _logger.LogDebug("[Resp] 处理完成 | endpoint={Endpoint} items={Count}", endpointType, processedResponse.ProcessedDataCount);
                 }
                 else
                 {
-                    _logger.LogDebug("[Resp#{Seq}] 处理器返回空结果 | endpoint={Endpoint}", seq, endpointType);
+                    _logger.LogDebug("[Resp] 处理器返回空结果 | endpoint={Endpoint}", endpointType);
                 }
             }
             else
             {
-                _logger.LogDebug("[Resp#{Seq}] 未找到处理器 | endpoint={Endpoint}", seq, endpointType);
+                _logger.LogDebug("[Resp] 未找到处理器 | endpoint={Endpoint}", endpointType);
             }
         }
         catch (Exception ex)
@@ -181,7 +184,7 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     }
 
     /// <summary>
-    /// 识别API端点类型
+    /// 识别 API 端点类型（基于 URL 片段的轻量规则）。
     /// </summary>
     private static ApiEndpointType? IdentifyApiEndpoint(string url)
     {
@@ -198,11 +201,11 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     }
 
     /// <summary>
-    /// 等待指定端点的API响应
-    /// </summary>
-    /// <summary>
-    /// 等待指定端点的 API 响应（中文文档注释）
-    /// 使用 McpSettings.WaitTimeoutMs 作为统一等待时长（默认 10 分钟），不做上限限制。
+    /// 等待指定端点的 API 响应。
+    /// - 统一等待时长：使用 <see cref="McpSettings.WaitTimeoutMs"/>（默认 10 分钟），不做上限封顶；
+    /// - 判定条件：监听容器中累计响应条数达到 <paramref name="expectedCount"/> 即返回 true；
+    /// - 轮询间隔：100ms，兼顾实时性与开销；
+    /// - 超时：返回 false，并记录当前已捕获数量。
     /// </summary>
     public async Task<bool> WaitForResponsesAsync(ApiEndpointType endpointType,
         int expectedCount = 1)
@@ -210,7 +213,14 @@ public class UniversalApiMonitor : IUniversalApiMonitor
         // 统一 MCP 等待超时（默认 10 分钟）；若配置 <=0 则回退到默认 10 分钟
         var cfgMs = _mcpSettings.WaitTimeoutMs;
         var waitMs = cfgMs > 0 ? cfgMs : 600_000;
-        var timeout = TimeSpan.FromMilliseconds(waitMs);
+        return await WaitForResponsesAsync(endpointType, TimeSpan.FromMilliseconds(waitMs), expectedCount);
+    }
+
+    /// <summary>
+    /// 在指定超时时间内等待指定端点的API响应。
+    /// </summary>
+    public async Task<bool> WaitForResponsesAsync(ApiEndpointType endpointType, TimeSpan timeout, int expectedCount = 1)
+    {
         var startTime = DateTime.UtcNow;
 
         _logger.LogDebug("等待 {EndpointType} API响应: 期望数量={ExpectedCount}, 超时={Timeout}ms",
@@ -241,7 +251,8 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     }
 
     /// <summary>
-    /// 获取指定端点监听到的笔记详情
+    /// 获取指定端点监听到的“结构化笔记详情”集合（累积）。
+    /// 数据来源于各端点处理器对原始响应的解析产物。
     /// </summary>
     public List<NoteDetail> GetMonitoredNoteDetails(ApiEndpointType endpointType)
     {
@@ -264,7 +275,8 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     }
 
     /// <summary>
-    /// 获取指定端点监听到的原始响应数据
+    /// 获取指定端点监听到的原始响应数据（累积）。
+    /// 常用于调试、回放或导出。
     /// </summary>
     public List<MonitoredApiResponse> GetRawResponses(ApiEndpointType endpointType)
     {
@@ -275,7 +287,9 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     }
 
     /// <summary>
-    /// 清理指定端点的监听数据
+    /// 清理监听数据。
+    /// - 传入端点值时仅清理该端点；
+    /// - 否则清理全部端点的累积数据。
     /// </summary>
     public void ClearMonitoredData(ApiEndpointType? endpointType = null)
     {
@@ -301,7 +315,7 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     }
 
     /// <summary>
-    /// 停止API监听
+    /// 停止 API 监听（解绑 Response 事件并保持幂等）。
     /// </summary>
     public async Task StopMonitoringAsync()
     {
@@ -647,7 +661,10 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
                         noteDetail.VideoDuration = vdur.GetInt32();
                     }
                 }
-                catch { /* 忽略视频字段解析异常 */ }
+                catch
+                {
+                    /* 忽略视频字段解析异常 */
+                }
             }
             else
             {

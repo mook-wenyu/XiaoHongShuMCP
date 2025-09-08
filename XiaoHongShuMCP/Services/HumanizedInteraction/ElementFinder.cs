@@ -3,8 +3,11 @@ using Microsoft.Playwright;
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
-/// 元素查找器实现类
-/// 统一处理元素查找和重试逻辑
+/// 元素查找器实现类。
+/// - 职责：基于“选择器别名”从 <see cref="IDomElementManager"/> 取得候选选择器并按顺序尝试，
+///         封装等待可见/批量查找/重试与退避逻辑。
+/// - 约定：不直接硬编码具体 Selector；所有 Selector 均来自别名映射，便于跨版本维护。
+/// - 失败：当所有候选均失败时返回 null（或 false），由上层决定是否重试/降级。
 /// </summary>
 public class ElementFinder : IElementFinder
 {

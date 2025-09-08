@@ -146,7 +146,7 @@ public interface IXiaoHongShuService
     /// </summary>
     /// <param name="page">浏览器页面实例</param>
     /// <returns>发现页面状态</returns>
-    [Obsolete("请使用 GetCurrentPageStatusAsync(IPage, PageType?) 方法替代，传入 PageType.Discover 作为期望类型")]
+    [Obsolete("请使用 GetCurrentPageStatusAsync(IPage, PageType?) 方法替代，传入 PageType.Recommend 作为期望类型")]
     Task<DiscoverPageStatus> GetDiscoverPageStatusAsync(IPage page);
 }
 /// <summary>
@@ -516,13 +516,13 @@ public enum PageState
 /// </summary>
 public enum PageType
 {
-    /// <summary>发现页面 (https://www.xiaohongshu.com/explore)</summary>
-    Discover,
+    /// <summary>发现页面 (https://www.xiaohongshu.com/explore?channel_id=homefeed_recommend)</summary>
+    Recommend,
     /// <summary>搜索页面 (https://www.xiaohongshu.com/search_result)</summary>
     Search,
     /// <summary>个人页面 (https://www.xiaohongshu.com/user/profile)</summary>
     Profile,
-    /// <summary>笔记详情页面 (https://www.xiaohongshu.com/discovery/item)</summary>
+    /// <summary>笔记详情页面 (https://www.xiaohongshu.com/explore/item)</summary>
     NoteDetail,
     /// <summary>首页 (https://www.xiaohongshu.com/)</summary>
     Home,
@@ -567,6 +567,30 @@ public enum HumanWaitType
 
     /// <summary>虚拟列表更新 - 等待虚拟化列表更新DOM的专用延时</summary>
     VirtualListUpdate
+}
+
+/// <summary>
+/// 详情页关键词匹配配置（权重/阈值/拼音）。
+/// 可通过配置节 DetailMatchConfig 或环境变量 XHS__DetailMatchConfig__* 覆盖。
+/// </summary>
+public class DetailMatchConfig
+{
+    public double WeightedThreshold { get; set; } = 0.5; // 命中阈值（加权分/总权重）
+    public int TitleWeight { get; set; } = 4;
+    public int AuthorWeight { get; set; } = 3;
+    public int ContentWeight { get; set; } = 2;
+    public int HashtagWeight { get; set; } = 2;
+    public int ImageAltWeight { get; set; } = 1;
+
+    // 近似匹配相关（透传到 KeywordMatcher）
+    public bool UseFuzzy { get; set; } = true;
+    public int MaxDistanceCap { get; set; } = 3;
+    public double TokenCoverageThreshold { get; set; } = 0.7;
+    public bool IgnoreSpaces { get; set; } = true;
+
+    // 拼音匹配（无外部依赖，使用 GB2312 首字母启发式）
+    public bool UsePinyin { get; set; } = true;
+    public bool PinyinInitialsOnly { get; set; } = true; // 仅首字母匹配
 }
 /// <summary>
 /// 笔记类型枚举
@@ -1413,7 +1437,7 @@ public class DiscoverPageStatus : PageStatusInfo
     /// </summary>
     public DiscoverPageStatus()
     {
-        PageType = PageType.Discover;
+        PageType = PageType.Recommend;
     }
 
     /// <summary>
@@ -1421,25 +1445,17 @@ public class DiscoverPageStatus : PageStatusInfo
     /// </summary>
     public bool IsOnDiscoverPage
     {
-        get => PageType == PageType.Discover && IsPageReady;
+        get => PageType == PageType.Recommend && IsPageReady;
         set
         {
             if (value)
             {
-                PageType = PageType.Discover;
+                PageType = PageType.Recommend;
                 IsPageReady = true;
             }
         }
     }
 
-    /// <summary>
-    /// 可见的发现页面元素数量 - 兼容性属性
-    /// </summary>
-    public int DiscoverElementsCount
-    {
-        get => ElementsDetected.GetValueOrDefault("discover_elements", 0);
-        set => ElementsDetected["discover_elements"] = value;
-    }
 }
 
 /// <summary>
@@ -3042,6 +3058,16 @@ public interface IUniversalApiMonitor : IDisposable
     /// <param name="expectedCount">期望响应数量</param>
     /// <returns>是否成功等待到响应</returns>
     Task<bool> WaitForResponsesAsync(ApiEndpointType endpointType, int expectedCount = 1);
+
+    /// <summary>
+    /// 在指定超时时间内等待指定端点的API响应。
+    /// 用于覆盖全局 MCP 超时策略的场景（例如业务侧希望更快失败并重试）。
+    /// </summary>
+    /// <param name="endpointType">端点类型</param>
+    /// <param name="timeout">本次等待的超时时间</param>
+    /// <param name="expectedCount">期望响应数量</param>
+    /// <returns>是否成功等待到响应</returns>
+    Task<bool> WaitForResponsesAsync(ApiEndpointType endpointType, TimeSpan timeout, int expectedCount = 1);
 
     /// <summary>
     /// 获取指定端点监听到的笔记详情

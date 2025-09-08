@@ -25,6 +25,7 @@ public class XiaoHongShuService : IXiaoHongShuService
     private readonly SearchTimeoutsConfig _timeouts;
     private readonly DetailMatchConfig _detailMatch;
     private readonly McpSettings _mcpSettings;
+    private readonly EndpointRetryConfig _endpointRetry;
 
     /// <summary>
     /// URL构建常量和默认参数
@@ -45,7 +46,8 @@ public class XiaoHongShuService : IXiaoHongShuService
         IUniversalApiMonitor universalApiMonitor,
         IOptions<SearchTimeoutsConfig> timeouts,
         IOptions<DetailMatchConfig> detailMatch,
-        IOptions<McpSettings> mcpSettings)
+        IOptions<McpSettings> mcpSettings,
+        IOptions<EndpointRetryConfig> endpointRetry)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
@@ -59,6 +61,7 @@ public class XiaoHongShuService : IXiaoHongShuService
         _timeouts = timeouts.Value ?? new SearchTimeoutsConfig();
         _detailMatch = detailMatch.Value ?? new DetailMatchConfig();
         _mcpSettings = mcpSettings.Value ?? new McpSettings();
+        _endpointRetry = endpointRetry.Value ?? new EndpointRetryConfig();
     }
 
     /// <summary>
@@ -126,21 +129,65 @@ public class XiaoHongShuService : IXiaoHongShuService
                     "NOTE_NOT_FOUND");
             }
 
-            // 4. 点击笔记元素触发Feed API调用
-            _logger.LogDebug("正在点击笔记元素以触发Feed API...");
-            await _humanizedInteraction.HumanClickAsync(page, noteElement);
-            await _humanizedInteraction.HumanWaitAsync(HumanWaitType.PageLoading);
+            // 4/5. 点击笔记元素触发Feed API + 等待端点（可配置重试）
+            var maxRetries = Math.Max(0, _endpointRetry.MaxRetries);
+            var perAttemptTimeout = TimeSpan.FromMilliseconds(Math.Max(1, _endpointRetry.AttemptTimeoutMs));
+            var attempt = 0;
+            var feedApiReceived = false;
+            while (attempt <= maxRetries)
+            {
+                // 最后一次重试前：先强制跳转到主页以刷新上下文
+                if (maxRetries > 0 && attempt == maxRetries)
+                {
+                    _logger.LogInformation("最后一次重试：先强制跳转到主页再尝试点击笔记");
+                    var (navOk, navLog) = await TryDirectUrlNavigationAsync(page);
+                    foreach (var l in navLog) _logger.LogDebug("[ForceHome] {Line}", l);
+                    if (!navOk)
+                    {
+                        _logger.LogWarning("强制跳转主页失败，继续按原路径重试");
+                    }
+                    await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                }
+                // 如果不是第一次尝试，重新查找可见匹配笔记元素
+                if (attempt > 0)
+                {
+                    noteElement = await FindMatchingNoteElementAsync(keywords);
+                    if (noteElement == null)
+                    {
+                        return OperationResult<NoteDetail>.Fail(
+                            $"未找到匹配关键词的笔记: {string.Join(", ", keywords)}",
+                            ErrorType.ElementNotFound,
+                            "NOTE_NOT_FOUND");
+                    }
+                }
 
-            // 5. 等待Feed API响应
-            var feedApiReceived = await _universalApiMonitor.WaitForResponsesAsync(
-                ApiEndpointType.Feed, 1);
+                _universalApiMonitor.ClearMonitoredData(ApiEndpointType.Feed);
+
+                _logger.LogDebug("正在点击笔记元素以触发Feed API（尝试 {Attempt}/{Total}）...", attempt + 1, maxRetries + 1);
+                await _humanizedInteraction.HumanClickAsync(page, noteElement);
+                await _humanizedInteraction.HumanWaitAsync(HumanWaitType.PageLoading);
+
+                feedApiReceived = await _universalApiMonitor.WaitForResponsesAsync(
+                    ApiEndpointType.Feed, perAttemptTimeout, 1);
+                if (feedApiReceived) break;
+
+                attempt++;
+                if (attempt > maxRetries)
+                {
+                    _logger.LogWarning("Feed 未命中端点且达到最大重试次数({MaxRetries})", maxRetries);
+                    break;
+                }
+
+                _logger.LogWarning("Feed 未命中端点，准备重试（第 {Attempt} 次重试）...", attempt);
+                await _humanizedInteraction.HumanWaitAsync(HumanWaitType.ThinkingPause);
+            }
 
             if (!feedApiReceived)
             {
                 return OperationResult<NoteDetail>.Fail(
-                    "等待Feed API响应超时",
+                    "等待Feed API响应超时，重试已达上限",
                     ErrorType.NetworkError,
-                    "FEED_API_TIMEOUT");
+                    "FEED_API_TIMEOUT_RETRY_EXCEEDED");
             }
 
             // 6. 获取Feed API监听到的笔记详情
@@ -279,10 +326,44 @@ public class XiaoHongShuService : IXiaoHongShuService
                     continue;
                 }
 
-                var got = await _universalApiMonitor.WaitForResponsesAsync(ApiEndpointType.SearchNotes, 1);
+                // 等待端点（可配置重试）
+                var maxRetries = Math.Max(0, _endpointRetry.MaxRetries);
+                var perAttemptTimeout = TimeSpan.FromMilliseconds(Math.Max(1, _endpointRetry.AttemptTimeoutMs));
+                var attempt = 0;
+                var got = false;
+                while (attempt <= maxRetries)
+                {
+                    got = await _universalApiMonitor.WaitForResponsesAsync(ApiEndpointType.SearchNotes, perAttemptTimeout, 1);
+                    if (got) break;
+
+                    attempt++;
+                    if (attempt > maxRetries) break;
+
+                    _logger.LogWarning("Batch SearchNotes 未命中端点，准备重试（第 {Attempt} 次重试）...", attempt);
+                    // 最后一次重试前：先强制跳转到主页再执行搜索
+                    var isLastRetry = maxRetries > 0 && attempt == maxRetries;
+                    if (isLastRetry)
+                    {
+                        _logger.LogInformation("最后一次重试：先强制跳转到主页再执行批量搜索");
+                        var (navOk, navLog) = await TryDirectUrlNavigationAsync(page);
+                        foreach (var l in navLog) _logger.LogDebug("[ForceHome] {Line}", l);
+                        if (!navOk)
+                        {
+                            _logger.LogWarning("强制跳转主页失败，继续按原路径重试");
+                        }
+                        await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                    }
+                    _universalApiMonitor.ClearMonitoredData(ApiEndpointType.SearchNotes);
+                    var retryOp = await PerformHumanizedSearchAsync(page, keyword, "comprehensive", "all", "all", assumeOnDiscover: isLastRetry);
+                    if (!retryOp.Success)
+                    {
+                        break;
+                    }
+                    await _humanizedInteraction.HumanWaitAsync(HumanWaitType.ThinkingPause);
+                }
                 if (!got)
                 {
-                    failed.Add((keyword, "等待SearchNotes API响应超时"));
+                    failed.Add((keyword, "等待SearchNotes API响应超时，重试已达上限"));
                     await _universalApiMonitor.StopMonitoringAsync();
                     continue;
                 }
@@ -2902,27 +2983,65 @@ public class XiaoHongShuService : IXiaoHongShuService
 
             _logger.LogDebug("SearchNotes API监听器设置完成，开始执行拟人化搜索");
 
-            // 4. 执行拟人化搜索操作
-            var searchResult = await PerformHumanizedSearchAsync(page, keyword, sortBy, noteType, publishTime);
-            if (!searchResult.Success)
+            // 4. 执行拟人化搜索 + 端点等待（可配置：单次等待 + 重试次数）
+            var maxRetries = Math.Max(0, _endpointRetry.MaxRetries); // 重试次数（不含首次尝试）
+            var perAttemptTimeout = TimeSpan.FromMilliseconds(Math.Max(1, _endpointRetry.AttemptTimeoutMs));
+            var attempt = 0;
+            var searchApiReceived = false;
+            while (attempt <= maxRetries)
             {
-                return OperationResult<SearchResult>.Fail(
-                    searchResult.ErrorMessage ?? "拟人化搜索失败",
-                    ErrorType.BrowserError,
-                    "HUMANIZED_SEARCH_FAILED");
-            }
+                var isLastRetry = maxRetries > 0 && attempt == maxRetries;
+                // 最后一次重试前：先强制跳转到主页再执行搜索
+                if (isLastRetry)
+                {
+                    _logger.LogInformation("最后一次重试：先强制跳转到主页再执行搜索");
+                    var (navOk, navLog) = await TryDirectUrlNavigationAsync(page);
+                    foreach (var l in navLog) _logger.LogDebug("[ForceHome] {Line}", l);
+                    if (!navOk)
+                    {
+                        _logger.LogWarning("强制跳转主页失败，继续按原路径重试");
+                    }
+                    await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                }
+                // 清理上一次监听数据，避免旧数据干扰判断
+                _universalApiMonitor.ClearMonitoredData(ApiEndpointType.SearchNotes);
 
-            // 5. 等待SearchNotes API响应
-            _logger.LogDebug("拟人化搜索完成，等待SearchNotes API响应...");
-            var searchApiReceived = await _universalApiMonitor.WaitForResponsesAsync(
-                ApiEndpointType.SearchNotes, 1);
+                // 执行拟人化搜索操作
+                var searchResult = await PerformHumanizedSearchAsync(page, keyword, sortBy, noteType, publishTime, assumeOnDiscover: isLastRetry);
+                if (!searchResult.Success)
+                {
+                    return OperationResult<SearchResult>.Fail(
+                        searchResult.ErrorMessage ?? "拟人化搜索失败",
+                        ErrorType.BrowserError,
+                        "HUMANIZED_SEARCH_FAILED");
+                }
+
+                // 等待端点命中（本次限定为2分钟）
+                _logger.LogDebug("拟人化搜索完成，等待SearchNotes API响应（尝试 {Attempt}/{Total}，单次超时 {Timeout}ms）...",
+                    attempt + 1, maxRetries + 1, perAttemptTimeout.TotalMilliseconds);
+
+                searchApiReceived = await _universalApiMonitor.WaitForResponsesAsync(
+                    ApiEndpointType.SearchNotes, perAttemptTimeout, 1);
+
+                if (searchApiReceived) break;
+
+                attempt++;
+                if (attempt > maxRetries)
+                {
+                    _logger.LogWarning("SearchNotes 未命中端点且达到最大重试次数({MaxRetries})", maxRetries);
+                    break;
+                }
+
+                _logger.LogWarning("SearchNotes 未命中端点，准备重试（第 {Attempt} 次重试）...", attempt);
+                await _humanizedInteraction.HumanWaitAsync(HumanWaitType.ThinkingPause);
+            }
 
             if (!searchApiReceived)
             {
                 return OperationResult<SearchResult>.Fail(
-                    "等待SearchNotes API响应超时",
+                    "等待SearchNotes API响应超时，重试已达上限",
                     ErrorType.NetworkError,
-                    "SEARCH_API_TIMEOUT");
+                    "SEARCH_API_TIMEOUT_RETRY_EXCEEDED");
             }
 
             // 6. 获取监听到的API数据
@@ -3130,44 +3249,52 @@ public class XiaoHongShuService : IXiaoHongShuService
         string keyword,
         string sortBy,
         string noteType,
-        string publishTime)
+        string publishTime,
+        bool assumeOnDiscover = false)
     {
         try
         {
             _logger.LogDebug("开始执行拟人化搜索操作");
-            try
+            if (!assumeOnDiscover)
             {
-                // 1. 导航到发现页面
-                _browserManager.BeginOperation();
-                var navigationResult = await NavigateToDiscoverPageAsync(page, TimeSpan.FromSeconds(30));
-                if (!navigationResult.Success)
+                try
                 {
-                    _logger.LogError("导航到发现页面失败：{Error}", navigationResult.ErrorMessage);
-                    return OperationResult<bool>.Fail(
-                        $"导航到发现页面失败：{navigationResult.ErrorMessage}",
-                        ErrorType.NavigationError,
-                        "NAVIGATION_FAILED");
+                    // 1. 导航到发现页面
+                    _browserManager.BeginOperation();
+                    var navigationResult = await NavigateToDiscoverPageAsync(page, TimeSpan.FromSeconds(30));
+                    if (!navigationResult.Success)
+                    {
+                        _logger.LogError("导航到发现页面失败：{Error}", navigationResult.ErrorMessage);
+                        return OperationResult<bool>.Fail(
+                            $"导航到发现页面失败：{navigationResult.ErrorMessage}",
+                            ErrorType.NavigationError,
+                            "NAVIGATION_FAILED");
+                    }
+                }
+                catch (PlaywrightException)
+                {
+                    // 页面/上下文可能被重连打断，尝试一次自愈：重新获取页面并重试导航
+                    _logger.LogWarning("页面在导航时已关闭，尝试重新获取页面并重试导航");
+                    var freshPage = await _browserManager.GetPageAsync();
+                    page = freshPage;
+                    var navigationResult = await NavigateToDiscoverPageAsync(page, TimeSpan.FromSeconds(30));
+                    if (!navigationResult.Success)
+                    {
+                        _logger.LogError("导航到发现页面失败：{Error}", navigationResult.ErrorMessage);
+                        return OperationResult<bool>.Fail(
+                            $"导航到发现页面失败：{navigationResult.ErrorMessage}",
+                            ErrorType.NavigationError,
+                            "NAVIGATION_FAILED");
+                    }
+                }
+                finally
+                {
+                    _browserManager.EndOperation();
                 }
             }
-            catch (PlaywrightException)
+            else
             {
-                // 页面/上下文可能被重连打断，尝试一次自愈：重新获取页面并重试导航
-                _logger.LogWarning("页面在导航时已关闭，尝试重新获取页面并重试导航");
-                var freshPage = await _browserManager.GetPageAsync();
-                page = freshPage;
-                var navigationResult = await NavigateToDiscoverPageAsync(page, TimeSpan.FromSeconds(30));
-                if (!navigationResult.Success)
-                {
-                    _logger.LogError("导航到发现页面失败：{Error}", navigationResult.ErrorMessage);
-                    return OperationResult<bool>.Fail(
-                        $"导航到发现页面失败：{navigationResult.ErrorMessage}",
-                        ErrorType.NavigationError,
-                        "NAVIGATION_FAILED");
-                }
-            }
-            finally
-            {
-                _browserManager.EndOperation();
+                _logger.LogDebug("已在主页/发现页环境，跳过导航步骤");
             }
 
             // 2. 等待页面加载（使用统一等待服务，具备降级与重试能力）
@@ -3678,22 +3805,62 @@ public class XiaoHongShuService : IXiaoHongShuService
 
             _logger.LogDebug("Homefeed API监听器设置完成，开始导航到发现页面");
 
-            // 导航到发现页面并触发API
-            var navigationResult = await NavigateToDiscoverPageAsync(page, TimeSpan.FromSeconds(30));
-            if (!navigationResult.Success)
+            // 导航 + 等待端点（可配置：单次等待 + 重试次数）
+            var maxRetries = Math.Max(0, _endpointRetry.MaxRetries); // 重试次数（不含首次尝试）
+            var perAttemptTimeout = TimeSpan.FromMilliseconds(Math.Max(1, _endpointRetry.AttemptTimeoutMs));
+            var attempt = 0;
+            var waitOk = false;
+            DiscoverNavigationResult navigationResult = new() { Success = false };
+            while (attempt <= maxRetries)
             {
-                _logger.LogError("导航到发现页面失败：{Error}", navigationResult.ErrorMessage);
-                return OperationResult<RecommendListResult>.Fail(
-                    $"导航到发现页面失败：{navigationResult.ErrorMessage}",
-                    ErrorType.NavigationError,
-                    "NAVIGATION_FAILED");
+                var isLastRetry = maxRetries > 0 && attempt == maxRetries;
+                // 每轮先清空监听数据，保证捕捉当轮请求
+                _universalApiMonitor.ClearMonitoredData(ApiEndpointType.Homefeed);
+
+                if (isLastRetry)
+                {
+                    _logger.LogInformation("最后一次重试：强制跳转主页并直接等待 Homefeed");
+                    var (navOk, navLog) = await TryDirectUrlNavigationAsync(page);
+                    foreach (var l in navLog) _logger.LogDebug("[ForceHome] {Line}", l);
+                    if (!navOk)
+                    {
+                        _logger.LogWarning("强制跳转主页失败，继续按原路径重试");
+                    }
+                    await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                }
+                else
+                {
+                    navigationResult = await NavigateToDiscoverPageAsync(page, TimeSpan.FromSeconds(30));
+                    if (!navigationResult.Success)
+                    {
+                        _logger.LogError("导航到发现页面失败：{Error}", navigationResult.ErrorMessage);
+                        return OperationResult<RecommendListResult>.Fail(
+                            $"导航到发现页面失败：{navigationResult.ErrorMessage}",
+                            ErrorType.NavigationError,
+                            "NAVIGATION_FAILED");
+                    }
+                }
+
+                waitOk = await _universalApiMonitor.WaitForResponsesAsync(ApiEndpointType.Homefeed, perAttemptTimeout, 1);
+                if (waitOk) break;
+
+                attempt++;
+                if (attempt > maxRetries)
+                {
+                    _logger.LogWarning("Homefeed 未命中端点且达到最大重试次数({MaxRetries})", maxRetries);
+                    break;
+                }
+
+                _logger.LogWarning("Homefeed 未命中端点，准备重试（第 {Attempt} 次重试）...", attempt);
+                await _humanizedInteraction.HumanWaitAsync(HumanWaitType.ThinkingPause);
             }
 
-            // 通用等待：等待至少一次 Homefeed 响应到达（不主动触发）
-            var waitOk = await _universalApiMonitor.WaitForResponsesAsync(ApiEndpointType.Homefeed, 1);
             if (!waitOk)
             {
-                _logger.LogWarning("等待Homefeed响应超时或未到达，将继续尝试读取监听缓存。");
+                return OperationResult<RecommendListResult>.Fail(
+                    "等待Homefeed API响应超时，重试已达上限",
+                    ErrorType.NetworkError,
+                    "HOMEFEED_API_TIMEOUT_RETRY_EXCEEDED");
             }
 
             // 使用监听到的 API 数据

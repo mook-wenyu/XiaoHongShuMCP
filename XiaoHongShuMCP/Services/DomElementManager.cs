@@ -3,8 +3,17 @@ using Microsoft.Playwright;
 namespace XiaoHongShuMCP.Services
 {
     /// <summary>
-    /// DOM元素管理服务，提供UI动态容错能力和页面状态感知
-    /// 支持基于页面状态的智能选择器切换
+    /// DOM 元素管理服务（实现 IDomElementManager）。
+    /// - 职责：维护“选择器别名 → 候选选择器列表”的映射，提供基于页面状态（<see cref="PageState"/>）的
+    ///         精细化候选集；用于屏蔽页面结构调整带来的不稳定，提升选择器健壮性。
+    /// - 选择器策略：
+    ///   1) 同一别名维护 3–5 个候选（从高到低按成功概率排序）；
+    ///   2) 可维护页面状态特定的候选集，使用时会“状态候选优先 + 通用候选补充（去重）”；
+    ///   3) 支持回退：如找不到别名，则直接返回别名本身以兼容“直接传 CSS/XPath”。
+    /// - 页面状态检测：先 URL 关键词判断，后 DOM 特征回退，避免纯 URL 方案对 SPA 场景不敏感。
+    /// - 线程安全：该管理器通常在单线程 UI 自动化流程中使用（读多写少）。默认字典非并发容器，
+    ///             如需动态更新映射请在上层提供同步保障。
+    /// 维护建议：新增或调整选择器时，保持“状态优先 + 通用兜底 + 顺序代表优先级”的约定。
     /// </summary>
     public class DomElementManager : IDomElementManager
     {
@@ -252,7 +261,7 @@ namespace XiaoHongShuMCP.Services
                         ".sidebar a[href*='/explore']",                      // 侧边栏探索链接
                         "a:has-text('发现')",                                  // 包含"发现"文本的链接
                         "a:has-text('探索')",                                  // 包含"探索"文本的链接（备选）
-                        "a:has-text('Discover')",                            // 英文版发现链接
+                        "a:has-text('Recommend')",                           // 英文版发现链接
                         "[data-v-*] a[href*='explore']",                     // Vue组件内的探索链接
                         ".nav-item a[href*='explore']",                      // 导航项中的探索链接
                         ".menu-item a[href*='explore']",                     // 菜单项中的探索链接
@@ -1505,7 +1514,11 @@ namespace XiaoHongShuMCP.Services
             };
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// 获取某别名对应的通用候选选择器列表。
+        /// - 若未找到别名映射，则返回仅包含该别名本身的列表（允许直接写选择器）。
+        /// - 列表顺序代表优先级，建议从最稳定、最具体的选择器开始。
+        /// </summary>
         public List<string> GetSelectors(string alias)
         {
             if (_selectors.TryGetValue(alias, out var selectorList))
@@ -1516,7 +1529,11 @@ namespace XiaoHongShuMCP.Services
             return [alias];
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// 获取“页面状态 + 别名”的候选选择器列表。
+        /// - 当 <paramref name="pageState"/> 为 Auto/Unknown 时，退回通用候选；
+        /// - 若存在状态特定候选，则返回“状态候选优先 + 通用候选去重追加”的合并序列。
+        /// </summary>
         public List<string> GetSelectors(string alias, PageState pageState)
         {
             // 如果页面状态是自动检测，返回通用选择器
@@ -1552,7 +1569,12 @@ namespace XiaoHongShuMCP.Services
             return GetSelectors(alias);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// 检测当前页面状态。
+        /// - 先通过 URL 片段进行快速判断；
+        /// - 若无法判定，则按状态对应的页面容器选择器做 DOM 存在性检测；
+        /// - 若仍无法判定，返回 Unknown。
+        /// </summary>
         public async Task<PageState> DetectPageStateAsync(IPage page)
         {
             try
@@ -1614,7 +1636,9 @@ namespace XiaoHongShuMCP.Services
             }
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// 获取通用别名到候选选择器的完整映射（不包含页面状态特定映射）。
+        /// </summary>
         public Dictionary<string, List<string>> GetAllSelectors()
         {
             return _selectors;

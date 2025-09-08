@@ -4,8 +4,17 @@ using Microsoft.Playwright;
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
-/// 模拟真人交互服务的实现
-/// 门面模式，协调各个专门服务，遵循单一职责原则
+/// 拟人化交互服务实现（门面）。
+/// - 职责：对外提供“像人一样”的点击、悬停、输入、滚动与等待等交互方法；
+///         内部协调 <see cref="IDelayManager"/>（延时策略）、<see cref="IElementFinder"/>（元素定位）、
+///         <see cref="IDomElementManager"/>（选择器别名）与多种 <see cref="ITextInputStrategy"/>（输入策略）。
+/// - 设计：门面 + 策略 + 组合。所有动作统一经过延时管理，尽可能避免“机械化”模式触发风控。
+/// - 不变式：
+///   1) 不直接硬编码具体 CSS/XPath，统一通过别名向 <see cref="IDomElementManager"/> 取选择器；
+///   2) 输入采用语义分割 + 节奏停顿；
+///   3) 滚动采用分步 + 自然缓动，可选等待虚拟化列表刷新。
+/// - 失败面向：找不到元素、编辑器未就绪、虚拟列表未渲染完毕、按钮存在加载态等；均通过重试/等待做降噪。
+/// 线程安全：服务不持有页面或元素的可变状态（按调用传入），可在多个页面并发复用。
 /// </summary>
 public class HumanizedInteractionService : IHumanizedInteractionService
 {
@@ -29,7 +38,11 @@ public class HumanizedInteractionService : IHumanizedInteractionService
         _logger = logger;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// 人性化点击（通过选择器别名）。
+    /// 先利用 <see cref="IElementFinder"/> 定位元素，再委托到元素版本的点击方法。
+    /// 找不到元素将抛出异常，便于上层统一处理。
+    /// </summary>
     public async Task HumanClickAsync(IPage page, string selectorAlias)
     {
         var element = await _elementFinder.FindElementAsync(page, selectorAlias);
@@ -42,15 +55,17 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     }
         
     /// <summary>
-    /// 人性化点击直接传入的元素
+    /// 人性化点击（元素句柄）。
+    /// - 步骤：短暂“观察”→ Hover 聚焦 → 点击前停顿 → 执行点击。
+    /// - 目的：模拟用户将鼠标移入并确认的过程，降低明显的自动化特征。
     /// </summary>
     public async Task HumanClickAsync(IPage page, IElementHandle element)
     {
-        // 1. 注意力模拟 (hover 延时)
+        // 1. 注意力模拟（hover 前短暂停顿）
         await Task.Delay(_delayManager.GetReviewPauseDelay());
         await element.HoverAsync();
 
-        // 2. 点击前的思考延时
+        // 2. 点击前的思考延时（避免秒点）
         await Task.Delay(_delayManager.GetClickDelay());
 
         // 3. 执行点击
@@ -58,7 +73,8 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     }
         
     /// <summary>
-    /// 人性化悬停操作
+    /// 人性化悬停（通过选择器别名）。
+    /// 如果未找到元素则静默返回，以便调用方决定是否重试或降级。
     /// </summary>
     public async Task HumanHoverAsync(IPage page, string selectorAlias)
     {
@@ -70,19 +86,24 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     }
         
     /// <summary>
-    /// 人性化悬停操作（直接传入元素）
+    /// 人性化悬停（元素句柄）。
+    /// 移动到元素并进行观察性停顿，常用于触发 tooltip/菜单等悬停态。
     /// </summary>
     public async Task HumanHoverAsync(IPage page, IElementHandle element)
     {
-        // 模拟移动到元素的时间
+        // 模拟移动到元素需要的时间
         await Task.Delay(_delayManager.GetHoverDelay());
         await element.HoverAsync();
             
-        // 悬停观察时间
+        // 悬停后的观察时间（等待UI变化稳定）
         await Task.Delay(_delayManager.GetReviewPauseDelay());
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// 人性化文本输入（通过选择器别名）。
+    /// 使用“策略模式”根据元素类型选择具体输入策略（标准输入/富文本等）。
+    /// 未命中策略或未找到元素会抛出异常，以便上层统一处理。
+    /// </summary>
     public async Task HumanTypeAsync(IPage page, string selectorAlias, string text)
     {
         var element = await _elementFinder.FindElementAsync(page, selectorAlias);
@@ -104,19 +125,24 @@ public class HumanizedInteractionService : IHumanizedInteractionService
 
 
 
-    /// <inheritdoc />
+    /// <summary>
+    /// 人性化滚动（默认随机距离，不等待新内容）。
+    /// 等价于 <c>HumanScrollAsync(page, 0, false)</c>。
+    /// </summary>
     public async Task HumanScrollAsync(IPage page)
     {
         await HumanScrollAsync(page, targetDistance: 0, waitForLoad: false);
     }
 
     /// <summary>
-    /// 参数化的人性化滚动操作 - 支持虚拟化列表的滚动搜索需求
+    /// 参数化的人性化滚动操作。
+    /// - 用途：支持虚拟化列表“滚动-加载-匹配”的搜索流程。
+    /// - 策略：将总距离拆分为多步滚动，每步之间插入“短/中/长”不同节奏的停顿，模拟阅读与浏览。
+    /// - 边界：若已到达页面底部，直接返回。
     /// </summary>
     /// <param name="page">页面对象</param>
-    /// <param name="targetDistance">目标滚动距离（像素），0表示使用随机距离</param>
-    /// <param name="waitForLoad">是否等待新内容加载</param>
-    /// <returns></returns>
+    /// <param name="targetDistance">目标滚动距离（像素）；传 0 则在 [800,2000] 内随机</param>
+    /// <param name="waitForLoad">是否等待新内容加载（含虚拟列表渲染）</param>
     public async Task HumanScrollAsync(IPage page, int targetDistance, bool waitForLoad = true)
     {
         // 获取当前页面滚动位置和总高度信息
@@ -128,7 +154,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
             targetDistance = Random.Shared.Next(800, 2000); // 适合虚拟化列表的较大滚动距离
         }
 
-        // 检测页面底部边界
+        // 检测页面底部边界（避免滚动越界造成无效等待）
         var maxScrollDistance = Math.Max(0, scrollInfo.ScrollHeight - scrollInfo.ViewportHeight - scrollInfo.CurrentScrollTop);
         targetDistance = Math.Min(targetDistance, maxScrollDistance);
 
@@ -153,7 +179,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
             scrolledDistance += stepDistance;
             remainingDistance -= stepDistance;
 
-            // 拟人化延时 - 每步滚动后的自然停顿
+            // 拟人化延时：每步滚动后的自然停顿
             var delay = i == 0 ? _delayManager.GetReviewPauseDelay() : // 第一步较短停顿
                        i == steps.Count - 1 ? _delayManager.GetThinkingPauseDelay() : // 最后一步较长停顿
                        _delayManager.GetScrollDelay(); // 中间步骤正常停顿
@@ -169,7 +195,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
             if (remainingDistance <= 0) break;
         }
 
-        // 等待新内容加载
+        // 等待新内容加载（懒加载/瀑布流/虚拟列表刷新）
         if (waitForLoad && scrolledDistance > 0)
         {
             await WaitForContentLoadAsync(page);
@@ -177,7 +203,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     }
 
     /// <summary>
-    /// 获取页面滚动信息
+    /// 获取当前页面滚动信息（位置/总高度/视口高度）。
     /// </summary>
     private async Task<ScrollInfo> GetScrollInfoAsync(IPage page)
     {
@@ -193,7 +219,8 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     }
 
     /// <summary>
-    /// 计算拟人化的滚动步骤
+    /// 计算拟人化的滚动步骤。
+    /// 小距离更少步，大距离更多步；每一步的步长带一定随机扰动，避免整齐划一。
     /// </summary>
     private List<int> CalculateScrollSteps(int totalDistance)
     {
@@ -234,7 +261,10 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     }
 
     /// <summary>
-    /// 等待新内容加载完成
+    /// 等待新内容加载完成：
+    /// - 动作间基本延时；
+    /// - 等待加载指示器消失（若存在）；
+    /// - 最终小等待，保障虚拟化渲染。
     /// </summary>
     private async Task WaitForContentLoadAsync(IPage page)
     {
@@ -264,7 +294,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
 
         
     /// <summary>
-    /// 查找元素（委托给ElementFinder）
+    /// 查找元素（委托给 <see cref="IElementFinder"/>）。
     /// </summary>
     public async Task<IElementHandle?> FindElementAsync(IPage page, string selectorAlias, int retries = 3, int timeout = 3000)
     {
@@ -272,7 +302,8 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     }
 
     /// <summary>
-    /// 查找元素，支持页面状态感知（委托给ElementFinder）
+    /// 查找元素（支持页面状态感知）。
+    /// 根据 <paramref name="pageState"/> 从 <see cref="IDomElementManager"/> 获取更精确的候选选择器并逐一尝试。
     /// </summary>
     public async Task<IElementHandle?> FindElementAsync(IPage page, string selectorAlias, PageState pageState, int retries = 3, int timeout = 3000)
     {
@@ -678,7 +709,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     #region 私有辅助方法
     
     /// <summary>
-    /// 获取适用的文本输入策略
+    /// 选择一个适用的文本输入策略（先到先得）。
     /// </summary>
     private async Task<ITextInputStrategy?> GetApplicableInputStrategyAsync(IElementHandle element)
     {
@@ -694,7 +725,8 @@ public class HumanizedInteractionService : IHumanizedInteractionService
     }
 
     /// <summary>
-    /// 执行自然滚动操作
+    /// 执行自然滚动操作（单段平滑滚动）。
+    /// 使用三次缓动（ease-out 风格）以获得更贴近手动滚轮的视觉效果。
     /// </summary>
     /// <param name="page">页面对象</param>
     /// <param name="distance">滚动距离</param>

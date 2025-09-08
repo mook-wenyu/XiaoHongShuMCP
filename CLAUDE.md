@@ -12,7 +12,7 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 - **🤖 智能搜索**: 支持多维度筛选的增强搜索功能
 - **📊 数据分析**: 自动统计分析和 Excel 导出
 - **👤 拟人化交互**: 模拟真人操作模式，防检测机制
-- **🔧 完整测试**: 57 个单元测试，100% 通过率
+- **🔧 完整测试**: 65 个单元测试，100% 通过率
 - **🧩 通用API监听**: 全新的UniversalApiMonitor支持多端点监听
 - **🔄 智能数据转换**: 专门的API数据转换器和模型系统
 
@@ -120,6 +120,7 @@ XiaoHongShuMCP/
 - **状态验证**: 自动检查浏览器连接和小红书登录状态
 - **友好反馈**: 提供详细的连接状态日志信息
 - **非阻塞启动**: 连接过程不影响MCP服务器正常启动
+- **自动导航**: 连接浏览器成功后，自动导航到 `BaseUrl`（默认 `https://www.xiaohongshu.com/explore`）
 
 ### 11. 拟人化交互系统 (HumanizedInteraction)
 全新重构的拟人化交互系统，采用模块化设计：
@@ -134,6 +135,31 @@ XiaoHongShuMCP/
 - 动态选择器更新
 - 基于真实 HTML 结构优化
 - 别名映射系统
+
+## ⚙️ 端点监听与重试策略
+
+统一的端点等待-重试机制适用于以下操作：
+
+- 搜索：`GetSearchNotes`
+- 推荐：`GetRecommendedNotes`
+- 详情：`GetNoteDetail`
+- 批量：`BatchGetNoteDetailsOptimized`
+- 收集：`SmartCollectionController.ExecuteSmartCollectionAsync`
+
+配置项（`EndpointRetry`）：
+- `AttemptTimeoutMs`：单次等待端点命中的超时（默认 120000 毫秒）
+- `MaxRetries`：超时后最大重试次数，不含首次（默认 3）
+
+关键行为（Last Retry → Go Home）：
+- 在“最后一次重试”之前，服务会先强制跳转到主页（发现页），再执行对应操作或直接等待端点命中，以刷新 SPA 上下文并减少脏状态影响。
+- 搜索/批量在最后一轮会跳过二次导航（避免重复），直接在主页执行输入与提交；推荐在最后一轮直接等待 Homefeed 命中。
+
+覆盖方式：
+- 环境变量：`XHS__EndpointRetry__AttemptTimeoutMs`、`XHS__EndpointRetry__MaxRetries`
+- 命令行：`--EndpointRetry:AttemptTimeoutMs=... --EndpointRetry:MaxRetries=...`
+
+与 `McpSettings:WaitTimeoutMs` 的关系：
+- `McpSettings:WaitTimeoutMs` 是整体兜底等待；`EndpointRetry` 控制每轮端点等待与重试次数，两者互补。
 
 ## 🛠️ 开发环境配置
 

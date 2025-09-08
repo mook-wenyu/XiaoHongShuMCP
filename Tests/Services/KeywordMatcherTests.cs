@@ -2,6 +2,9 @@ using XiaoHongShuMCP.Services;
 
 namespace Tests.Services;
 
+/// <summary>
+/// 关键词匹配工具测试用例（覆盖子串匹配、全角半角、短语覆盖度与模糊匹配等场景）。
+/// </summary>
 public class KeywordMatcherTests
 {
     [Test]
