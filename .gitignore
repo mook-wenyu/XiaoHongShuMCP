@@ -398,3 +398,7 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
+# Local build artifacts (Playwright publish output, binaries, caches)
+build-out/
+.playwright/
+
