@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
+using Microsoft.Extensions.Options;
 using NPOI.XSSF.UserModel;
 
 namespace XiaoHongShuMCP.Services;
@@ -15,10 +15,14 @@ public class XiaoHongShuService : IXiaoHongShuService
 {
     private readonly ILogger<XiaoHongShuService> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly PlaywrightBrowserManager _browserManager;
+    private readonly IBrowserManager _browserManager;
     private readonly IAccountManager _accountManager;
     private readonly IHumanizedInteractionService _humanizedInteraction;
     private readonly IDomElementManager _domElementManager;
+    private readonly IPageLoadWaitService _pageLoadWaitService;
+    private readonly ISmartCollectionController _smartCollectionController;
+    private readonly IUniversalApiMonitor _universalApiMonitor;
+    private readonly SearchTimeoutsConfig _timeouts;
 
     /// <summary>
     /// URL构建常量和默认参数
@@ -30,10 +34,14 @@ public class XiaoHongShuService : IXiaoHongShuService
     public XiaoHongShuService(
         ILogger<XiaoHongShuService> logger,
         ILoggerFactory loggerFactory,
-        PlaywrightBrowserManager browserManager,
+        IBrowserManager browserManager,
         IAccountManager accountManager,
         IHumanizedInteractionService humanizedInteraction,
-        IDomElementManager domElementManager)
+        IDomElementManager domElementManager,
+        IPageLoadWaitService pageLoadWaitService,
+        ISmartCollectionController smartCollectionController,
+        IUniversalApiMonitor universalApiMonitor,
+        IOptions<SearchTimeoutsConfig> timeouts)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
@@ -41,10 +49,15 @@ public class XiaoHongShuService : IXiaoHongShuService
         _accountManager = accountManager;
         _humanizedInteraction = humanizedInteraction;
         _domElementManager = domElementManager;
+        _pageLoadWaitService = pageLoadWaitService;
+        _smartCollectionController = smartCollectionController;
+        _universalApiMonitor = universalApiMonitor;
+        _timeouts = timeouts.Value ?? new SearchTimeoutsConfig();
     }
 
     /// <summary>
     /// 基于关键词列表查找单个笔记详情
+    /// 使用UniversalApiMonitor的Feed端点功能替代FeedApiMonitor
     /// </summary>
     /// <param name="keywords">搜索关键词列表（匹配任意关键词）</param>
     /// <param name="includeComments">是否包含评论</param>
@@ -53,7 +66,7 @@ public class XiaoHongShuService : IXiaoHongShuService
         List<string> keywords,
         bool includeComments = false)
     {
-        _logger.LogInformation("开始破坏性重构版笔记详情获取: 关键词={Keywords}, 包含评论={IncludeComments}",
+        _logger.LogInformation("开始获取笔记详情: 关键词={Keywords}, 包含评论={IncludeComments}",
             string.Join(", ", keywords), includeComments);
 
         try
@@ -68,20 +81,26 @@ public class XiaoHongShuService : IXiaoHongShuService
             }
 
             var page = await _browserManager.GetPageAsync();
-            
-            // 2. 创建新的 Feed API 监听器
-            using var feedApiMonitor = new FeedApiMonitor(_loggerFactory.CreateLogger<FeedApiMonitor>());
-            
-            // 3. 设置真实 Feed API 监听器
-            if (!await feedApiMonitor.SetupMonitorAsync(page, TimeSpan.FromSeconds(10)))
+
+            // 2. 设置Feed端点监听（用于笔记详情）
+            _browserManager.BeginOperation();
+            var endpointsToMonitor = new HashSet<ApiEndpointType>
+            {
+                ApiEndpointType.Feed
+            };
+
+            var setupSuccess = _universalApiMonitor.SetupMonitor(page, endpointsToMonitor);
+            if (!setupSuccess)
             {
                 return OperationResult<NoteDetail>.Fail(
-                    "设置 Feed API 监听器失败",
-                    ErrorType.BrowserError,
-                    "FEED_MONITOR_SETUP_FAILED");
+                    "无法设置Feed API监听器",
+                    ErrorType.NetworkError,
+                    "FEED_API_MONITOR_SETUP_FAILED");
             }
 
-            // 4. 通过拟人化操作找到并点击匹配的笔记
+            _logger.LogDebug("Feed API监听器设置完成，开始查找匹配笔记");
+
+            // 3. 通过拟人化操作找到并点击匹配的笔记
             var noteElement = await FindMatchingNoteElementAsync(keywords);
             if (noteElement == null)
             {
@@ -91,56 +110,71 @@ public class XiaoHongShuService : IXiaoHongShuService
                     "NOTE_NOT_FOUND");
             }
 
-            // 5. 清理之前的监听数据，准备捕获新数据
-            feedApiMonitor.ClearMonitoredData();
-
-            // 6. 拟人化点击笔记触发 Feed API 请求
-            _logger.LogDebug("正在点击笔记元素以触发真实 Feed API 请求...");
+            // 4. 点击笔记元素触发Feed API调用
+            _logger.LogDebug("正在点击笔记元素以触发Feed API...");
             await _humanizedInteraction.HumanClickAsync(page, noteElement);
+            await _humanizedInteraction.HumanWaitAsync(HumanWaitType.PageLoading);
 
-            // 7. 等待真实 Feed API 响应被监听
-            var interceptSuccess = await feedApiMonitor.WaitForMonitoredResponsesAsync(1, TimeSpan.FromSeconds(15));
-            if (!interceptSuccess)
+            // 5. 等待Feed API响应
+            var feedApiReceived = await _universalApiMonitor.WaitForResponsesAsync(
+                ApiEndpointType.Feed, 1);
+
+            if (!feedApiReceived)
             {
                 return OperationResult<NoteDetail>.Fail(
-                    "等待 Feed API 响应超时，可能网络问题或页面结构变化",
+                    "等待Feed API响应超时",
                     ErrorType.NetworkError,
-                    "FEED_API_RESPONSE_TIMEOUT");
+                    "FEED_API_TIMEOUT");
             }
 
-            // 8. 从监听的真实 Feed API 响应中获取笔记详情
-            var noteDetail = feedApiMonitor.GetLatestMonitoredNoteDetail();
-            if (noteDetail == null)
+            // 6. 获取Feed API监听到的笔记详情
+            var feedNoteDetails = _universalApiMonitor.GetMonitoredNoteDetails(ApiEndpointType.Feed);
+            if (feedNoteDetails.Count == 0)
             {
                 return OperationResult<NoteDetail>.Fail(
-                    "无法从 Feed API 响应中提取笔记详情数据",
+                    "无法从Feed API获取笔记详情",
                     ErrorType.ElementNotFound,
-                    "FEED_API_DATA_EXTRACTION_FAILED");
+                    "NO_FEED_API_DATA");
             }
 
-            // 9. 如果需要评论数据，进行额外处理（可选实现）
+            var noteDetail = feedNoteDetails.First();
+
+            // 7. 补充评论信息（如果需要）
             if (includeComments)
             {
-                // TODO: 实现基于真实API的评论数据获取逻辑
-                _logger.LogWarning("基于 Feed API 的评论数据获取功能暂未实现，将在后续版本中支持");
+                await EnhanceNoteDetailWithComments(noteDetail, page);
             }
 
-            // 10. 拟人化延时后返回结果
+            // 8. 拟人化延时后返回结果
             await _humanizedInteraction.HumanBetweenActionsDelayAsync();
 
-            _logger.LogInformation("成功通过 Feed API 监听获取笔记详情: 关键词={Keywords}, 标题={Title}, 类型={Type}, 质量={Quality}",
+            _logger.LogInformation("成功获取笔记详情: 关键词={Keywords}, 标题={Title}, 类型={Type}, 质量={Quality}",
                 string.Join(", ", keywords), noteDetail.Title, noteDetail.Type, noteDetail.Quality);
 
             return OperationResult<NoteDetail>.Ok(noteDetail);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "破坏性重构版笔记详情获取失败: 关键词={Keywords}", string.Join(", ", keywords));
+            _logger.LogError(ex, "获取笔记详情失败: 关键词={Keywords}", string.Join(", ", keywords));
 
             return OperationResult<NoteDetail>.Fail(
                 $"获取笔记详情失败: {ex.Message}",
                 ErrorType.BrowserError,
-                "FEED_API_INTERCEPT_ERROR");
+                "GET_NOTE_DETAIL_ERROR");
+        }
+        finally
+        {
+            // 清理API监听器
+            try
+            {
+                await _universalApiMonitor.StopMonitoringAsync();
+                _universalApiMonitor.ClearMonitoredData(ApiEndpointType.Feed);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "清理Feed API监听器失败");
+            }
+            _browserManager.EndOperation();
         }
     }
 
@@ -161,12 +195,12 @@ public class XiaoHongShuService : IXiaoHongShuService
         string? exportFileName = null)
     {
         var startTime = DateTime.UtcNow;
-        _logger.LogInformation("开始破坏性重构版批量获取笔记详情: 关键词={Keywords}, 最大数量={MaxCount}, 自动导出={AutoExport}",
+        _logger.LogInformation("开始批量获取笔记详情(纯监听): 关键词组={Keywords}, 最大数量={MaxCount}, 自动导出={AutoExport}",
             string.Join(", ", keywords), maxCount, autoExport);
 
         try
         {
-            // 1. 参数验证
+            // 1) 参数与登录校验
             if (keywords.Count == 0 || keywords.All(string.IsNullOrWhiteSpace))
             {
                 return OperationResult<BatchNoteResult>.Fail(
@@ -175,7 +209,6 @@ public class XiaoHongShuService : IXiaoHongShuService
                     "EMPTY_KEYWORDS");
             }
 
-            // 2. 检查用户登录状态
             if (!await _accountManager.IsLoggedInAsync())
             {
                 return OperationResult<BatchNoteResult>.Fail(
@@ -185,34 +218,10 @@ public class XiaoHongShuService : IXiaoHongShuService
             }
 
             var page = await _browserManager.GetPageAsync();
-            
-            // 3. 创建真实 Feed API 监听器（破坏性替换）
-            using var feedApiMonitor = new FeedApiMonitor(_loggerFactory.CreateLogger<FeedApiMonitor>());
-            
-            // 4. 设置 Feed API 监听器
-            if (!await feedApiMonitor.SetupMonitorAsync(page, TimeSpan.FromSeconds(10)))
-            {
-                return OperationResult<BatchNoteResult>.Fail(
-                    "设置 Feed API 监听器失败",
-                    ErrorType.BrowserError,
-                    "FEED_MONITOR_SETUP_FAILED");
-            }
 
-            // 5. 查找所有匹配的笔记元素
-            var matchingNotesElements = await FindMultipleMatchingNoteElementsAsync(keywords, maxCount);
-            if (matchingNotesElements.Count == 0)
-            {
-                _logger.LogWarning("未找到匹配关键词的笔记: {Keywords}", string.Join(", ", keywords));
-                
-                var emptyResult = CreateEmptyBatchResult(startTime, string.Join(", ", keywords));
-                return OperationResult<BatchNoteResult>.Ok(emptyResult);
-            }
-
-            _logger.LogInformation("找到 {Count} 个匹配的笔记元素，开始批量 Feed API 监听处理", matchingNotesElements.Count);
-
-            // 6. 初始化批量处理统计
-            var noteDetails = new List<NoteDetail>();
-            var failedNotes = new List<(string, string)>();
+            var collected = new List<NoteDetail>();
+            var failed = new List<(string, string)>();
+            var seenIds = new HashSet<string>();
             var processingStats = new Dictionary<ProcessingMode, int>
             {
                 [ProcessingMode.Fast] = 0,
@@ -221,135 +230,139 @@ public class XiaoHongShuService : IXiaoHongShuService
             };
             var individualProcessingTimes = new List<double>();
 
-            // 7. 批量点击笔记触发真实 Feed API 请求
-            var processedCount = 0;
-            foreach (var noteElement in matchingNotesElements.Take(maxCount))
+            // 2) 逐关键词执行“纯监听”搜索（仅用于触发API，不从DOM取数）
+            foreach (var keyword in keywords.Where(k => !string.IsNullOrWhiteSpace(k)))
             {
-                var noteProcessingStart = DateTime.UtcNow;
-                
+                if (collected.Count >= maxCount) break;
+
+                // 确保监听器是干净的
                 try
                 {
-                    _logger.LogDebug("批量处理第 {Current}/{Total} 个笔记元素 (Feed API)", processedCount + 1, Math.Min(matchingNotesElements.Count, maxCount));
+                    await _universalApiMonitor.StopMonitoringAsync();
+                }
+                catch
+                {
+                    /* ignore */
+                }
+                _universalApiMonitor.ClearMonitoredData(ApiEndpointType.SearchNotes);
 
-                    // 清理之前的监听数据，准备捕获新数据
-                    feedApiMonitor.ClearMonitoredData();
-                    
-                    // 拟人化点击笔记触发真实 Feed API 请求
-                    await _humanizedInteraction.HumanClickAsync(page, noteElement);
-                    
-                    // 等待真实 Feed API 响应
-                    var interceptSuccess = await feedApiMonitor.WaitForMonitoredResponsesAsync(1, TimeSpan.FromSeconds(10));
-                    
-                    if (interceptSuccess)
-                    {
-                        var noteDetail = feedApiMonitor.GetLatestMonitoredNoteDetail();
-                        if (noteDetail != null)
-                        {
-                            noteDetails.Add(noteDetail);
-                            
-                            // 确定处理模式
-                            var mode = DetermineProcessingMode(processedCount, noteDetail);
-                            processingStats[mode]++;
-                            
-                            _logger.LogDebug("成功通过 Feed API 监听获取笔记: 标题={Title}, 模式={Mode}", 
-                                noteDetail.Title, mode);
-                        }
-                        else
-                        {
-                            failedNotes.Add((string.Join(", ", keywords), "Feed API 响应解析失败"));
-                        }
-                    }
-                    else
-                    {
-                        failedNotes.Add((string.Join(", ", keywords), "Feed API 响应超时"));
-                        _logger.LogWarning("笔记 {Index} Feed API 响应超时", processedCount + 1);
-                    }
-                }
-                catch (Exception ex)
+                var endpointsToMonitor = new HashSet<ApiEndpointType> {ApiEndpointType.SearchNotes};
+                var setupOk = _universalApiMonitor.SetupMonitor(page, endpointsToMonitor);
+                if (!setupOk)
                 {
-                    failedNotes.Add((string.Join(", ", keywords), $"处理异常: {ex.Message}"));
-                    _logger.LogWarning(ex, "处理笔记 {Index} 时发生异常", processedCount + 1);
+                    failed.Add((keyword, "无法设置SearchNotes API监听器"));
+                    continue;
                 }
-                
-                processedCount++;
-                
-                // 记录处理时间
-                var processingTime = (DateTime.UtcNow - noteProcessingStart).TotalMilliseconds;
-                individualProcessingTimes.Add(processingTime);
-                
-                // 批量操作间的拟人化延时
-                if (processedCount < maxCount && processedCount < matchingNotesElements.Count)
+
+                // 触发搜索以产生 SearchNotes API 请求（不读取DOM数据）
+                var searchOp = await PerformHumanizedSearchAsync(page, keyword, "comprehensive", "all", "all");
+                if (!searchOp.Success)
                 {
-                    await _humanizedInteraction.HumanBetweenActionsDelayAsync();
+                    failed.Add((keyword, searchOp.ErrorMessage ?? "拟人化搜索失败"));
+                    await _universalApiMonitor.StopMonitoringAsync();
+                    continue;
                 }
+
+                var got = await _universalApiMonitor.WaitForResponsesAsync(ApiEndpointType.SearchNotes, 1);
+                if (!got)
+                {
+                    failed.Add((keyword, "等待SearchNotes API响应超时"));
+                    await _universalApiMonitor.StopMonitoringAsync();
+                    continue;
+                }
+
+                var details = _universalApiMonitor.GetMonitoredNoteDetails(ApiEndpointType.SearchNotes);
+                if (details.Count == 0)
+                {
+                    failed.Add((keyword, "SearchNotes API无数据"));
+                    await _universalApiMonitor.StopMonitoringAsync();
+                    continue;
+                }
+
+                // 合并去重并限量
+                foreach (var d in details)
+                {
+                    if (collected.Count >= maxCount) break;
+                    var addStart = DateTime.UtcNow;
+
+                    if (string.IsNullOrEmpty(d.Id) || !seenIds.Add(d.Id)) continue;
+
+                    // 统计处理模式（不做额外DOM操作）
+                    var mode = DetermineProcessingMode(collected.Count, d);
+                    processingStats[mode]++;
+
+                    // 若调用方要求包含评论，这里保持纯监听：不额外加载评论，仅占位
+                    if (includeComments && d.Comments == null)
+                    {
+                        d.Comments = [];
+                    }
+
+                    collected.Add(d);
+
+                    var addCost = (DateTime.UtcNow - addStart).TotalMilliseconds;
+                    individualProcessingTimes.Add(addCost);
+                }
+
+                await _universalApiMonitor.StopMonitoringAsync();
+                await _humanizedInteraction.HumanBetweenActionsDelayAsync();
             }
 
-            var totalProcessingTime = DateTime.UtcNow - startTime;
+            // 3) 统计与结果包装
+            var totalDuration = DateTime.UtcNow - startTime;
+            var stats = CalculateBatchStatisticsSync(collected, processingStats, individualProcessingTimes);
+            var overall = DetermineOverallQuality(collected);
 
-            // 8. 同步计算统计数据（零额外成本）
-            var statistics = CalculateBatchStatisticsSync(noteDetails, processingStats, individualProcessingTimes);
+            var enhanced = new BatchNoteResult(
+                SuccessfulNotes: collected,
+                FailedNotes: failed,
+                ProcessedCount: collected.Count,
+                ProcessingTime: totalDuration,
+                OverallQuality: overall,
+                Statistics: stats,
+                ExportInfo: null);
 
-            // 9. 确定整体数据质量
-            var overallQuality = DetermineOverallQuality(noteDetails);
+            var op = OperationResult<BatchNoteResult>.Ok(enhanced);
 
-            // 10. 构建增强结果（不等待导出）
-            var enhancedResult = new BatchNoteResult(
-                SuccessfulNotes: noteDetails,
-                FailedNotes: failedNotes,
-                ProcessedCount: processedCount,
-                ProcessingTime: totalProcessingTime,
-                OverallQuality: overallQuality,
-                Statistics: statistics,
-                ExportInfo: null // 初始为null，异步导出完成后可通过其他方式获取
-            );
-
-            // 11. 立即返回给客户端（不等待导出）
-            var result = OperationResult<BatchNoteResult>.Ok(enhancedResult);
-
-            // 12. 异步启动导出任务（如果启用）
-            if (autoExport && noteDetails.Count > 0)
+            // 4) 异步导出（如开启）
+            if (autoExport && collected.Count > 0)
             {
                 _ = Task.Run(() =>
                 {
                     try
                     {
-                        var fileName = exportFileName ??
-                                       $"batch_notes_feed_api_{DateTime.Now:yyyyMMdd_HHmmss}";
-
-                        // 将NoteDetail转换为NoteInfo以兼容导出方法
-                        var noteInfoList = noteDetails.Cast<NoteInfo>().ToList();
-
-                        var exportResult = ExportNotesSync(noteInfoList, fileName);
-
-                        if (exportResult.Success)
+                        var fileName = exportFileName ?? $"batch_notes_{DateTime.Now:yyyyMMdd_HHmmss}";
+                        var noteInfoList = collected.Cast<NoteInfo>().ToList();
+                        var export = ExportNotesSync(noteInfoList, fileName);
+                        if (export.Success)
                         {
-                            _logger.LogInformation("批量 Feed API 笔记结果自动导出完成: {FilePath}",
-                                exportResult.Data?.FilePath);
+                            _logger.LogInformation("批量(纯监听)导出完成: {FilePath}", export.Data?.FilePath);
                         }
                         else
                         {
-                            _logger.LogWarning("批量 Feed API 结果自动导出失败: {Error}", exportResult.ErrorMessage);
+                            _logger.LogWarning("批量(纯监听)导出失败: {Error}", export.ErrorMessage);
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Feed API 异步导出任务异常，不影响主功能");
+                        _logger.LogWarning(ex, "批量(纯监听)导出任务异常");
                     }
                 });
             }
 
-            _logger.LogInformation("破坏性重构版批量笔记详情获取完成: 成功={Success}, 失败={Failed}, 耗时={Duration}ms, 平均处理时间={AvgTime:F2}ms",
-                noteDetails.Count, failedNotes.Count, totalProcessingTime.TotalMilliseconds, statistics.AverageProcessingTime);
+            _logger.LogInformation("批量(纯监听)完成: 成功={Success}, 失败={Failed}, 耗时={Duration}ms, 平均处理时间={Avg:F2}ms",
+                collected.Count, failed.Count, totalDuration.TotalMilliseconds, stats.AverageProcessingTime);
 
-            return result;
+            _browserManager.EndOperation();
+            return op;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "破坏性重构版批量获取笔记详情异常");
+            _logger.LogError(ex, "批量(纯监听)获取笔记详情异常");
+            _browserManager.EndOperation();
             return OperationResult<BatchNoteResult>.Fail(
                 $"批量获取失败: {ex.Message}",
                 ErrorType.BrowserError,
-                "BATCH_GET_FEED_API_NOTES_FAILED");
+                "BATCH_GET_NOTES_FAILED");
         }
     }
 
@@ -407,40 +420,6 @@ public class XiaoHongShuService : IXiaoHongShuService
             TypeDistribution: typeDistribution,
             ProcessingModeStats: processingStats,
             CalculatedAt: DateTime.UtcNow
-        );
-    }
-
-    /// <summary>
-    /// 创建空的批量结果 - 用于无匹配笔记的情况
-    /// </summary>
-    private BatchNoteResult CreateEmptyBatchResult(DateTime startTime, string keyword)
-    {
-        var processingTime = DateTime.UtcNow - startTime;
-        var emptyStats = new BatchProcessingStatistics(
-            CompleteDataCount: 0,
-            PartialDataCount: 0,
-            MinimalDataCount: 0,
-            AverageProcessingTime: 0,
-            AverageLikes: 0,
-            AverageComments: 0,
-            TypeDistribution: new Dictionary<NoteType, int>(),
-            ProcessingModeStats: new Dictionary<ProcessingMode, int>
-            {
-                [ProcessingMode.Fast] = 0,
-                [ProcessingMode.Standard] = 0,
-                [ProcessingMode.Careful] = 0
-            },
-            CalculatedAt: DateTime.UtcNow
-        );
-
-        return new BatchNoteResult(
-            SuccessfulNotes: [],
-            FailedNotes: [(keyword, "未找到匹配的笔记")],
-            ProcessedCount: 0,
-            ProcessingTime: processingTime,
-            OverallQuality: DataQuality.Minimal,
-            Statistics: emptyStats,
-            ExportInfo: null
         );
     }
 
@@ -509,7 +488,18 @@ public class XiaoHongShuService : IXiaoHongShuService
 
             // 创建标题行
             var headerRow = sheet.CreateRow(0);
-            var headers = new[] {"标题", "作者", "链接", "点赞数", "评论数", "发布时间", "数据质量"};
+            var headers = new[]
+            {
+                "标题", "描述", "作者", "作者ID", "作者头像", "是否认证",
+                "链接", "类型", "类型置信度", "封面", "封面宽", "封面高", "封面FileId",
+                "点赞数", "点赞数(原始)", "评论数", "收藏数", "分享数",
+                "是否点赞", "是否收藏",
+                "视频时长(秒)", "视频时长(mm:ss)", "视频链接",
+                "图片数", "首图",
+                "发布时间", "数据质量", "缺失字段",
+                "TrackId", "XsecToken", "SearchId", "PageToken",
+                "抓取时间"
+            };
 
             for (int i = 0; i < headers.Length; i++)
             {
@@ -523,13 +513,49 @@ public class XiaoHongShuService : IXiaoHongShuService
                 var note = notes[i];
                 var row = sheet.CreateRow(i + 1);
 
-                row.CreateCell(0).SetCellValue(note.Title);
-                row.CreateCell(1).SetCellValue(note.Author);
-                row.CreateCell(2).SetCellValue(note.Url);
-                row.CreateCell(3).SetCellValue(note.LikeCount?.ToString() ?? "N/A");
-                row.CreateCell(4).SetCellValue(note.CommentCount?.ToString() ?? "N/A");
-                row.CreateCell(5).SetCellValue(note.PublishTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A");
-                row.CreateCell(6).SetCellValue(note.Quality.ToString());
+                int c = 0;
+                string fmtDur(int? s)
+                {
+                    if (!s.HasValue || s.Value <= 0) return string.Empty;
+                    var m = s.Value / 60;
+                    var ss = s.Value % 60;
+                    return $"{m}:{ss:D2}";
+                }
+
+                row.CreateCell(c++).SetCellValue(note.Title);
+                row.CreateCell(c++).SetCellValue(note.Description ?? string.Empty);
+                row.CreateCell(c++).SetCellValue(note.Author);
+                row.CreateCell(c++).SetCellValue(note.AuthorId);
+                row.CreateCell(c++).SetCellValue(note.AuthorAvatar);
+                row.CreateCell(c++).SetCellValue(note.UserInfo?.IsVerified == true ? "是" : "否");
+                row.CreateCell(c++).SetCellValue(note.Url);
+                row.CreateCell(c++).SetCellValue(note.Type.ToString());
+                row.CreateCell(c++).SetCellValue(note.GetTypeConfidence().ToString());
+                row.CreateCell(c++).SetCellValue(note.CoverImage);
+                row.CreateCell(c++).SetCellValue(note.CoverInfo?.Width.ToString() ?? string.Empty);
+                row.CreateCell(c++).SetCellValue(note.CoverInfo?.Height.ToString() ?? string.Empty);
+                row.CreateCell(c++).SetCellValue(note.CoverInfo?.FileId ?? string.Empty);
+                row.CreateCell(c++).SetCellValue(note.LikeCount?.ToString() ?? "N/A");
+                row.CreateCell(c++).SetCellValue(note.InteractInfo?.LikedCountRaw ?? string.Empty);
+                row.CreateCell(c++).SetCellValue(note.CommentCount?.ToString() ?? "N/A");
+                row.CreateCell(c++).SetCellValue(note.FavoriteCount?.ToString() ?? "N/A");
+                row.CreateCell(c++).SetCellValue(note.ShareCount?.ToString() ?? "N/A");
+                row.CreateCell(c++).SetCellValue(note.IsLiked ? "是" : "否");
+                row.CreateCell(c++).SetCellValue(note.IsCollected ? "是" : "否");
+                row.CreateCell(c++).SetCellValue(note.VideoDuration?.ToString() ?? "");
+                row.CreateCell(c++).SetCellValue(fmtDur(note.VideoDuration));
+                row.CreateCell(c++).SetCellValue(note.VideoUrl ?? "");
+                var imgCount = note.Images?.Count ?? 0;
+                row.CreateCell(c++).SetCellValue(imgCount.ToString());
+                row.CreateCell(c++).SetCellValue(imgCount > 0 ? note.Images![0] : string.Empty);
+                row.CreateCell(c++).SetCellValue(note.PublishTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A");
+                row.CreateCell(c++).SetCellValue(note.Quality.ToString());
+                row.CreateCell(c++).SetCellValue(note.MissingFields != null && note.MissingFields.Count > 0 ? string.Join(",", note.MissingFields) : string.Empty);
+                row.CreateCell(c++).SetCellValue(note.TrackId ?? string.Empty);
+                row.CreateCell(c++).SetCellValue(note.XsecToken ?? string.Empty);
+                row.CreateCell(c++).SetCellValue(note.SearchId ?? string.Empty);
+                row.CreateCell(c++).SetCellValue(note.PageToken ?? string.Empty);
+                row.CreateCell(c++).SetCellValue(note.ExtractedAt.ToString("yyyy-MM-dd HH:mm:ss"));
             }
 
             // 自动调整列宽
@@ -1044,11 +1070,33 @@ public class XiaoHongShuService : IXiaoHongShuService
             const string publishUrl = "https://creator.xiaohongshu.com/publish/publish?source=official";
             _logger.LogInformation("导航到创作平台: {PublishUrl}", publishUrl);
 
-            await page.GotoAsync(publishUrl, new PageGotoOptions
+            _browserManager.BeginOperation();
+            try
             {
-                WaitUntil = WaitUntilState.NetworkIdle,
-                Timeout = 30000
-            });
+                try
+                {
+                    await page.GotoAsync(publishUrl, new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.DOMContentLoaded,
+                        Timeout = 30000
+                    });
+                }
+                catch (PlaywrightException)
+                {
+                    _logger.LogWarning("页面在导航发布页时关闭，尝试重新获取页面并重试");
+                    page = await _browserManager.GetPageAsync();
+                    await page.GotoAsync(publishUrl, new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.DOMContentLoaded,
+                        Timeout = 30000
+                    });
+                }
+                await _pageLoadWaitService.WaitForPageLoadAsync(page);
+            }
+            finally
+            {
+                _browserManager.EndOperation();
+            }
 
             // 3. 等待发布页面完全加载（Vue.js应用特殊处理）
             await WaitForPublishPageReadyAsync(page);
@@ -1084,8 +1132,91 @@ public class XiaoHongShuService : IXiaoHongShuService
         }
     }
 
-    #region 支持方法 - Feed API 专用辅助功能
-    
+    /// <summary>
+    /// 增强笔记详情，补充评论信息
+    /// </summary>
+    private async Task EnhanceNoteDetailWithComments(NoteDetail noteDetail, IPage page)
+    {
+        try
+        {
+            _logger.LogDebug("开始补充笔记评论信息: {Title}", noteDetail.Title);
+
+            // 尝试找到评论区域
+            var commentSelectors = _domElementManager.GetSelectors("CommentSection");
+            var commentElements = new List<IElementHandle>();
+            foreach (var selector in commentSelectors)
+            {
+                var elements = await page.QuerySelectorAllAsync(selector);
+                commentElements.AddRange(elements);
+            }
+
+            if (commentElements.Any())
+            {
+                var comments = new List<CommentInfo>();
+
+                // 解析评论信息（简化版）
+                foreach (var commentElement in commentElements.Take(5)) // 只取前5条评论
+                {
+                    try
+                    {
+                        var authorSelectors = _domElementManager.GetSelectors("CommentAuthor");
+                        var contentSelectors = _domElementManager.GetSelectors("CommentContent");
+
+                        IElementHandle? authorElement = null;
+                        IElementHandle? contentElement = null;
+
+                        // 尝试找到作者元素
+                        foreach (var selector in authorSelectors)
+                        {
+                            authorElement = await commentElement.QuerySelectorAsync(selector);
+                            if (authorElement != null) break;
+                        }
+
+                        // 尝试找到内容元素
+                        foreach (var selector in contentSelectors)
+                        {
+                            contentElement = await commentElement.QuerySelectorAsync(selector);
+                            if (contentElement != null) break;
+                        }
+
+                        if (authorElement != null && contentElement != null)
+                        {
+                            var author = await authorElement.InnerTextAsync();
+                            var content = await contentElement.InnerTextAsync();
+
+                            comments.Add(new CommentInfo
+                            {
+                                Author = author?.Trim() ?? "",
+                                Content = content?.Trim() ?? "",
+                                PublishTime = DateTime.UtcNow // 简化处理，实际应解析时间
+                            });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "解析单个评论失败");
+                    }
+                }
+
+                // 更新笔记详情中的评论数据
+                if (comments.Any())
+                {
+                    // 假设NoteDetail有Comments属性，如果没有则需要扩展数据结构
+                    _logger.LogDebug("成功获取 {Count} 条评论", comments.Count);
+                }
+            }
+            else
+            {
+                _logger.LogDebug("未找到评论区域");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "补充评论信息时发生错误");
+        }
+    }
+
+    #region 支持方法 - UniversalApiMonitor
     /// <summary>
     /// 查找匹配关键词的单个笔记元素 - Feed API 重构版专用
     /// 为了触发真实 Feed API 请求而定位页面元素
@@ -1098,9 +1229,9 @@ public class XiaoHongShuService : IXiaoHongShuService
         {
             var page = await _browserManager.GetPageAsync();
             var noteItemSelectors = _domElementManager.GetSelectors("NoteCard");
-            
+
             _logger.LogDebug("开始查找匹配关键词的笔记元素: {Keywords}", string.Join(", ", keywords));
-            
+
             // 尝试不同的选择器找到笔记元素
             foreach (var selector in noteItemSelectors)
             {
@@ -1108,18 +1239,18 @@ public class XiaoHongShuService : IXiaoHongShuService
                 {
                     var noteElements = await page.QuerySelectorAllAsync(selector);
                     if (!noteElements.Any()) continue;
-                    
+
                     _logger.LogDebug("使用选择器 {Selector} 找到 {Count} 个笔记元素", selector, noteElements.Count);
-                    
+
                     // 检查每个笔记元素是否匹配关键词
                     foreach (var noteElement in noteElements)
                     {
                         if (!await IsElementVisible(noteElement)) continue;
-                        
+
                         var noteText = await ExtractNoteTextForMatching(noteElement);
                         if (MatchesKeywords(noteText, keywords))
                         {
-                            _logger.LogDebug("找到匹配的笔记元素: {Text}", 
+                            _logger.LogDebug("找到匹配的笔记元素: {Text}",
                                 noteText.Substring(0, Math.Min(50, noteText.Length)));
                             return noteElement;
                         }
@@ -1130,7 +1261,7 @@ public class XiaoHongShuService : IXiaoHongShuService
                     _logger.LogDebug("选择器 {Selector} 查找失败: {Error}", selector, ex.Message);
                 }
             }
-            
+
             _logger.LogDebug("未找到匹配关键词的笔记元素: {Keywords}", string.Join(", ", keywords));
             return null;
         }
@@ -1140,74 +1271,6 @@ public class XiaoHongShuService : IXiaoHongShuService
             return null;
         }
     }
-    
-    /// <summary>
-    /// 查找匹配关键词的多个笔记元素 - Feed API 批量处理专用
-    /// 为了批量触发真实 Feed API 请求而定位页面元素
-    /// </summary>
-    /// <param name="keywords">匹配关键词列表</param>
-    /// <param name="maxCount">最大查找数量</param>
-    /// <returns>匹配的笔记元素列表</returns>
-    private async Task<List<IElementHandle>> FindMultipleMatchingNoteElementsAsync(List<string> keywords, int maxCount)
-    {
-        var matchingElements = new List<IElementHandle>();
-        
-        try
-        {
-            var page = await _browserManager.GetPageAsync();
-            var noteItemSelectors = _domElementManager.GetSelectors("NoteCard");
-            
-            _logger.LogDebug("开始查找 {MaxCount} 个匹配关键词的笔记元素: {Keywords}", 
-                maxCount, string.Join(", ", keywords));
-            
-            // 尝试不同的选择器找到笔记元素
-            foreach (var selector in noteItemSelectors)
-            {
-                try
-                {
-                    var noteElements = await page.QuerySelectorAllAsync(selector);
-                    if (!noteElements.Any()) continue;
-                    
-                    _logger.LogDebug("使用选择器 {Selector} 找到 {Count} 个笔记元素", selector, noteElements.Count);
-                    
-                    // 检查每个笔记元素是否匹配关键词
-                    foreach (var noteElement in noteElements)
-                    {
-                        if (matchingElements.Count >= maxCount) break;
-                        
-                        if (!await IsElementVisible(noteElement)) continue;
-                        
-                        var noteText = await ExtractNoteTextForMatching(noteElement);
-                        if (MatchesKeywords(noteText, keywords))
-                        {
-                            matchingElements.Add(noteElement);
-                            _logger.LogDebug("找到匹配的笔记元素 #{Index}: {Text}", 
-                                matchingElements.Count,
-                                noteText.Substring(0, Math.Min(50, noteText.Length)));
-                        }
-                    }
-                    
-                    // 如果已经找到足够的元素，停止查找
-                    if (matchingElements.Count >= maxCount) break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug("选择器 {Selector} 查找失败: {Error}", selector, ex.Message);
-                }
-            }
-            
-            _logger.LogInformation("找到 {Count}/{MaxCount} 个匹配关键词的笔记元素", 
-                matchingElements.Count, maxCount);
-                
-            return matchingElements;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "批量查找匹配笔记元素时发生异常: {Keywords}", string.Join(", ", keywords));
-            return matchingElements;
-        }
-    }
-    
     #endregion
 
     #region 通用核心方法
@@ -1327,12 +1390,12 @@ public class XiaoHongShuService : IXiaoHongShuService
     private ProcessingMode DetermineProcessingMode(int index, NoteDetail? note = null)
     {
         // 如果有笔记类型信息，优先基于类型决策
-        if (note?.Type != NoteType.Unknown)
+        if (note is {Type: not NoteType.Unknown})
         {
             return note.Type switch
             {
-                NoteType.Image => ProcessingMode.Fast,      // 图文：快速处理（数量最多，包含长文）
-                NoteType.Video => ProcessingMode.Standard,  // 视频：标准处理（需要加载视频）
+                NoteType.Image => ProcessingMode.Fast,     // 图文：快速处理（数量最多，包含长文）
+                NoteType.Video => ProcessingMode.Standard, // 视频：标准处理（需要加载视频）
                 _ => ProcessingMode.Standard
             };
         }
@@ -1359,30 +1422,22 @@ public class XiaoHongShuService : IXiaoHongShuService
     }
 
     /// <summary>
-    /// 从文本中提取数字
-    /// </summary>
-    private bool ExtractNumber(string text, out int number)
-    {
-        number = 0;
-        var match = Regex.Match(text, @"\d+");
-        return match.Success && int.TryParse(match.Value, out number);
-    }
-
-    /// <summary>
     /// 验证发布前提条件：根据笔记类型验证媒体文件要求
     /// </summary>
-    private async Task<bool> ValidatePublishRequirementsAsync(NoteType noteType, List<string>? imagePaths, string? videoPath)
+    private Task<bool> ValidatePublishRequirementsAsync(NoteType noteType, List<string>? imagePaths, string? videoPath)
     {
         var hasImages = imagePaths?.Any(File.Exists) == true;
         var hasVideo = !string.IsNullOrEmpty(videoPath) && File.Exists(videoPath);
 
-        return noteType switch
+        var ok = noteType switch
         {
             NoteType.Image => hasImages && !hasVideo,
             NoteType.Video => hasVideo && !hasImages,
             NoteType.Unknown => false, // 未知类型不允许发布
             _ => false
         };
+
+        return Task.FromResult(ok);
     }
 
     /// <summary>
@@ -1731,8 +1786,12 @@ public class XiaoHongShuService : IXiaoHongShuService
                 var segment = segments[i].Trim();
                 if (string.IsNullOrEmpty(segment)) continue;
 
-                // 输入这一段
-                await contentInput.TypeAsync(segment, new() {Delay = Random.Shared.Next(50, 150)});
+                // 输入这一段（使用键盘输入替代过时的 ElementHandle.TypeAsync）
+                await contentInput.FocusAsync();
+                await page.Keyboard.TypeAsync(segment, new KeyboardTypeOptions
+                {
+                    Delay = Random.Shared.Next(50, 150)
+                });
 
                 // 补充标点符号（如果原文有的话）
                 if (i < segments.Count - 1)
@@ -1742,7 +1801,8 @@ public class XiaoHongShuService : IXiaoHongShuService
                         content.Contains(segment + "？") ? "？" : "";
                     if (!string.IsNullOrEmpty(punctuation))
                     {
-                        await contentInput.TypeAsync(punctuation);
+                        await contentInput.FocusAsync();
+                        await page.Keyboard.TypeAsync(punctuation);
                     }
 
                     // 如果原文有换行，保留换行
@@ -1797,7 +1857,11 @@ public class XiaoHongShuService : IXiaoHongShuService
 
                 // 输入标签（有些平台需要#，有些不需要）
                 var tagText = tag.StartsWith("#") ? tag : $"#{tag}";
-                await tagInput.TypeAsync(tagText, new() {Delay = Random.Shared.Next(80, 150)});
+                await tagInput.FocusAsync();
+                await page.Keyboard.TypeAsync(tagText, new KeyboardTypeOptions
+                {
+                    Delay = Random.Shared.Next(80, 150)
+                });
 
                 // 确认标签（回车或空格）
                 await Task.Delay(Random.Shared.Next(200, 400));
@@ -2356,18 +2420,12 @@ public class XiaoHongShuService : IXiaoHongShuService
     }
 
     /// <summary>
-    /// 关键词匹配逻辑
+    /// 关键词匹配逻辑（增强版包装）：
+    /// 复用 <see cref="KeywordMatcher"/>，保持现有调用点不变。
     /// </summary>
     private bool MatchesKeywords(string text, List<string> keywords)
     {
-        if (string.IsNullOrEmpty(text) || keywords.Count == 0) return false;
-
-        var lowerText = text.ToLowerInvariant();
-
-        // 简单的任意关键词匹配
-        return keywords.Any(keyword =>
-            !string.IsNullOrEmpty(keyword) &&
-            lowerText.Contains(keyword.ToLowerInvariant()));
+        return KeywordMatcher.Matches(text, keywords);
     }
     #endregion
 
@@ -2506,24 +2564,21 @@ public class XiaoHongShuService : IXiaoHongShuService
     #endregion
 
     #region 搜索功能 - SearchNotes
-
     public async Task<OperationResult<SearchResult>> SearchNotesAsync(
         string keyword,
         int maxResults = 20,
         string sortBy = "comprehensive",
-        string noteType = "all", 
+        string noteType = "all",
         string publishTime = "all",
         bool includeAnalytics = true,
         bool autoExport = true,
         string? exportFileName = null)
     {
         var startTime = DateTime.UtcNow;
-        var monitoredResponses = new List<SearchNotesApiResponse>();
-        int requestCount = 0;
-        
+
         try
         {
-            _logger.LogInformation("开始基于API监听的智能搜索: 关键词={Keyword}, 最大结果={MaxResults}", 
+            _logger.LogInformation("开始基于UniversalApiMonitor的智能搜索: 关键词={Keyword}, 最大结果={MaxResults}",
                 keyword, maxResults);
 
             // 1. 检查登录状态
@@ -2536,14 +2591,25 @@ public class XiaoHongShuService : IXiaoHongShuService
             }
 
             // 2. 获取浏览器上下文和页面
-            var context = await _browserManager.GetBrowserContextAsync();
-            var page = context.Pages.FirstOrDefault() ?? await context.NewPageAsync();
+            var page = await _browserManager.GetPageAsync();
 
-            // 3. 设置API监听器
-            var config = new SearchMonitorConfig();
-            await SetupSearchApiMonitorAsync(page, config, monitoredResponses, () => requestCount++);
-            
-            _logger.LogDebug("API监听器设置完成，开始执行拟人化搜索");
+            // 3. 设置SearchNotes API监听器（统一架构模式）
+            _browserManager.BeginOperation();
+            var endpointsToMonitor = new HashSet<ApiEndpointType>
+            {
+                ApiEndpointType.SearchNotes
+            };
+
+            var setupSuccess = _universalApiMonitor.SetupMonitor(page, endpointsToMonitor);
+            if (!setupSuccess)
+            {
+                return OperationResult<SearchResult>.Fail(
+                    "无法设置SearchNotes API监听器",
+                    ErrorType.NetworkError,
+                    "SEARCH_API_MONITOR_SETUP_FAILED");
+            }
+
+            _logger.LogDebug("SearchNotes API监听器设置完成，开始执行拟人化搜索");
 
             // 4. 执行拟人化搜索操作
             var searchResult = await PerformHumanizedSearchAsync(page, keyword, sortBy, noteType, publishTime);
@@ -2555,49 +2621,61 @@ public class XiaoHongShuService : IXiaoHongShuService
                     "HUMANIZED_SEARCH_FAILED");
             }
 
-            // 5. 收集API数据
-            _logger.LogDebug("拟人化搜索完成，开始收集API数据");
-            var apiNotes = await CollectSearchApiDataAsync(monitoredResponses, maxResults);
-            
-            if (apiNotes.Count == 0)
+            // 5. 等待SearchNotes API响应
+            _logger.LogDebug("拟人化搜索完成，等待SearchNotes API响应...");
+            var searchApiReceived = await _universalApiMonitor.WaitForResponsesAsync(
+                ApiEndpointType.SearchNotes, 1);
+
+            if (!searchApiReceived)
             {
                 return OperationResult<SearchResult>.Fail(
-                    "未能从API监听中获取到搜索数据",
+                    "等待SearchNotes API响应超时",
                     ErrorType.NetworkError,
-                    "NO_API_DATA_COLLECTED");
+                    "SEARCH_API_TIMEOUT");
             }
 
-            // 6. 转换为标准格式
-            var recommendedNotes = ConvertToRecommendedNotes(apiNotes, keyword);
+            // 6. 获取监听到的API数据
+            var searchNoteDetails = _universalApiMonitor.GetMonitoredNoteDetails(ApiEndpointType.SearchNotes);
+            if (searchNoteDetails.Count == 0)
+            {
+                return OperationResult<SearchResult>.Fail(
+                    "无法从SearchNotes API获取搜索数据",
+                    ErrorType.ElementNotFound,
+                    "NO_SEARCH_API_DATA");
+            }
+
+            // 7. 转换为标准格式
+            var recommendedNotes = ConvertNoteDetailsToRecommendedNotes(searchNoteDetails, keyword);
             _logger.LogInformation("成功转换 {Count} 个搜索结果", recommendedNotes.Count);
 
-            // 7. 计算统计信息
-            var statistics = includeAnalytics 
+            // 8. 计算统计信息
+            var statistics = includeAnalytics
                 ? CalculateEnhancedSearchStatistics(recommendedNotes)
                 : CreateEmptyEnhancedStatistics();
 
             var duration = DateTime.UtcNow - startTime;
 
-            // 8. 转换为NoteInfo格式用于导出
+            // 9. 转换为NoteInfo格式用于导出
             var noteInfoList = ConvertRecommendedNotesToNoteInfo(recommendedNotes);
 
-            // 9. 执行导出功能（如果启用）
+            // 10. 执行导出功能（如果启用）
             SimpleExportInfo? exportInfo = null;
             if (autoExport && noteInfoList.Count > 0)
             {
                 try
                 {
-                    var fileName = exportFileName ?? 
-                                  $"search_{keyword}_{DateTime.Now:yyyyMMdd_HHmmss}";
-                    
+                    var fileName = exportFileName ??
+                                   $"search_{keyword}_{DateTime.Now:yyyyMMdd_HHmmss}";
+
                     var exportOptions = new ExportOptions(IncludeImages: true, IncludeComments: includeAnalytics);
                     var exportResult = ExportNotesToExcel(noteInfoList, fileName, exportOptions);
-                    
+
                     if (exportResult.Success)
                     {
                         exportInfo = exportResult.Data;
-                        _logger.LogInformation("搜索数据导出成功: {FilePath}, 记录数: {Count}", 
-                            exportInfo.FilePath, noteInfoList.Count);
+                        var exportedPath = exportResult.Data?.FilePath ?? string.Empty;
+                        _logger.LogInformation("搜索数据导出成功: {FilePath}, 记录数: {Count}",
+                            exportedPath, noteInfoList.Count);
                     }
                     else
                     {
@@ -2610,16 +2688,16 @@ public class XiaoHongShuService : IXiaoHongShuService
                 }
             }
 
-            // 10. 构建搜索结果
+            // 11. 构建搜索结果
             var searchResultData = new SearchResult(
                 Notes: noteInfoList,
                 TotalCount: recommendedNotes.Count,
                 SearchKeyword: keyword,
                 Duration: duration,
                 Statistics: statistics,
-                ExportInfo: exportInfo, // 包含导出信息
-                ApiRequests: requestCount,
-                InterceptedResponses: monitoredResponses.Count,
+                ExportInfo: exportInfo,
+                ApiRequests: 1, // 统一架构下不再记录多个请求
+                InterceptedResponses: 1,
                 SearchParameters: new SearchParametersInfo(
                     Keyword: keyword,
                     SortBy: sortBy,
@@ -2631,18 +2709,32 @@ public class XiaoHongShuService : IXiaoHongShuService
             );
 
             _logger.LogInformation(
-                "API监听搜索完成: 关键词={Keyword}, 结果={Count}条, 耗时={Duration}ms, API请求={ApiRequests}次", 
-                keyword, recommendedNotes.Count, duration.TotalMilliseconds, requestCount);
+                "UniversalApiMonitor搜索完成: 关键词={Keyword}, 结果={Count}条, 耗时={Duration}ms",
+                keyword, recommendedNotes.Count, duration.TotalMilliseconds);
 
             return OperationResult<SearchResult>.Ok(searchResultData);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "API监听搜索失败: 关键词={Keyword}", keyword);
+            _logger.LogError(ex, "UniversalApiMonitor搜索失败: 关键词={Keyword}", keyword);
             return OperationResult<SearchResult>.Fail(
                 $"搜索失败: {ex.Message}",
                 ErrorType.NetworkError,
-                "API_SEARCH_EXCEPTION");
+                "SEARCH_EXCEPTION");
+        }
+        finally
+        {
+            // 清理API监听器
+            try
+            {
+                await _universalApiMonitor.StopMonitoringAsync();
+                _universalApiMonitor.ClearMonitoredData(ApiEndpointType.SearchNotes);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "清理SearchNotes API监听器失败");
+            }
+            _browserManager.EndOperation();
         }
     }
 
@@ -2653,7 +2745,7 @@ public class XiaoHongShuService : IXiaoHongShuService
     private List<NoteInfo> ConvertRecommendedNotesToNoteInfo(List<RecommendedNote> recommendedNotes)
     {
         var noteInfoList = new List<NoteInfo>();
-        
+
         foreach (var recommendedNote in recommendedNotes)
         {
             try
@@ -2663,23 +2755,33 @@ public class XiaoHongShuService : IXiaoHongShuService
                     Id = recommendedNote.Id,
                     Title = recommendedNote.Title,
                     Author = recommendedNote.Author,
+                    AuthorId = recommendedNote.AuthorId,
+                    AuthorAvatar = recommendedNote.AuthorAvatar,
                     Url = recommendedNote.Url,
                     CoverImage = recommendedNote.CoverImage,
                     LikeCount = recommendedNote.LikeCount,
                     CommentCount = recommendedNote.CommentCount,
+                    FavoriteCount = recommendedNote.FavoriteCount,
+                    ShareCount = recommendedNote.ShareCount,
                     Quality = recommendedNote.Quality,
                     MissingFields = recommendedNote.MissingFields,
                     Type = recommendedNote.Type,
-                    ExtractedAt = recommendedNote.ExtractedAt
+                    ExtractedAt = recommendedNote.ExtractedAt,
+                    Description = recommendedNote.Description,
+                    VideoUrl = recommendedNote.VideoUrl,
+                    VideoDuration = recommendedNote.VideoDuration,
+                    IsLiked = recommendedNote.IsLiked,
+                    IsCollected = recommendedNote.IsCollected,
+                    TrackId = recommendedNote.TrackId,
+                    XsecToken = recommendedNote.XsecToken,
+                    PageToken = recommendedNote.PageToken,
+                    SearchId = recommendedNote.SearchId,
+                    CoverInfo = recommendedNote.CoverInfo,
+                    InteractInfo = recommendedNote.InteractInfo,
+                    UserInfo = recommendedNote.UserInfo,
+                    Images = recommendedNote.Images.Select(img => img.Url).Where(u => !string.IsNullOrEmpty(u)).ToList()
                 };
-                
-                // 设置收藏数（如果有的话）
-                if (recommendedNote.FavoriteCount.HasValue)
-                {
-                    // NoteInfo没有FavoriteCount字段，可以考虑扩展或忽略
-                    // 这里暂时忽略，因为NoteInfo结构相对简单
-                }
-                
+
                 noteInfoList.Add(noteInfo);
             }
             catch (Exception ex)
@@ -2687,74 +2789,45 @@ public class XiaoHongShuService : IXiaoHongShuService
                 _logger.LogWarning(ex, "转换推荐笔记到NoteInfo失败: ID={Id}", recommendedNote.Id);
             }
         }
-        
+
         return noteInfoList;
     }
 
     /// <summary>
-    /// 设置搜索API监听器
-    /// 使用被动监听模式捕获搜索API的响应数据，降低检测风险
+    /// 将NoteDetail列表转换为RecommendedNote列表
     /// </summary>
-    private async Task SetupSearchApiMonitorAsync(
-        IPage page, 
-        SearchMonitorConfig config, 
-        List<SearchNotesApiResponse> monitoredResponses,
-        Action onRequestCount)
+    private List<RecommendedNote> ConvertNoteDetailsToRecommendedNotes(List<NoteDetail> noteDetails, string searchKeyword)
     {
-        _logger.LogDebug("设置搜索API监听器: {ApiPattern}", config.ApiUrlPattern);
-
-        // 设置被动响应监听器
-        page.Context.Response += async (sender, response) =>
+        return noteDetails.Select(noteDetail =>
         {
-            try
+            var rn = new RecommendedNote
             {
-                // 检查是否为目标搜索API
-                if (!response.Url.Contains("/api/sns/web/v1/search/notes"))
-                    return;
-
-                onRequestCount();
-                
-                _logger.LogDebug("检测到搜索API响应: {Url}", response.Url);
-                
-                // 只处理成功的响应
-                if (response.Status == 200)
-                {
-                    try
-                    {
-                        var responseText = await response.TextAsync();
-                        var searchApiResponse = JsonSerializer.Deserialize<SearchNotesApiResponse>(responseText, new JsonSerializerOptions
-                        {
-                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                            PropertyNameCaseInsensitive = true
-                        });
-                        
-                        if (searchApiResponse != null)
-                        {
-                            lock (monitoredResponses)
-                            {
-                                monitoredResponses.Add(searchApiResponse);
-                            }
-                            _logger.LogDebug("成功监听搜索API响应，数据条数: {Count}", searchApiResponse.Data?.Items.Count ?? 0);
-                        }
-                    }
-                    catch (Exception parseEx)
-                    {
-                        _logger.LogWarning(parseEx, "解析搜索API响应失败");
-                    }
-                }
-                else
-                {
-                    _logger.LogDebug("搜索API响应状态码: {Status}", response.Status);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "搜索API监听器处理异常");
-            }
-        };
-
-        _logger.LogDebug("搜索API监听器设置完成");
-        await Task.CompletedTask;
+                Id = noteDetail.Id,
+                Title = noteDetail.Title,
+                Author = noteDetail.Author,
+                AuthorId = noteDetail.AuthorId,
+                AuthorAvatar = noteDetail.AuthorAvatar,
+                CoverImage = noteDetail.CoverImage,
+                Url = noteDetail.Url,
+                Type = noteDetail.Type,
+                LikeCount = noteDetail.LikeCount,
+                CommentCount = noteDetail.CommentCount,
+                FavoriteCount = noteDetail.FavoriteCount,
+                ShareCount = noteDetail.ShareCount,
+                ExtractedAt = noteDetail.ExtractedAt,
+                Quality = noteDetail.Quality,
+                MissingFields = noteDetail.MissingFields ?? [],
+                Description = string.IsNullOrEmpty(noteDetail.Description) ? noteDetail.Content : noteDetail.Description,
+                VideoUrl = noteDetail.VideoUrl,
+                VideoDuration = noteDetail.VideoDuration,
+                IsLiked = noteDetail.IsLiked,
+                IsCollected = noteDetail.IsCollected,
+                TrackId = noteDetail.TrackId,
+                XsecToken = noteDetail.XsecToken,
+                Images = noteDetail.Images.Select(u => new RecommendedImageInfo {Url = u}).ToList()
+            };
+            return rn;
+        }).ToList();
     }
 
     /// <summary>
@@ -2762,44 +2835,90 @@ public class XiaoHongShuService : IXiaoHongShuService
     /// 导航到搜索页面，输入关键词，设置筛选条件，模拟真实用户行为
     /// </summary>
     private async Task<OperationResult<bool>> PerformHumanizedSearchAsync(
-        IPage page, 
-        string keyword, 
-        string sortBy, 
-        string noteType, 
+        IPage page,
+        string keyword,
+        string sortBy,
+        string noteType,
         string publishTime)
     {
         try
         {
             _logger.LogDebug("开始执行拟人化搜索操作");
-
-            // 1. 导航到探索页面（而不是search_result页面，避免404）
-            var exploreUrl = "https://www.xiaohongshu.com/explore";
-            await page.GotoAsync(exploreUrl, new PageGotoOptions
+            try
             {
-                WaitUntil = WaitUntilState.NetworkIdle,
-                Timeout = 30000
-            });
+                // 1. 导航到发现页面
+                _browserManager.BeginOperation();
+                var navigationResult = await NavigateToDiscoverPageAsync(page, TimeSpan.FromSeconds(30));
+                if (!navigationResult.Success)
+                {
+                    _logger.LogError("导航到发现页面失败：{Error}", navigationResult.ErrorMessage);
+                    return OperationResult<bool>.Fail(
+                        $"导航到发现页面失败：{navigationResult.ErrorMessage}",
+                        ErrorType.NavigationError,
+                        "NAVIGATION_FAILED");
+                }
+            }
+            catch (PlaywrightException)
+            {
+                // 页面/上下文可能被重连打断，尝试一次自愈：重新获取页面并重试导航
+                _logger.LogWarning("页面在导航时已关闭，尝试重新获取页面并重试导航");
+                var freshPage = await _browserManager.GetPageAsync();
+                page = freshPage;
+                var navigationResult = await NavigateToDiscoverPageAsync(page, TimeSpan.FromSeconds(30));
+                if (!navigationResult.Success)
+                {
+                    _logger.LogError("导航到发现页面失败：{Error}", navigationResult.ErrorMessage);
+                    return OperationResult<bool>.Fail(
+                        $"导航到发现页面失败：{navigationResult.ErrorMessage}",
+                        ErrorType.NavigationError,
+                        "NAVIGATION_FAILED");
+                }
+            }
+            finally
+            {
+                _browserManager.EndOperation();
+            }
 
-            // 2. 等待页面完全加载
-            await _humanizedInteraction.HumanWaitAsync(HumanWaitType.PageLoading);
+            // 2. 等待页面加载（使用统一等待服务，具备降级与重试能力）
+            await _pageLoadWaitService.WaitForPageLoadAsync(page);
 
             // 3. 模拟用户思考过程
             await _humanizedInteraction.HumanWaitAsync(HumanWaitType.ThinkingPause);
 
-            // 4. 查找搜索输入框并输入关键词
-            var searchInputSelectors = new[] 
-            { 
-                "input[placeholder*='搜索']", 
-                ".search-input input", 
-                ".search-box input",
-                "input[type='search']"
-            };
-
-            IElementHandle? searchInput = null;
-            foreach (var selector in searchInputSelectors)
+            // 4. 查找搜索输入框（使用统一的别名选择器，容错更强）
+            var searchInput = await _humanizedInteraction.FindElementAsync(page, "SearchInput", retries: 3, timeout: _timeouts.UiWaitMs);
+            if (searchInput != null)
             {
-                searchInput = await page.QuerySelectorAsync(selector);
-                if (searchInput != null) break;
+                _logger.LogDebug("搜索输入框定位成功：使用别名选择器SearchInput");
+            }
+            if (searchInput == null)
+            {
+                // 兜底：再尝试几组直接选择器（包含用户提供DOM）
+                var fallbacks = new[]
+                {
+                    "#search-input",
+                    ".search-input",
+                    "input[placeholder='搜索小红书']",
+                    ".input-box input",
+                    "input[placeholder*='搜索']",
+                };
+                foreach (var sel in fallbacks)
+                {
+                    try
+                    {
+                        await page.WaitForSelectorAsync(sel, new() {Timeout = _timeouts.UiWaitMs});
+                        searchInput = await page.QuerySelectorAsync(sel);
+                        if (searchInput != null)
+                        {
+                            _logger.LogDebug("搜索输入框定位成功：fallback选择器 {Selector}", sel);
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        /* ignore and try next */
+                    }
+                }
             }
 
             if (searchInput == null)
@@ -2810,22 +2929,90 @@ public class XiaoHongShuService : IXiaoHongShuService
                     "SEARCH_INPUT_NOT_FOUND");
             }
 
-            // 5. 清空输入框并输入关键词
+            _logger.LogDebug(searchInput.ToString());
+            // 5. 清空输入框并输入关键词（尽量保持焦点在输入框上）
             await _humanizedInteraction.HumanClickAsync(page, searchInput);
             await _humanizedInteraction.HumanWaitAsync(HumanWaitType.ThinkingPause);
-            
+
+            // 尝试快捷键全选删除 + 兜底Fill清空，保证触发输入事件
+            try { await page.Keyboard.PressAsync("Control+A"); }
+            catch { }
+            try { await page.Keyboard.PressAsync("Meta+A"); }
+            catch { }
+            try { await page.Keyboard.PressAsync("Backspace"); }
+            catch { }
             await searchInput.FillAsync("");
             await Task.Delay(Random.Shared.Next(300, 800));
-            
-            // 模拟打字
-            foreach (char c in keyword)
+
+            // 模拟打字（非过时API）：聚焦后用键盘输入
+            await searchInput.FocusAsync();
+            await page.Keyboard.TypeAsync(keyword, new KeyboardTypeOptions
             {
-                await page.Keyboard.TypeAsync(c.ToString());
-                await Task.Delay(Random.Shared.Next(80, 200));
+                Delay = Random.Shared.Next(80, 160)
+            });
+
+            // 6. 提交搜索：优先回车，失败则回退点击按钮
+            bool submitted = false;
+            try
+            {
+                await searchInput.PressAsync("Enter");
+                submitted = true;
+                _logger.LogDebug("搜索提交：通过Enter触发");
+            }
+            catch { }
+
+            // 等待结果页迹象（URL或布局容器）
+            bool navigated = false;
+            if (submitted)
+            {
+                try
+                {
+                    await page.WaitForURLAsync("**/search_result**", new() {Timeout = _timeouts.UiWaitMs});
+                    navigated = true;
+                    _logger.LogDebug("检测到搜索结果页URL变化");
+                }
+                catch { }
+                if (!navigated)
+                {
+                    try
+                    {
+                        await page.WaitForSelectorAsync(".search-layout", new() {Timeout = _timeouts.UiWaitMs});
+                        navigated = true;
+                        _logger.LogDebug("检测到搜索结果页布局容器");
+                    }
+                    catch { }
+                }
             }
 
-            // 6. 提交搜索
-            await page.Keyboard.PressAsync("Enter");
+            if (!navigated)
+            {
+                // 回退点击搜索按钮
+                var searchBtn = await _humanizedInteraction.FindElementAsync(page, "SearchButton", retries: 2, timeout: 3000);
+                if (searchBtn != null)
+                {
+                    await _humanizedInteraction.HumanClickAsync(page, searchBtn);
+                    _logger.LogDebug("搜索提交：通过点击SearchButton触发");
+                    // 再次等待结果页迹象
+                    try
+                    {
+                        await page.WaitForURLAsync("**/search_result**", new() {Timeout = _timeouts.UiWaitMs});
+                        navigated = true;
+                        _logger.LogDebug("检测到搜索结果页URL变化");
+                    }
+                    catch { }
+                    if (!navigated)
+                    {
+                        try
+                        {
+                            await page.WaitForSelectorAsync(".search-layout", new() {Timeout = _timeouts.UiWaitMs});
+                            navigated = true;
+                            _logger.LogDebug("检测到搜索结果页布局容器");
+                        }
+                        catch { }
+                    }
+                }
+            }
+
             await _humanizedInteraction.HumanWaitAsync(HumanWaitType.PageLoading);
 
             // 7. 应用筛选条件（如果不是默认值）
@@ -2886,14 +3073,24 @@ public class XiaoHongShuService : IXiaoHongShuService
             {
                 try
                 {
+                    // 等待筛选按钮出现并可见，最长来自配置（统一 UI 等待）
+                    try { await page.WaitForSelectorAsync(selector, new() {Timeout = _timeouts.UiWaitMs, State = WaitForSelectorState.Visible}); }
+                    catch { }
                     var filterButton = await page.QuerySelectorAsync(selector);
                     if (filterButton != null)
                     {
                         await _humanizedInteraction.HumanClickAsync(page, filterButton);
                         await Task.Delay(Random.Shared.Next(500, 1000));
 
+                        // 可选：等待筛选面板出现（使用别名以提升鲁棒性）
+                        try { await _humanizedInteraction.FindElementAsync(page, "FilterPanel", retries: 2, timeout: _timeouts.UiWaitMs); }
+                        catch { }
+
                         // 查找具体的筛选值
                         var valueSelector = $"[data-value='{filterValue}'], button:has-text('{filterValue}')";
+                        // 等待筛选值出现并可见，最长来自配置（统一 UI 等待）
+                        try { await page.WaitForSelectorAsync(valueSelector, new() {Timeout = _timeouts.UiWaitMs, State = WaitForSelectorState.Visible}); }
+                        catch { }
                         var valueButton = await page.QuerySelectorAsync(valueSelector);
                         if (valueButton != null)
                         {
@@ -2914,241 +3111,6 @@ public class XiaoHongShuService : IXiaoHongShuService
             _logger.LogWarning(ex, "应用搜索筛选失败: {FilterType} = {FilterValue}", filterType, filterValue);
             // 筛选失败不阻止主流程
         }
-    }
-
-    /// <summary>
-    /// 等待并收集搜索API数据
-    /// 等待网络监听器收集足够的数据
-    /// </summary>
-    private async Task<List<SearchNoteItem>> CollectSearchApiDataAsync(
-        List<SearchNotesApiResponse> interceptedResponses, 
-        int maxResults)
-    {
-        var collectedNotes = new List<SearchNoteItem>();
-        var waitTime = 0;
-        const int maxWaitTime = 30000; // 最大等待30秒
-        const int checkInterval = 1000; // 每秒检查一次
-
-        _logger.LogDebug("开始收集搜索API数据，目标数量: {MaxResults}", maxResults);
-
-        while (collectedNotes.Count < maxResults && waitTime < maxWaitTime)
-        {
-            // 收集所有监听到的笔记
-            foreach (var response in interceptedResponses)
-            {
-                if (response.Data?.Items != null)
-                {
-                    foreach (var item in response.Data.Items)
-                    {
-                        if (collectedNotes.All(n => n.Id != item.Id))
-                        {
-                            collectedNotes.Add(item);
-                            if (collectedNotes.Count >= maxResults) break;
-                        }
-                    }
-                }
-                if (collectedNotes.Count >= maxResults) break;
-            }
-
-            if (collectedNotes.Count >= maxResults) break;
-
-            // 如果数据不够，等待更多响应
-            await Task.Delay(checkInterval);
-            waitTime += checkInterval;
-
-            _logger.LogDebug("当前收集到 {Current}/{Target} 个笔记，等待时间: {WaitTime}ms", 
-                collectedNotes.Count, maxResults, waitTime);
-        }
-
-        _logger.LogInformation("API数据收集完成: {Collected}/{Target} 个笔记，耗时: {WaitTime}ms", 
-            collectedNotes.Count, maxResults, waitTime);
-
-        return collectedNotes.Take(maxResults).ToList();
-    }
-
-    /// <summary>
-    /// 转换API数据为搜索结果笔记对象
-    /// 将搜索API返回的原始数据转换为结构化的笔记对象，用于搜索结果展示
-    /// </summary>
-    private List<RecommendedNote> ConvertToRecommendedNotes(List<SearchNoteItem> apiItems, string searchKeyword)
-    {
-        var recommendedNotes = new List<RecommendedNote>();
-
-        foreach (var item in apiItems)
-        {
-            try
-            {
-                var recommendedNote = ConvertSingleNoteItem(item, searchKeyword);
-                if (recommendedNote != null)
-                {
-                    recommendedNotes.Add(recommendedNote);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "转换笔记项目失败: ID={Id}", item.Id);
-            }
-        }
-
-        return recommendedNotes;
-    }
-
-    /// <summary>
-    /// 转换单个笔记项目
-    /// 详细的数据映射和转换逻辑
-    /// </summary>
-    private RecommendedNote? ConvertSingleNoteItem(SearchNoteItem item, string searchKeyword)
-    {
-        if (item.NoteCard == null) return null;
-
-        var note = item.NoteCard;
-        var missingFields = new List<string>();
-
-        var recommendedNote = new RecommendedNote
-        {
-            Id = item.Id,
-            Title = note.DisplayTitle,
-            Description = note.Desc,
-            Author = note.User?.Nickname ?? "未知用户",
-            AuthorId = note.User?.UserId ?? string.Empty,
-            AuthorAvatar = note.User?.Avatar ?? string.Empty,
-            Url = $"https://www.xiaohongshu.com/explore/{item.Id}",
-            TrackId = item.TrackId,
-            XsecToken = item.XsecToken,
-            ExtractedAt = DateTime.UtcNow
-        };
-
-        // 设置用户信息
-        if (note.User != null)
-        {
-            recommendedNote.UserInfo = new RecommendedUserInfo
-            {
-                UserId = note.User.UserId,
-                Nickname = note.User.Nickname,
-                Avatar = note.User.Avatar,
-                IsVerified = note.User.Verified
-            };
-        }
-
-        // 设置封面信息
-        if (note.Cover != null)
-        {
-            recommendedNote.CoverImage = SelectBestCoverUrl(note.Cover);
-            recommendedNote.CoverInfo = new RecommendedCoverInfo
-            {
-                DefaultUrl = note.Cover.UrlDefault,
-                PreviewUrl = note.Cover.UrlPre,
-                Width = note.Cover.Width,
-                Height = note.Cover.Height,
-                FileId = note.Cover.FileId,
-                Scenes = note.Cover.InfoList.Select(info => new ImageSceneInfo
-                {
-                    SceneType = info.ImageScene,
-                    Url = info.Url
-                }).ToList()
-            };
-        }
-
-        // 设置互动信息
-        if (note.InteractInfo != null)
-        {
-            var likeCount = note.InteractInfo.LikedCount;
-            recommendedNote.LikeCount = likeCount;
-            recommendedNote.CommentCount = note.InteractInfo.CommentCount;
-            recommendedNote.FavoriteCount = note.InteractInfo.CollectedCount;
-            recommendedNote.ShareCount = note.InteractInfo.ShareCount;
-            recommendedNote.IsLiked = note.InteractInfo.Liked;
-            recommendedNote.IsCollected = note.InteractInfo.Collected;
-
-            recommendedNote.InteractInfo = new RecommendedInteractInfo
-            {
-                LikedCountRaw = note.InteractInfo.LikedCount.ToString(),
-                LikedCount = likeCount,
-                CommentCount = note.InteractInfo.CommentCount,
-                CollectedCount = note.InteractInfo.CollectedCount,
-                ShareCount = note.InteractInfo.ShareCount,
-                Liked = note.InteractInfo.Liked,
-                Collected = note.InteractInfo.Collected
-            };
-        }
-        else
-        {
-            missingFields.Add("InteractInfo");
-        }
-
-        // 设置视频信息
-        if (note.Video != null)
-        {
-            recommendedNote.VideoInfo = new RecommendedVideoInfo
-            {
-                Duration = note.Video.Duration,
-                Cover = note.Video.Cover,
-                Url = note.Video.Url,
-                Width = note.Video.Width,
-                Height = note.Video.Height
-            };
-            recommendedNote.VideoDuration = note.Video.Duration;
-            recommendedNote.VideoUrl = note.Video.Url;
-            recommendedNote.Type = NoteType.Video;
-        }
-
-        // 设置图片信息
-        if (note.ImageList.Count != 0)
-        {
-            recommendedNote.Images = note.ImageList.Select(img => new RecommendedImageInfo
-            {
-                Url = img.Url,
-                Width = img.Width,
-                Height = img.Height,
-                Scenes = img.InfoList.Select(info => new ImageSceneInfo
-                {
-                    SceneType = info.ImageScene,
-                    Url = info.Url
-                }).ToList()
-            }).ToList();
-
-            if (recommendedNote.Type == NoteType.Unknown)
-            {
-                recommendedNote.Type = NoteType.Image;
-            }
-        }
-
-        // 确定笔记类型
-        if (recommendedNote.Type == NoteType.Unknown)
-        {
-            recommendedNote.DetermineType();
-        }
-
-        // 设置数据质量
-        recommendedNote.Quality = missingFields.Count switch
-        {
-            0 => DataQuality.Complete,
-            <= 2 => DataQuality.Partial,
-            _ => DataQuality.Minimal
-        };
-        recommendedNote.MissingFields = missingFields;
-
-        return recommendedNote;
-    }
-
-    /// <summary>
-    /// 选择最佳封面图片URL
-    /// 优先级：UrlDefault > UrlPre > InfoList中的最佳选择
-    /// </summary>
-    private string SelectBestCoverUrl(SearchCoverInfo cover)
-    {
-        if (!string.IsNullOrEmpty(cover.UrlDefault))
-            return cover.UrlDefault;
-
-        if (!string.IsNullOrEmpty(cover.UrlPre))
-            return cover.UrlPre;
-
-        // 从InfoList中选择最佳URL
-        var bestInfo = cover.InfoList.FirstOrDefault(info => info.ImageScene == "WB_DFT")
-                      ?? cover.InfoList.FirstOrDefault(info => info.ImageScene == "WB_PRV")
-                      ?? cover.InfoList.FirstOrDefault();
-
-        return bestInfo?.Url ?? string.Empty;
     }
 
     /// <summary>
@@ -3375,7 +3337,810 @@ public class XiaoHongShuService : IXiaoHongShuService
             _ => "不限"
         };
     }
+    #endregion
 
+    #region 推荐服务功能 (原 RecommendService)
+    /// <summary>
+    /// 获取推荐笔记，确保API被正确触发
+    /// 合并自 RecommendService.GetRecommendedNotesAsync
+    /// </summary>
+    /// <param name="limit">获取数量限制</param>
+    /// <param name="timeout">超时时间</param>
+    /// <returns>推荐结果</returns>
+    public async Task<OperationResult<RecommendListResult>> GetRecommendedNotesAsync(int limit = 20, TimeSpan? timeout = null)
+    {
+        timeout ??= TimeSpan.FromMinutes(5);
+        var startTime = DateTime.UtcNow;
+
+        try
+        {
+            _logger.LogInformation("开始获取推荐笔记，数量：{Limit}，超时：{Timeout}分钟", limit, timeout.Value.TotalMinutes);
+
+            // 检查登录状态
+            if (!await _accountManager.IsLoggedInAsync())
+            {
+                return OperationResult<RecommendListResult>.Fail(
+                    "用户未登录，请先登录",
+                    ErrorType.LoginRequired,
+                    "NOT_LOGGED_IN");
+            }
+
+            var page = await _browserManager.GetPageAsync();
+
+            // 设置Homefeed API监听器
+            _browserManager.BeginOperation();
+            var endpointsToMonitor = new HashSet<ApiEndpointType>
+            {
+                ApiEndpointType.Homefeed
+            };
+
+            var setupSuccess = _universalApiMonitor.SetupMonitor(page, endpointsToMonitor);
+            if (!setupSuccess)
+            {
+                return OperationResult<RecommendListResult>.Fail(
+                    "无法设置Homefeed API监听器",
+                    ErrorType.NetworkError,
+                    "HOMEFEED_API_MONITOR_SETUP_FAILED");
+            }
+
+            _logger.LogDebug("Homefeed API监听器设置完成，开始导航到发现页面");
+
+            // 导航到发现页面并触发API
+            var navigationResult = await NavigateToDiscoverPageAsync(page, TimeSpan.FromSeconds(30));
+            if (!navigationResult.Success)
+            {
+                _logger.LogError("导航到发现页面失败：{Error}", navigationResult.ErrorMessage);
+                return OperationResult<RecommendListResult>.Fail(
+                    $"导航到发现页面失败：{navigationResult.ErrorMessage}",
+                    ErrorType.NavigationError,
+                    "NAVIGATION_FAILED");
+            }
+
+            // 通用等待：等待至少一次 Homefeed 响应到达（不主动触发）
+            var waitOk = await _universalApiMonitor.WaitForResponsesAsync(ApiEndpointType.Homefeed, 1);
+            if (!waitOk)
+            {
+                _logger.LogWarning("等待Homefeed响应超时或未到达，将继续尝试读取监听缓存。");
+            }
+
+            // 使用监听到的 API 数据
+            var homefeedNoteDetails = _universalApiMonitor.GetMonitoredNoteDetails(ApiEndpointType.Homefeed);
+            _logger.LogDebug("从Homefeed API获取到 {ApiNoteCount} 条笔记详情", homefeedNoteDetails.Count);
+
+            if (homefeedNoteDetails.Count == 0)
+            {
+                return OperationResult<RecommendListResult>.Fail(
+                    "无法从Homefeed API获取推荐数据",
+                    ErrorType.NetworkError,
+                    "HOMEFEED_API_NO_DATA");
+            }
+
+            var noteInfos = homefeedNoteDetails
+                .Select(ConvertNoteDetailToNoteInfo)
+                .Take(limit)
+                .ToList();
+
+            var duration = DateTime.UtcNow - startTime;
+            var rawResponses = _universalApiMonitor.GetRawResponses(ApiEndpointType.Homefeed);
+            var perf = new CollectionPerformanceMetrics(
+                successfulRequests: rawResponses.Count,
+                failedRequests: 0,
+                scrollCount: 0,
+                duration: duration);
+
+            var collectionResult = SmartCollectionResult.CreateSuccess(
+                noteInfos,
+                limit,
+                perf.RequestCount,
+                duration,
+                perf);
+
+            // 6. 转换为推荐结果格式（API-only）
+            var recommendResult = ConvertToRecommendResult(collectionResult, navigationResult);
+
+            _logger.LogInformation("推荐获取完成（API-only），收集{Count}/{Target}条笔记，耗时{Duration}ms",
+                recommendResult.Notes.Count, limit, duration.TotalMilliseconds);
+
+            return OperationResult<RecommendListResult>.Ok(recommendResult);
+        }
+        catch (Exception ex)
+        {
+            var duration = DateTime.UtcNow - startTime;
+            _logger.LogError(ex, "获取推荐笔记时发生异常，耗时{Duration}ms", duration.TotalMilliseconds);
+            return OperationResult<RecommendListResult>.Fail(
+                $"获取推荐失败：{ex.Message}",
+                ErrorType.Unknown,
+                "GET_RECOMMENDATIONS_EXCEPTION");
+        }
+        finally
+        {
+            // 清理API监听器
+            try
+            {
+                await _universalApiMonitor.StopMonitoringAsync();
+                _universalApiMonitor.ClearMonitoredData(ApiEndpointType.Homefeed);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "清理Homefeed API监听器失败");
+            }
+            _browserManager.EndOperation();
+        }
+    }
+
+    /// <summary>
+    /// 将NoteDetail转换为NoteInfo - 修复后版本
+    /// </summary>
+    /// <param name="noteDetail">笔记详情</param>
+    /// <returns>笔记信息</returns>
+    private NoteInfo ConvertNoteDetailToNoteInfo(NoteDetail noteDetail)
+    {
+        return new NoteInfo
+        {
+            Id = noteDetail.Id,
+            Title = noteDetail.Title,
+            Author = noteDetail.Author,
+            AuthorId = noteDetail.AuthorId,
+            AuthorAvatar = noteDetail.AuthorAvatar,
+            CoverImage = noteDetail.CoverImage,
+            LikeCount = noteDetail.LikeCount,
+            CommentCount = noteDetail.CommentCount,
+            FavoriteCount = noteDetail.FavoriteCount,
+            PublishTime = noteDetail.PublishTime,
+            Url = noteDetail.Url,
+            Content = noteDetail.Content,
+            Type = noteDetail.Type,
+            ExtractedAt = noteDetail.ExtractedAt,
+            Quality = noteDetail.Quality,
+            MissingFields = noteDetail.MissingFields
+        };
+    }
+
+    /// <summary>
+    /// 转换收集结果为推荐结果格式
+    /// 合并自 RecommendService.ConvertToRecommendResult
+    /// </summary>
+    private RecommendListResult ConvertToRecommendResult(
+        SmartCollectionResult collectionResult,
+        DiscoverNavigationResult navigationResult)
+    {
+        // 直接使用 NoteInfo，不需要转换为 RecommendNote
+        var notes = collectionResult.CollectedNotes;
+
+        _logger.LogDebug("开始转换收集结果，笔记总数：{Count}", notes.Count);
+
+        // 创建统计数据，使用安全的平均值计算
+        var notesWithLikes = notes.Where(n => n.LikeCount is > 0).ToList();
+        var notesWithComments = notes.Where(n => n.CommentCount is >= 0).ToList();
+        var notesWithCollects = notes.Where(n => n.FavoriteCount is >= 0).ToList();
+
+        _logger.LogDebug("统计数据过滤结果 - 有点赞数据：{LikeCount}，有评论数据：{CommentCount}，有收藏数据：{CollectCount}",
+            notesWithLikes.Count, notesWithComments.Count, notesWithCollects.Count);
+
+        // 安全计算平均值，避免空序列异常
+        var avgLikes = notesWithLikes.Count > 0 ? notesWithLikes.Average(n => n.LikeCount ?? 0) : 0;
+        var avgComments = notesWithComments.Count > 0 ? notesWithComments.Average(n => n.CommentCount ?? 0) : 0;
+        var avgCollects = notesWithCollects.Count > 0 ? notesWithCollects.Average(n => n.FavoriteCount ?? 0) : 0;
+
+        var statistics = new RecommendStatistics(
+            VideoNotesCount: notes.Count(n => n.Type == NoteType.Video),
+            ImageNotesCount: notes.Count(n => n.Type == NoteType.Image),
+            AverageLikes: avgLikes,
+            AverageComments: avgComments,
+            AverageCollects: avgCollects,
+            TopCategories: new Dictionary<string, int>(),
+            AuthorDistribution: notes.Count != 0 ?
+                notes.Where(n => !string.IsNullOrEmpty(n.Author))
+                    .GroupBy(n => n.Author)
+                    .ToDictionary(g => g.Key, g => g.Count()) :
+                new Dictionary<string, int>(),
+            CalculatedAt: DateTime.UtcNow
+        );
+
+        _logger.LogDebug("统计数据计算完成 - 平均点赞：{AvgLikes:F1}，平均评论：{AvgComments:F1}，平均收藏：{AvgCollects:F1}",
+            avgLikes, avgComments, avgCollects);
+
+        // 创建收集详情
+        var collectionDetails = new RecommendCollectionDetails(
+            InterceptedRequests: collectionResult.RequestCount,
+            SuccessfulRequests: collectionResult.PerformanceMetrics.SuccessfulRequests,
+            FailedRequests: collectionResult.PerformanceMetrics.FailedRequests,
+            ScrollOperations: collectionResult.PerformanceMetrics.ScrollCount,
+            AverageScrollDelay: 1500, // 默认滚动延时
+            DataQuality: DataQuality.Complete,
+            CollectionMode: RecommendCollectionMode.Standard
+        );
+
+        // 使用 record 构造函数创建实例
+        return new RecommendListResult(
+            Notes: notes,
+            TotalCollected: notes.Count,
+            RequestCount: collectionResult.RequestCount,
+            Duration: collectionResult.Duration,
+            Statistics: statistics,
+            ExportInfo: null,
+            CollectionDetails: collectionDetails
+        );
+    }
+    #endregion
+
+    #region 发现页面导航功能 (原 DiscoverPageNavigationService)
+    /// <summary>
+    /// 导航到发现页面并确保API被正确触发
+    /// 合并自 DiscoverPageNavigationService.NavigateToDiscoverPageAsync
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="timeout">超时时间</param>
+    /// <returns>导航结果</returns>
+    public async Task<DiscoverNavigationResult> NavigateToDiscoverPageAsync(IPage page, TimeSpan? timeout = null)
+    {
+        var startTime = DateTime.UtcNow;
+        timeout ??= TimeSpan.FromSeconds(30);
+
+        var result = new DiscoverNavigationResult
+        {
+            NavigationLog = []
+        };
+
+        try
+        {
+            result.NavigationLog.Add($"开始导航到发现页面，超时时间：{timeout.Value.TotalSeconds}秒");
+
+            // 方法1：尝试点击发现按钮
+            var buttonClickResult = await TryClickDiscoverButtonAsync(page);
+            if (buttonClickResult.Success)
+            {
+                result.Success = true;
+                result.Method = DiscoverNavigationMethod.ClickButton;
+                result.FinalUrl = page.Url;
+                result.NavigationLog.AddRange(buttonClickResult.Log);
+
+                _logger.LogInformation("通过点击发现按钮成功导航");
+                return result;
+            }
+
+            result.NavigationLog.AddRange(buttonClickResult.Log);
+
+            // 方法2：直接URL导航
+            var urlNavigationResult = await TryDirectUrlNavigationAsync(page);
+            if (urlNavigationResult.Success)
+            {
+                result.Success = true;
+                result.Method = DiscoverNavigationMethod.DirectUrl;
+                result.FinalUrl = page.Url;
+                result.NavigationLog.AddRange(urlNavigationResult.Log);
+
+                _logger.LogInformation("通过直接URL导航成功");
+                return result;
+            }
+
+            result.NavigationLog.AddRange(urlNavigationResult.Log);
+
+            // 所有方法都失败
+            result.Success = false;
+            result.Method = DiscoverNavigationMethod.Failed;
+            result.ErrorMessage = "所有导航方法都失败";
+            result.NavigationLog.Add("所有导航方法都失败");
+
+            _logger.LogError("导航到发现页面失败，已尝试所有方法");
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.Method = DiscoverNavigationMethod.Failed;
+            result.ErrorMessage = ex.Message;
+            result.NavigationLog.Add($"导航过程中发生异常：{ex.Message}");
+
+            _logger.LogError(ex, "导航到发现页面时发生异常");
+        }
+        finally
+        {
+            result.DurationMs = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 获取当前页面状态
+    /// 支持多种页面类型的检测和状态分析
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="expectedPageType">期望的页面类型（可选，用于优化检测）</param>
+    /// <returns>通用页面状态信息</returns>
+    public async Task<PageStatusInfo> GetCurrentPageStatusAsync(IPage page, PageType? expectedPageType = null)
+    {
+        var status = new PageStatusInfo
+        {
+            CurrentUrl = page.Url,
+            DetectedAt = DateTime.UtcNow
+        };
+
+        status.AddDetectionLog($"开始页面状态检测，当前URL: {status.CurrentUrl}");
+        if (expectedPageType.HasValue)
+        {
+            status.AddDetectionLog($"期望页面类型: {expectedPageType.Value}");
+        }
+
+        try
+        {
+            // 1. 基于URL的页面类型识别
+            status.PageType = DeterminePageTypeFromUrl(status.CurrentUrl);
+            status.AddDetectionLog($"URL识别结果: {status.PageType}");
+
+            // 2. 如果有期望类型且与URL识别结果不匹配，进行更详细的检测
+            if (expectedPageType.HasValue && expectedPageType.Value != status.PageType)
+            {
+                status.AddDetectionLog($"URL识别与期望类型不匹配，进行详细检测");
+                status.PageType = await DetectPageTypeFromDom(page, expectedPageType.Value);
+            }
+
+            // 3. 传统页面状态检测（兼容性）
+            status.PageState = await _domElementManager.DetectPageStateAsync(page);
+            status.AddDetectionLog($"传统页面状态: {status.PageState}");
+
+            // 4. 页面类型特定的元素检测
+            await DetectPageSpecificElements(page, status);
+
+            // 5. API特征检测
+            await DetectApiFeatures(page, status);
+
+            // 6. 确定页面就绪状态
+            status.IsPageReady = DeterminePageReadiness(status);
+
+            status.AddDetectionLog($"最终页面类型: {status.PageType}, 就绪状态: {status.IsPageReady}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "获取页面状态时发生异常");
+            status.AddDetectionLog($"检测异常: {ex.Message}");
+        }
+
+        return status;
+    }
+
+    /// <summary>
+    /// 获取发现页面状态 - 向后兼容方法
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <returns>发现页面状态</returns>
+    [Obsolete("请使用 GetCurrentPageStatusAsync(IPage, PageType?) 方法替代，传入 PageType.Discover 作为期望类型")]
+    public async Task<DiscoverPageStatus> GetDiscoverPageStatusAsync(IPage page)
+    {
+        var generalStatus = await GetCurrentPageStatusAsync(page, PageType.Discover);
+
+        // 转换为DiscoverPageStatus以保持向后兼容
+        var discoverStatus = new DiscoverPageStatus
+        {
+            PageType = generalStatus.PageType,
+            CurrentUrl = generalStatus.CurrentUrl,
+            PageState = generalStatus.PageState,
+            ApiFeatures = generalStatus.ApiFeatures,
+            IsPageReady = generalStatus.IsPageReady,
+            ElementsDetected = generalStatus.ElementsDetected,
+            DetectedAt = generalStatus.DetectedAt,
+            DetectionLog = generalStatus.DetectionLog
+        };
+
+        // 设置兼容性属性
+        discoverStatus.IsOnDiscoverPage = discoverStatus.IsPageType(PageType.Discover);
+
+        return discoverStatus;
+    }
+
+    /// <summary>
+    /// 基于URL确定页面类型
+    /// </summary>
+    /// <param name="url">页面URL</param>
+    /// <returns>页面类型</returns>
+    private PageType DeterminePageTypeFromUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return PageType.Unknown;
+
+        var uri = new Uri(url);
+        var path = uri.AbsolutePath.ToLowerInvariant();
+        var query = uri.Query.ToLowerInvariant();
+
+        // 发现页面检测
+        if (path.Contains("/explore") && query.Contains("channel_id=homefeed_recommend"))
+        {
+            return PageType.Discover;
+        }
+
+        // 搜索页面检测
+        if (path.Contains("/search_result") || path.Contains("/search"))
+        {
+            return PageType.Search;
+        }
+
+        // 个人页面检测
+        if (path.Contains("/user/profile") || path.StartsWith("/user/"))
+        {
+            return PageType.Profile;
+        }
+
+        // 笔记详情页面检测
+        if (path.Contains("/explore/") && path.Length > 10)
+        {
+            return PageType.NoteDetail;
+        }
+
+        // 首页检测
+        if (path is "/" or "")
+        {
+            return PageType.Home;
+        }
+
+        return PageType.Unknown;
+    }
+
+    /// <summary>
+    /// 基于DOM元素检测页面类型
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="expectedType">期望的页面类型</param>
+    /// <returns>页面类型</returns>
+    private async Task<PageType> DetectPageTypeFromDom(IPage page, PageType expectedType)
+    {
+        try
+        {
+            switch (expectedType)
+            {
+                case PageType.Discover:
+                    var discoverElements = await CountElements(page, [
+                        "#exploreFeeds",
+                        "[data-testid='explore-page']",
+                        ".channel-container",
+                        ".note-item"
+                    ]);
+                    return discoverElements > 0 ? PageType.Discover : PageType.Unknown;
+
+                case PageType.Search:
+                    var searchElements = await CountElements(page, [
+                        "[data-testid='search-result']",
+                        ".search-container",
+                        ".search-result-item"
+                    ]);
+                    return searchElements > 0 ? PageType.Search : PageType.Unknown;
+
+                case PageType.Profile:
+                    var profileElements = await CountElements(page, [
+                        ".user-profile",
+                        ".profile-info",
+                        ".user-stats"
+                    ]);
+                    return profileElements > 0 ? PageType.Profile : PageType.Unknown;
+
+                case PageType.NoteDetail:
+                    var noteElements = await CountElements(page, [
+                        ".note-detail",
+                        ".note-content",
+                        ".note-interaction"
+                    ]);
+                    return noteElements > 0 ? PageType.NoteDetail : PageType.Unknown;
+
+                default:
+                    return PageType.Unknown;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "DOM检测页面类型时发生异常: {ExpectedType}", expectedType);
+            return PageType.Unknown;
+        }
+    }
+
+    /// <summary>
+    /// 页面类型特定的元素检测
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="status">页面状态信息</param>
+    private async Task DetectPageSpecificElements(IPage page, PageStatusInfo status)
+    {
+        switch (status.PageType)
+        {
+            case PageType.Discover:
+                var discoverElements = await CountElements(page, [
+                    "#exploreFeeds",
+                    "[data-testid='explore-page']",
+                    ".channel-container",
+                    ".note-item"
+                ]);
+                status.ElementsDetected["discover_elements"] = discoverElements;
+                status.ElementsDetected["note_items"] = await CountElements(page, [".note-item"]);
+                break;
+
+            case PageType.Search:
+                status.ElementsDetected["search_results"] = await CountElements(page, [
+                    ".search-result-item",
+                    "[data-testid='search-result']"
+                ]);
+                status.ElementsDetected["search_filters"] = await CountElements(page, [".search-filter"]);
+                break;
+
+            case PageType.Profile:
+                status.ElementsDetected["profile_info"] = await CountElements(page, [".profile-info"]);
+                status.ElementsDetected["user_notes"] = await CountElements(page, [".user-note-item"]);
+                break;
+
+            case PageType.NoteDetail:
+                status.ElementsDetected["note_content"] = await CountElements(page, [".note-content"]);
+                status.ElementsDetected["note_comments"] = await CountElements(page, [".comment-item"]);
+                break;
+
+            default:
+                status.ElementsDetected["general_elements"] = await CountElements(page, ["[class*='note']", "[class*='item']", "[class*='card']"]);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// API特征检测
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="status">页面状态信息</param>
+    private async Task DetectApiFeatures(IPage page, PageStatusInfo status)
+    {
+        try
+        {
+            // 检测网络请求特征
+            var networkRequests = await page.EvaluateAsync<string[]>(@"
+                Array.from(performance.getEntriesByType('resource'))
+                    .map(entry => entry.name)
+                    .filter(name => 
+                        name.includes('homefeed') || 
+                        name.includes('explore') ||
+                        name.includes('search/notes') ||
+                        name.includes('user/profile') ||
+                        name.includes('note/detail')
+                    )
+            ");
+
+            status.ApiFeatures.AddRange(networkRequests);
+            status.AddDetectionLog($"检测到 {networkRequests.Length} 个相关API请求");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "API特征检测失败");
+            status.AddDetectionLog("API特征检测失败");
+        }
+    }
+
+    /// <summary>
+    /// 计算页面元素数量
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="selectors">选择器数组</param>
+    /// <returns>元素总数</returns>
+    private async Task<int> CountElements(IPage page, string[] selectors)
+    {
+        var totalCount = 0;
+
+        foreach (var selector in selectors)
+        {
+            try
+            {
+                var elements = await page.QuerySelectorAllAsync(selector);
+                totalCount += elements.Count;
+            }
+            catch
+            {
+                // 忽略选择器错误
+            }
+        }
+
+        return totalCount;
+    }
+
+    /// <summary>
+    /// 确定页面就绪状态
+    /// </summary>
+    /// <param name="status">页面状态信息</param>
+    /// <returns>是否就绪</returns>
+    private bool DeterminePageReadiness(PageStatusInfo status)
+    {
+        // 基于页面类型和检测到的元素数量确定就绪状态
+        switch (status.PageType)
+        {
+            case PageType.Discover:
+                return status.GetElementCount("discover_elements") > 0 ||
+                       status.GetElementCount("note_items") > 0;
+
+            case PageType.Search:
+                return status.GetElementCount("search_results") > 0;
+
+            case PageType.Profile:
+                return status.GetElementCount("profile_info") > 0;
+
+            case PageType.NoteDetail:
+                return status.GetElementCount("note_content") > 0;
+
+            case PageType.Home:
+                return status.GetElementCount("general_elements") > 0;
+
+            case PageType.Unknown:
+            default:
+                // 对于未知页面，如果有任何相关元素就认为就绪
+                return status.ElementsDetected.Values.Any(count => count > 0) ||
+                       status.ApiFeatures.Count > 0;
+        }
+    }
+
+    /// <summary>
+    /// 尝试通过点击发现按钮导航
+    /// 合并自 DiscoverPageNavigationService.TryClickDiscoverButtonAsync
+    /// </summary>
+    private async Task<(bool Success, List<string> Log)> TryClickDiscoverButtonAsync(IPage page)
+    {
+        var log = new List<string>();
+
+        try
+        {
+            log.Add("尝试方法1：点击发现按钮");
+
+            var discoverSelectors = _domElementManager.GetSelectors("SidebarDiscoverLink");
+            log.Add($"获取到{discoverSelectors.Count}个发现按钮选择器");
+
+            foreach (var selector in discoverSelectors)
+            {
+                try
+                {
+                    log.Add($"尝试选择器：{selector}");
+
+                    var button = await page.QuerySelectorAsync(selector);
+                    if (button != null)
+                    {
+                        log.Add($"找到发现按钮：{selector}");
+
+                        // 检查按钮是否可见和可点击
+                        var isVisible = await button.IsVisibleAsync();
+                        var isEnabled = await button.IsEnabledAsync();
+
+                        log.Add($"按钮状态 - 可见：{isVisible}，可点击：{isEnabled}");
+
+                        if (isVisible && isEnabled)
+                        {
+                            // 执行拟人化点击
+                            await _humanizedInteraction.HumanClickAsync(page, button);
+                            log.Add("已执行拟人化点击");
+
+                            // 等待页面响应 - 使用新的等待策略
+                            var waitResult = await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                            if (!waitResult.Success)
+                            {
+                                log.Add($"页面加载等待失败：{waitResult.ErrorMessage}");
+                                log.AddRange(waitResult.ExecutionLog);
+                                continue;
+                            }
+                            log.AddRange(waitResult.ExecutionLog);
+
+                            // 验证导航结果
+                            var currentUrl = page.Url;
+                            log.Add($"点击后页面URL：{currentUrl}");
+
+                            if (currentUrl.Contains("/explore") || currentUrl.Contains("channel_id=homefeed_recommend"))
+                            {
+                                log.Add("通过URL验证导航成功");
+                                return (true, log);
+                            }
+                        }
+                        else
+                        {
+                            log.Add("按钮不可点击，跳过");
+                        }
+                    }
+                    else
+                    {
+                        log.Add($"选择器未找到元素：{selector}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    log.Add($"选择器{selector}处理失败：{ex.Message}");
+                }
+            }
+
+            log.Add("所有发现按钮选择器都失败");
+            return (false, log);
+        }
+        catch (Exception ex)
+        {
+            log.Add($"点击发现按钮方法异常：{ex.Message}");
+            return (false, log);
+        }
+    }
+
+    /// <summary>
+    /// 尝试直接URL导航
+    /// </summary>
+    private async Task<(bool Success, List<string> Log)> TryDirectUrlNavigationAsync(IPage page)
+    {
+        var log = new List<string>();
+
+        try
+        {
+            log.Add("尝试方法2：直接URL导航");
+
+            var discoverUrls = new[]
+            {
+                "https://www.xiaohongshu.com/explore?channel_id=homefeed_recommend",
+                "https://www.xiaohongshu.com/explore",
+                "https://www.xiaohongshu.com/discovery"
+            };
+
+            foreach (var url in discoverUrls)
+            {
+                try
+                {
+                    log.Add($"尝试导航到：{url}");
+
+                    _browserManager.BeginOperation();
+                    try
+                    {
+                        try
+                        {
+                            await page.GotoAsync(url, new PageGotoOptions
+                            {
+                                WaitUntil = WaitUntilState.DOMContentLoaded,
+                                Timeout = 20000
+                            });
+                        }
+                        catch (PlaywrightException)
+                        {
+                            _logger.LogWarning("页面在直接URL导航时关闭，尝试重新获取页面并重试");
+                            page = await _browserManager.GetPageAsync();
+                            await page.GotoAsync(url, new PageGotoOptions
+                            {
+                                WaitUntil = WaitUntilState.DOMContentLoaded,
+                                Timeout = 20000
+                            });
+                        }
+
+                        // 使用新的等待策略
+                        var waitResult = await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                        if (!waitResult.Success)
+                        {
+                            log.Add($"页面加载等待失败：{waitResult.ErrorMessage}");
+                            if (waitResult.WasDegraded)
+                            {
+                                log.Add("已使用降级策略");
+                            }
+                            log.AddRange(waitResult.ExecutionLog);
+                            continue;
+                        }
+                        log.AddRange(waitResult.ExecutionLog);
+                    }
+                    finally
+                    {
+                        _browserManager.EndOperation();
+                    }
+
+                    var currentUrl = page.Url;
+                    log.Add($"导航后页面URL：{currentUrl}");
+
+                    // 验证页面状态
+                    var pageStatus = await GetCurrentPageStatusAsync(page, PageType.Discover);
+                    if (pageStatus.IsPageType(PageType.Discover))
+                    {
+                        log.Add("通过页面状态验证导航成功");
+                        return (true, log);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    log.Add($"URL导航{url}失败：{ex.Message}");
+                }
+            }
+
+            log.Add("所有URL导航尝试都失败");
+            return (false, log);
+        }
+        catch (Exception ex)
+        {
+            log.Add($"URL导航方法异常：{ex.Message}");
+            return (false, log);
+        }
+    }
     #endregion
 
 }

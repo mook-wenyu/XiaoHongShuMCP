@@ -132,8 +132,7 @@ public class BrowserConnectionHostedService : BackgroundService
     {
         try
         {
-            var context = await browserManager.GetBrowserContextAsync();
-            var page = context.Pages.FirstOrDefault();
+            var page = await browserManager.GetPageAsync();
             
             if (page == null)
             {

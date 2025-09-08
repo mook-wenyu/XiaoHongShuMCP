@@ -33,7 +33,7 @@ XiaoHongShuMCP/
 ├── XiaoHongShuMCP/                 # 主项目
 │   ├── Program.cs                  # 程序入口，MCP 服务器配置
 │   ├── XiaoHongShuMCP.csproj      # 项目文件和依赖管理
-│   ├── appsettings.json           # 应用配置文件
+│   ├── Program.cs                 # 程序入口（内置默认配置 + 覆盖机制）
 │   ├── Services/                   # 服务层实现
 │   │   ├── Interfaces.cs           # 接口定义和数据模型
 │   │   ├── AccountManager.cs       # 账号管理服务
@@ -227,20 +227,20 @@ dotnet publish -c Release -r osx-x64 --self-contained
 
 ## ⚙️ 配置管理
 
-### appsettings.json 主要配置
-```json
-{
-  "XiaoHongShu": {
-    "BaseUrl": "https://www.xiaohongshu.com",
-    "DefaultTimeout": 30000,
-    "MaxRetries": 3,
-    "BrowserSettings": {
-      "Headless": false,
-      "RemoteDebuggingPort": 9222
-    }
-  }
-}
-```
+项目使用“代码内默认 + 外部覆盖”的方式，不再读取 `appsettings.json`。
+
+覆盖方式（优先级：命令行 > 环境变量 > 代码默认）：
+- 环境变量：使用前缀 `XHS__`，双下划线 `__` 映射为冒号 `:`。
+  - 示例：`XHS__Serilog__MinimumLevel=Debug`、`XHS__BrowserSettings__Headless=true`
+- 命令行参数：`Section:Key=Value`
+  - 示例：`Serilog:MinimumLevel=Debug PageLoadWaitConfig:MaxRetries=5`
+
+默认键见 `Program.cs` 的 `CreateDefaultSettings()`：`Serilog`, `UniversalApiMonitor`, `BrowserSettings`, `McpSettings`, `PageLoadWaitConfig`, `SearchTimeoutsConfig`。
+
+### 按命名空间覆盖日志等级
+- 键格式：`Logging:Overrides:<Namespace>=<Level>`（如 `Debug`/`Information`/`Warning`/`Error`）
+- 环境变量：`XHS__Logging__Overrides__XiaoHongShuMCP.Services.UniversalApiMonitor=Debug`
+- 命令行：`Logging:Overrides:XiaoHongShuMCP.Services.PlaywrightBrowserManager=Information`
 
 ### MCP 客户端配置 (Claude Desktop)
 

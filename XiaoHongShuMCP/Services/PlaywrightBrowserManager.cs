@@ -23,6 +23,7 @@ public class PlaywrightBrowserManager : IBrowserManager, IAsyncDisposable
     private DateTime _lastConnectionTime;
     private readonly Timer _healthCheckTimer;
     private bool _isReconnecting;
+    private int _busyOperations;
 
     public PlaywrightBrowserManager(
         ILogger<PlaywrightBrowserManager> logger,
@@ -42,6 +43,13 @@ public class PlaywrightBrowserManager : IBrowserManager, IAsyncDisposable
     {
         if (_disposed || _browser == null || _isReconnecting)
             return;
+
+        // 如果正在执行关键操作，暂缓健康检查重连，避免打断外部 IPage
+        if (Interlocked.CompareExchange(ref _busyOperations, 0, 0) > 0)
+        {
+            _logger.LogDebug("健康检查跳过：存在活跃操作");
+            return;
+        }
 
         try
         {
@@ -97,7 +105,7 @@ public class PlaywrightBrowserManager : IBrowserManager, IAsyncDisposable
     /// <summary>
     /// 安全断开连接（不关闭浏览器进程）
     /// </summary>
-    private async Task DisconnectSafely()
+    private Task DisconnectSafely()
     {
         try
         {
@@ -127,24 +135,43 @@ public class PlaywrightBrowserManager : IBrowserManager, IAsyncDisposable
         {
             _logger.LogWarning(ex, "断开连接时出现异常");
         }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 标记开始关键操作，防止健康检查在过程中触发重连
+    /// </summary>
+    public void BeginOperation()
+    {
+        Interlocked.Increment(ref _busyOperations);
+    }
+
+    /// <summary>
+    /// 标记结束关键操作
+    /// </summary>
+    public void EndOperation()
+    {
+        var v = Interlocked.Decrement(ref _busyOperations);
+        if (v < 0) Interlocked.Exchange(ref _busyOperations, 0);
     }
 
     /// <summary>
     /// 检查浏览器连接是否健康
     /// </summary>
-    public async Task<bool> IsConnectionHealthyAsync()
+    public Task<bool> IsConnectionHealthyAsync()
     {
         try
         {
             if (_browser == null)
-                return false;
+                return Task.FromResult(false);
 
             var contexts = _browser.Contexts;
-            return contexts.Any();
+            return Task.FromResult(contexts.Any());
         }
         catch
         {
-            return false;
+            return Task.FromResult(false);
         }
     }
 
@@ -204,9 +231,9 @@ public class PlaywrightBrowserManager : IBrowserManager, IAsyncDisposable
         }
     }
 
-    private static string RedactUrl(string url)
+    private static string RedactUrl(string? url)
     {
-        if (string.IsNullOrEmpty(url)) return url;
+        if (string.IsNullOrEmpty(url)) return string.Empty;
         var q = url.IndexOf('?');
         return q > 0 ? url[..q] : url;
     }

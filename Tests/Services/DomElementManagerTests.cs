@@ -8,7 +8,7 @@ namespace XiaoHongShuMCP.Tests.Services;
 [TestFixture]
 public class DomElementManagerTests
 {
-    private DomElementManager _domElementManager;
+    private DomElementManager _domElementManager = null!;
 
     [SetUp]
     public void SetUp()

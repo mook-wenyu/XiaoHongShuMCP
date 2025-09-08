@@ -10,9 +10,9 @@ namespace XiaoHongShuMCP.Tests.Tools;
 [TestFixture]
 public class XiaoHongShuToolsTests
 {
-    private Mock<IAccountManager> _mockAccountManager;
-    private Mock<IXiaoHongShuService> _mockXiaoHongShuService;
-    private IServiceProvider _serviceProvider;
+    private Mock<IAccountManager> _mockAccountManager = null!;
+    private Mock<IXiaoHongShuService> _mockXiaoHongShuService = null!;
+    private IServiceProvider _serviceProvider = null!;
 
     [SetUp]
     public void SetUp()
@@ -31,15 +31,8 @@ public class XiaoHongShuToolsTests
     public async Task ConnectToBrowser_WhenSuccessful_ReturnsConnectionResult()
     {
         // Arrange
-        var expectedUserInfo = new UserInfo 
-        { 
-            Username = "testuser", 
-            IsLoggedIn = true,
-            RedId = "12345678901"
-        };
-
         _mockAccountManager.Setup(x => x.ConnectToBrowserAsync())
-            .ReturnsAsync(OperationResult<UserInfo>.Ok(expectedUserInfo));
+            .ReturnsAsync(OperationResult<bool>.Ok(true));
 
         // Act
         var result = await XiaoHongShuTools.ConnectToBrowser(_serviceProvider);
@@ -55,7 +48,7 @@ public class XiaoHongShuToolsTests
     {
         // Arrange
         _mockAccountManager.Setup(x => x.ConnectToBrowserAsync())
-            .ReturnsAsync(OperationResult<UserInfo>.Fail("连接失败", ErrorType.BrowserError, "BROWSER_ERROR"));
+            .ReturnsAsync(OperationResult<bool>.Fail("连接失败", ErrorType.BrowserError, "BROWSER_ERROR"));
 
         // Act
         var result = await XiaoHongShuTools.ConnectToBrowser(_serviceProvider);

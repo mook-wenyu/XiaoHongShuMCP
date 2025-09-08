@@ -11,9 +11,9 @@ namespace XiaoHongShuMCP.Tests.Services;
 [TestFixture]
 public class AccountManagerTests
 {
-    private Mock<ILogger<AccountManager>> _mockLogger;
-    private Mock<PlaywrightBrowserManager> _mockBrowserManager;
-    private Mock<IDomElementManager> _mockDomElementManager;
+    private Mock<ILogger<AccountManager>> _mockLogger = null!;
+    private Mock<PlaywrightBrowserManager> _mockBrowserManager = null!;
+    private Mock<IDomElementManager> _mockDomElementManager = null!;
 
     [SetUp]
     public void SetUp()

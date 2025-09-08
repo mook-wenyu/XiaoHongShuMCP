@@ -175,8 +175,12 @@ public class ContentEditableInputStrategy : BaseTextInputStrategy
                     await Task.Delay(delayManager.GetThinkingPauseDelay());
                 }
                 
-                // 使用Playwright的type方法，它能正确处理contenteditable
-                await element.TypeAsync(unit, new() { Delay = delayManager.GetCharacterTypingDelay() });
+                // 使用键盘输入替代过时的 ElementHandle.TypeAsync
+                await element.FocusAsync();
+                await page.Keyboard.TypeAsync(unit, new Microsoft.Playwright.KeyboardTypeOptions
+                {
+                    Delay = delayManager.GetCharacterTypingDelay()
+                });
                 
                 // 检查停顿
                 var reviewDelay = GetSemanticUnitReviewDelay(unit);

@@ -117,6 +117,10 @@ public class FeedApiUser : BaseUserInfo
     [JsonPropertyName("nickname")]
     public new string Nickname { get; set; } = string.Empty;
     
+    // 兼容另一种字段名：nick_name
+    [JsonPropertyName("nick_name")]
+    public string NicknameAlt { get; set; } = string.Empty;
+    
     [JsonPropertyName("avatar")]
     public new string Avatar { get; set; } = string.Empty;
     

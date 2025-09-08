@@ -62,13 +62,13 @@ public static class XiaoHongShuTools
     {
         try
         {
-            var enhancedRecommendService = serviceProvider.GetRequiredService<IRecommendService>();
+            var xiaohongShuService = serviceProvider.GetRequiredService<IXiaoHongShuService>();
             var timeout = TimeSpan.FromMinutes(timeoutMinutes);
 
-            var result = await enhancedRecommendService.GetRecommendedNotesAsync(limit, timeout);
+            var result = await xiaohongShuService.GetRecommendedNotesAsync(limit, timeout);
 
             var successMessage = result.Success
-                ? $"✅ 获取推荐笔记成功，共{result.Data?.Notes.Count ?? 0}条"
+                ? $"✅ 获取推荐笔记成功，共{result.Data?.Notes?.Count ?? 0}条"
                 : "❌ 获取推荐笔记失败";
 
             return new RecommendResultMcp(

@@ -9,11 +9,11 @@ namespace XiaoHongShuMCP.Tests.Services;
 [TestFixture]
 public class HumanizedInteractionServiceTests
 {
-    private Mock<IDelayManager> _mockDelayManager;
-    private Mock<IElementFinder> _mockElementFinder;
-    private Mock<ITextInputStrategy> _mockInputStrategy;
-    private Mock<IDomElementManager> _mockDomElementManager;
-    private HumanizedInteractionService _service;
+    private Mock<IDelayManager> _mockDelayManager = null!;
+    private Mock<IElementFinder> _mockElementFinder = null!;
+    private Mock<ITextInputStrategy> _mockInputStrategy = null!;
+    private Mock<IDomElementManager> _mockDomElementManager = null!;
+    private HumanizedInteractionService _service = null!;
 
     [SetUp]
     public void SetUp()

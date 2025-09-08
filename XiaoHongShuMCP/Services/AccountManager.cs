@@ -12,6 +12,7 @@ public class AccountManager : IAccountManager
     private readonly ILogger<AccountManager> _logger;
     private readonly IBrowserManager _browserManager;
     private readonly IDomElementManager _domElementManager;
+    private readonly IPageLoadWaitService _pageLoadWaitService;
     // === 全局用户信息管理功能（合并自 GlobalUserInfo） ===
     private readonly object _lock = new object();
     private UserInfo? _currentUser;
@@ -157,11 +158,13 @@ public class AccountManager : IAccountManager
     public AccountManager(
         ILogger<AccountManager> logger,
         IBrowserManager browserManager,
-        IDomElementManager domElementManager)
+        IDomElementManager domElementManager,
+        IPageLoadWaitService pageLoadWaitService)
     {
         _logger = logger;
         _browserManager = browserManager;
         _domElementManager = domElementManager;
+        _pageLoadWaitService = pageLoadWaitService;
     }
 
     /// <summary>
@@ -238,38 +241,41 @@ public class AccountManager : IAccountManager
                     "INVALID_USER_ID");
             }
 
-            var context = await _browserManager.GetBrowserContextAsync();
-            var pages = context.Pages;
-            if (!pages.Any())
-            {
-                return OperationResult<UserInfo>.Fail(
-                    "没有可用的页面",
-                    ErrorType.BrowserError,
-                    "NO_PAGES_AVAILABLE");
-            }
-
-            var page = pages.FirstOrDefault();
-            if (page == null)
-            {
-                return OperationResult<UserInfo>.Fail(
-                    "无法获取浏览器页面",
-                    ErrorType.BrowserError,
-                    "NO_BROWSER_PAGE");
-            }
+            var page = await _browserManager.GetPageAsync();
 
             // 构造个人页面URL
             var profileUrl = $"https://www.xiaohongshu.com/user/profile/{userId}";
             _logger.LogInformation("正在访问用户个人页面: {ProfileUrl}", profileUrl);
 
-            // 导航到个人页面
-            await page.GotoAsync(profileUrl, new PageGotoOptions
+            // 导航到个人页面（带忙碌租约 + 自愈重试）
+            _browserManager.BeginOperation();
+            try
             {
-                WaitUntil = WaitUntilState.NetworkIdle,
-                Timeout = 15000
-            });
-
-            // 等待页面加载完成
-            await Task.Delay(2000);
+                try
+                {
+                    await page.GotoAsync(profileUrl, new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.DOMContentLoaded,
+                        Timeout = 15000
+                    });
+                }
+                catch (Microsoft.Playwright.PlaywrightException)
+                {
+                    _logger.LogWarning("页面在导航用户页时关闭，尝试重新获取页面并重试");
+                    page = await _browserManager.GetPageAsync();
+                    await page.GotoAsync(profileUrl, new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.DOMContentLoaded,
+                        Timeout = 15000
+                    });
+                }
+                // 等待页面加载完成（统一等待服务）
+                await _pageLoadWaitService.WaitForPageLoadAsync(page);
+            }
+            finally
+            {
+                _browserManager.EndOperation();
+            }
 
             var userInfo = new UserInfo
             {

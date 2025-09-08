@@ -55,7 +55,8 @@ update_plan: [ {step: 探索代码, in_progress}, {step: 实现修复, pending} 
   - Browser, selectors, search, humanized interaction services
 - `XiaoHongShuMCP/Tools/`: MCP tool definitions (`XiaoHongShuTools.cs`).
 - `Tests/`: NUnit tests (~51 tests) covering `Services/`, `Models/`, `Tools/`.
-- `appsettings.json`: local configuration. Logs write to `XiaoHongShuMCP/logs/` via Serilog.
+- 配置：采用代码内默认配置；使用环境变量 `XHS__...` 或命令行参数覆盖。日志输出到 `XiaoHongShuMCP/logs/`（Serilog）。
+  - 支持“命名空间级覆盖”：`Logging:Overrides:<Namespace>=<Level>`；示例 env `XHS__Logging__Overrides__XiaoHongShuMCP.Services.UniversalApiMonitor=Debug`。
 
 ## Build, Test, Run
 ```bash
@@ -85,6 +86,7 @@ Playwright (first run): `pwsh ./XiaoHongShuMCP/bin/Debug/net9.0/playwright.ps1 i
 - PRs: include summary, linked issue, scope of changes, test coverage notes, and any relevant logs/output. Keep changes focused.
 
 ## Security & Configuration Tips
-- Do not commit credentials; store local values in `appsettings.json` only.
+- Do not commit credentials; pass secrets via environment variables (prefix `XHS__`) or CLI args.
+- Example env overrides: `XHS__Serilog__MinimumLevel=Debug`, `XHS__BrowserSettings__Headless=true`.
 - Browser debugging: launch Chrome/Edge with `--remote-debugging-port=9222` before running the server.
 - Environment: set `DOTNET_ENVIRONMENT=Development` when iterating locally.

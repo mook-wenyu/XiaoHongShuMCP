@@ -14,12 +14,17 @@ public static class FeedApiConverter
     /// </summary>
     public static NoteDetail ConvertToNoteDetail(FeedApiNoteCard noteCard, string sourceNoteId)
     {
+        // 选择作者昵称（nickname 或 nick_name）
+        var authorName = noteCard.User != null && !string.IsNullOrWhiteSpace(noteCard.User.Nickname)
+            ? noteCard.User.Nickname
+            : (noteCard.User?.NicknameAlt ?? string.Empty);
+
         var noteDetail = new NoteDetail
         {
             Id = noteCard.NoteId,
             Title = noteCard.Title,
             Content = noteCard.Description,
-            Author = noteCard.User?.Nickname ?? "未知作者",
+            Author = !string.IsNullOrWhiteSpace(authorName) ? authorName : "未知作者",
             Url = $"https://www.xiaohongshu.com/explore/{sourceNoteId}",
             ExtractedAt = DateTime.UtcNow
         };
@@ -39,7 +44,7 @@ public static class FeedApiConverter
         }
 
         // 设置图片信息
-        if (noteCard.ImageList.Count != 0)
+        if (noteCard.ImageList != null && noteCard.ImageList.Count != 0)
         {
             noteDetail.Images = noteCard.ImageList
                 .Select(img => img.UrlDefault)
@@ -63,7 +68,7 @@ public static class FeedApiConverter
         }
 
         // 设置标签信息
-        if (noteCard.TagList.Count != 0)
+        if (noteCard.TagList != null && noteCard.TagList.Count != 0)
         {
             noteDetail.Tags = noteCard.TagList.Select(tag => tag.Name).ToList();
         }
@@ -90,14 +95,14 @@ public static class FeedApiConverter
         // 优先级：H265 > H264
         var allStreams = new List<FeedApiVideoStreamDetail>();
         
-        if (video.Media?.Stream?.H265.Count != 0)
+        if (video.Media?.Stream?.H265?.Count > 0)
         {
-            allStreams.AddRange(video.Media.Stream.H265);
+            allStreams.AddRange(video.Media!.Stream!.H265!);
         }
         
-        if (video.Media?.Stream?.H264.Count != 0)
+        if (video.Media?.Stream?.H264?.Count > 0)
         {
-            allStreams.AddRange(video.Media.Stream.H264);
+            allStreams.AddRange(video.Media!.Stream!.H264!);
         }
 
         // 选择最佳质量的流
@@ -181,13 +186,14 @@ public static class FeedApiConverter
 
         foreach (var response in monitoredResponses)
         {
-            if (response.ResponseData?.Success != true || 
-                response.ResponseData.Data?.Items.Count != 0 != true)
+            // 先做空值与计数判定，避免空引用与可空性告警
+            var items = response.ResponseData?.Data?.Items;
+            if (response.ResponseData?.Success != true || items == null || items.Count == 0)
             {
                 continue;
             }
 
-            foreach (var item in response.ResponseData.Data.Items)
+            foreach (var item in items)
             {
                 if (item.NoteCard != null)
                 {
@@ -234,7 +240,7 @@ public static class FeedApiConverter
     /// </summary>
     public static bool IsValidFeedResponse(FeedApiResponse? response)
     {
-        return response is {Success: true, Code: 0} &&
-               response.Data?.Items.Count != 0;
+        return response is { Success: true, Code: 0 }
+               && ((response.Data?.Items?.Count ?? 0) > 0);
     }
 }

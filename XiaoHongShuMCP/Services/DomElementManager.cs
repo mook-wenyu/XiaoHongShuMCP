@@ -13,14 +13,16 @@ namespace XiaoHongShuMCP.Services
 
         public DomElementManager()
         {
+            _pageStateSelectors = new Dictionary<PageState, Dictionary<string, List<string>>>();
             // 基于真实小红书HTML结构的CSS选择器管理
             // 为每个关键功能提供3-5个真实的备用选择器，按成功概率排序
             _selectors = new Dictionary<string, List<string>>
             {
                 // ===== 登录认证相关 =====
-                
+
                 // 登录按钮 - 优先级从高到低（基于真实HTML结构优化）
-                { "LoginButton", [
+                {
+                    "LoginButton", [
                         "#login-btn",                                     // 真实登录按钮ID，最准确
                         ".side-bar-component.login-btn button#login-btn", // 侧边栏登录按钮完整路径
                         ".reds-button-new.login-btn",                     // 真实的按钮类组合
@@ -32,9 +34,10 @@ namespace XiaoHongShuMCP.Services
                         ".auth-btn.primary"
                     ]
                 },
-                
+
                 // 用户头像 - 基于真实CSS类名
-                { "AvatarIcon", [
+                {
+                    "AvatarIcon", [
                         ".reds-avatar",
                         ".reds-avatar-img-box",
                         ".user-avatar",
@@ -42,9 +45,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='user-avatar']"
                     ]
                 },
-                
+
                 // 用户信息区域
-                { "UserInfo", [
+                {
+                    "UserInfo", [
                         ".user-name",
                         ".author",
                         ".user-info",
@@ -54,9 +58,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 个人页面数据提取选择器 - 基于真实HTML结构 =====
-                
+
                 // 个人页面容器 - 识别是否在个人页面
-                { "UserPageContainer", [
+                {
+                    "UserPageContainer", [
                         "#userPageContainer.user-page",     // 真实个人页面容器（最精确）
                         ".user-page[data-csr-exp='false']", // 带CSR属性的用户页面
                         "div[id='userPageContainer']",      // 通用个人页面容器
@@ -64,9 +69,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='user-page']"
                     ]
                 },
-                
+
                 // 用户头像区域 - 个人页面专用
-                { "UserPageAvatar", [
+                {
+                    "UserPageAvatar", [
                         ".user .user-info .avatar img.user-image",                 // 完整的头像路径（最精确）
                         ".avatar-wrapper img.user-image[crossorigin='anonymous']", // 跨域头像图片
                         "img[src*='sns-avatar-qc.xhscdn.com']",                    // 小红书头像CDN
@@ -75,9 +81,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='user-page-avatar']"
                     ]
                 },
-                
+
                 // 用户名 - 个人页面专用
-                { "UserPageName", [
+                {
+                    "UserPageName", [
                         ".user-basic .user-nickname .user-name", // 完整的用户名路径（最精确）
                         ".basic-info .user-basic .user-name",    // 基础信息区域用户名
                         ".user-nickname .user-name",             // 用户昵称容器内的名称
@@ -86,61 +93,68 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='user-page-name']"
                     ]
                 },
-                
+
                 // 小红书号 - 个人页面专用
-                { "UserRedId", [
+                {
+                    "UserRedId", [
                         ".user-content .user-redId", // 真实小红书号路径（最精确）
                         "span.user-redId",           // 小红书号span元素
                         "span:has-text('小红书号：')",    // 包含小红书号文本的span
                         "[data-testid='user-red-id']"
                     ]
                 },
-                
+
                 // 个人简介 - 个人页面专用
-                { "UserDescription", [
+                {
+                    "UserDescription", [
                         ".user-desc",                     // 真实用户描述类（最精确）
                         "div.user-desc[data-v-4947d265]", // 带Vue组件ID的用户描述
                         ".info-part .user-desc",          // 信息区域的用户描述
                         "[data-testid='user-description']"
                     ]
                 },
-                
+
                 // 用户统计数据容器
-                { "UserStatistics", [
+                {
+                    "UserStatistics", [
                         ".data-info .user-interactions",          // 真实统计数据路径（最精确）
                         "div.user-interactions[data-v-18b45ae8]", // 带Vue组件ID的用户交互统计
                         ".user-interactions",                     // 通用用户交互统计
                         "[data-testid='user-statistics']"
                     ]
                 },
-                
+
                 // 关注数 - 个人页面统计
-                { "UserFollowingCount", [
+                {
+                    "UserFollowingCount", [
                         ".user-interactions div:nth-child(1) .count",  // 第一个统计项的计数（关注）
                         "span.count:has(+ span.shows:has-text('关注'))", // 关注数的计数span
                         ".user-interactions .count:first-child",       // 第一个计数项
                         "[data-testid='following-count']"
                     ]
                 },
-                
+
                 // 粉丝数 - 个人页面统计
-                { "UserFollowersCount", [
+                {
+                    "UserFollowersCount", [
                         ".user-interactions div:nth-child(2) .count",  // 第二个统计项的计数（粉丝）
                         "span.count:has(+ span.shows:has-text('粉丝'))", // 粉丝数的计数span
                         "[data-testid='followers-count']"
                     ]
                 },
-                
+
                 // 获赞与收藏数 - 个人页面统计
-                { "UserLikesCollectsCount", [
+                {
+                    "UserLikesCollectsCount", [
                         ".user-interactions div:nth-child(3) .count",     // 第三个统计项的计数（获赞与收藏）
                         "span.count:has(+ span.shows:has-text('获赞与收藏'))", // 获赞与收藏数的计数span
                         "[data-testid='likes-collects-count']"
                     ]
                 },
-                
+
                 // 认证图标 - 识别认证用户
-                { "UserVerifyIcon", [
+                {
+                    "UserVerifyIcon", [
                         ".user-name .verify-icon svg",             // 用户名旁的认证图标SVG
                         "span.verify-icon[data-v-1d90bc98] svg",   // 带Vue组件ID的认证图标
                         ".verify-icon svg[xlink:href='#company']", // 企业认证图标
@@ -148,9 +162,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='user-verify-icon']"
                     ]
                 },
-                
+
                 // 关注按钮 - 个人页面操作
-                { "UserFollowButton", [
+                {
+                    "UserFollowButton", [
                         ".info-right-area .follow-button",        // 真实关注按钮路径（最精确）
                         "button.reds-button-new.follow-button",   // 完整的关注按钮类
                         "button:has-text('关注')",                  // 包含关注文本的按钮
@@ -158,18 +173,20 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='follow-button']"
                     ]
                 },
-                
+
                 // 更多操作按钮 - 个人页面
-                { "UserMoreActions", [
+                {
+                    "UserMoreActions", [
                         ".info-right-area-more-container svg", // 更多操作图标（最精确）
                         "svg use[xlink:href='#more']",         // 更多操作SVG
                         ".report-entrance-wrapper svg",        // 举报入口包装器图标
                         "[data-testid='user-more-actions']"
                     ]
                 },
-                
+
                 // 个人页面标签切换
-                { "UserPageTabs", [
+                {
+                    "UserPageTabs", [
                         ".reds-tabs-list .reds-tab-item",                 // 标签列表项（最精确）
                         ".tertiary.center.reds-tabs-list .reds-tab-item", // 完整的标签列表
                         ".reds-tab-item.active",                          // 激活状态的标签
@@ -178,9 +195,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='user-page-tabs']"
                     ]
                 },
-                
+
                 // 空内容提示 - 个人页面
-                { "UserPageEmptyContent", [
+                {
+                    "UserPageEmptyContent", [
                         ".empty-container .empty",               // 空内容容器（最精确）
                         "svg[xlink:href='#user_empty_collect']", // 空收藏图标
                         ".empty-text:has-text('还没有发布任何内容')",     // 空发布内容提示
@@ -190,9 +208,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 侧边栏导航相关 =====
-                
+
                 // 侧边栏发布按钮 - 基于真实HTML结构
-                { "SidebarPublishButton", [
+                {
+                    "SidebarPublishButton", [
                         "a[href*='creator.xiaohongshu.com/publish/publish?source=official']", // 真实链接最准确
                         "a[target='_blank'][href*='publish']",                                // 带target属性的发布链接
                         ".link-wrapper[href*='creator.xiaohongshu.com']",                     // 创作平台链接
@@ -200,9 +219,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='sidebar-publish']"
                     ]
                 },
-                
+
                 // 侧边栏用户信息链接 - 基于真实HTML结构
-                { "SidebarUserProfile", [
+                {
+                    "SidebarUserProfile", [
                         "a[href*='/user/profile/']",                // 真实用户个人页面链接
                         ".user.side-bar-component a.link-wrapper",  // 用户组件下的链接
                         "a:has(.reds-avatar)",                      // 包含用户头像的链接
@@ -210,9 +230,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='sidebar-user-profile']"
                     ]
                 },
-                
+
                 // 侧边栏导航项通用选择器
-                { "SidebarNavItem", [
+                {
+                    "SidebarNavItem", [
                         ".channel-list-content li", // 导航列表项
                         ".side-bar-component",      // 侧边栏组件
                         ".link-wrapper",            // 通用链接包装器
@@ -220,9 +241,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='sidebar-nav-item']"
                     ]
                 },
-                
+
                 // 侧边栏发现页面链接 - 增强版多级容错选择器
-                { "SidebarDiscoverLink", [
+                {
+                    "SidebarDiscoverLink", [
                         "a[href*='/explore?channel_id=homefeed_recommend']", // 真实发现页面链接（最高优先级）
                         "a[href*='/explore'][href*='channel_id']",           // 带channel_id的探索链接
                         "a[href='/explore?channel_id=homefeed_recommend']",  // 完整匹配的发现链接
@@ -247,9 +269,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 搜索功能相关 =====
-                
+
                 // 搜索输入框 - 基于真实HTML结构
-                { "SearchInput", [
+                {
+                    "SearchInput", [
                         "#search-input",              // 真实ID，最准确
                         ".search-input",              // 真实class名
                         "input[placeholder='搜索小红书']", // 真实placeholder文本
@@ -258,20 +281,23 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='search-input']"
                     ]
                 },
-                
+
                 // 搜索按钮 - 基于用户提供的HTML结构分析
-                { "SearchButton", [
+                {
+                    "SearchButton", [
                         ".input-button .search-icon", // 用户提供的真实结构
                         ".search-icon",               // 搜索图标
                         ".input-button button",       // 输入按钮容器中的按钮
+                        ".input-button",              // 容器本身可点击（兜底）
                         "button.search-btn",          // 搜索按钮类名
                         ".search-btn",                // 搜索按钮
                         "[data-testid='search-button']"
                     ]
                 },
-                
+
                 // 筛选按钮 - 基于真实HTML结构
-                { "FilterButton", [
+                {
+                    "FilterButton", [
                         ".filter",                        // 真实class名，最准确
                         "div[data-v-eb91fffe=''].filter", // 带Vue组件ID的筛选按钮
                         "span:has-text('筛选')",            // 包含"筛选"文本的元素
@@ -279,9 +305,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='filter-button']"
                     ]
                 },
-                
+
                 // 筛选面板 - 基于真实HTML结构
-                { "FilterPanel", [
+                {
+                    "FilterPanel", [
                         ".filter-panel",                        // 真实class名，最准确
                         "div[data-v-eb91fffe=''].filter-panel", // 带Vue组件ID的筛选面板
                         ".filter-container",                    // 筛选容器
@@ -289,18 +316,20 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='filter-panel']"
                     ]
                 },
-                
+
                 // 筛选选项容器
-                { "FilterOptions", [
+                {
+                    "FilterOptions", [
                         ".filters",                  // 筛选组
                         ".filters-wrapper .filters", // 筛选包装器下的筛选组
                         ".tag-container",            // 标签容器
                         "[data-testid='filter-options']"
                     ]
                 },
-                
+
                 // 排序选项标签 - 基于真实HTML结构
-                { "SortTags", [
+                {
+                    "SortTags", [
                         ".tag-container .tags", // 真实结构，最准确
                         ".tags",                // 标签元素
                         ".tags.active",         // 激活状态的标签
@@ -308,52 +337,59 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='sort-tags']"
                     ]
                 },
-                
+
                 // 具体排序选项选择器
-                { "SortOptionComprehensive", [
+                {
+                    "SortOptionComprehensive", [
                         ".tags:has(span:has-text('综合'))", // 综合排序
                         "span:has-text('综合')",
                         "[data-testid='sort-comprehensive']"
                     ]
                 },
-                
-                { "SortOptionLatest", [
+
+                {
+                    "SortOptionLatest", [
                         ".tags:has(span:has-text('最新'))", // 最新排序
                         "span:has-text('最新')",
                         "[data-testid='sort-latest']"
                     ]
                 },
-                
-                { "SortOptionMostLiked", [
+
+                {
+                    "SortOptionMostLiked", [
                         ".tags:has(span:has-text('最多点赞'))", // 最多点赞排序
                         "span:has-text('最多点赞')",
                         "[data-testid='sort-most-liked']"
                     ]
                 },
-                
-                { "SortOptionMostCommented", [
+
+                {
+                    "SortOptionMostCommented", [
                         ".tags:has(span:has-text('最多评论'))", // 最多评论排序
                         "span:has-text('最多评论')",
                         "[data-testid='sort-most-commented']"
                     ]
                 },
-                
-                { "SortOptionMostFavorited", [
+
+                {
+                    "SortOptionMostFavorited", [
                         ".tags:has(span:has-text('最多收藏'))", // 最多收藏排序
                         "span:has-text('最多收藏')",
                         "[data-testid='sort-most-favorited']"
                     ]
                 },
-                
+
                 // 笔记类型筛选选项
-                { "NoteTypeVideo", [
+                {
+                    "NoteTypeVideo", [
                         ".tags:has(span:has-text('视频'))", // 视频类型
                         "span:has-text('视频')",
                         "[data-testid='note-type-video']"
                     ]
                 },
-                
-                { "NoteTypeImage", [
+
+                {
+                    "NoteTypeImage", [
                         ".tags:has(span:has-text('图文'))", // 图文类型
                         "span:has-text('图文')",
                         "[data-testid='note-type-image']"
@@ -361,7 +397,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 笔记项容器 - 基于真实HTML结构（支持explore和search_result两种页面）
-                { "NoteItem", [
+                {
+                    "NoteItem", [
                         "section.note-item",                   // 最精确的标签+类名组合
                         "[data-v-a264b01a].note-item",         // 探索页面Vue组件
                         "[data-v-330d9cca].note-item",         // 搜索页面Vue组件
@@ -372,9 +409,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='note-item']"
                     ]
                 },
-                
+
                 // 笔记标题 - 基于真实HTML结构优化
-                { "NoteTitle", [
+                {
+                    "NoteTitle", [
                         ".title span",                   // 真实结构：标题文本在span内
                         ".footer .title",                // 更精确的上下文定位
                         "a.title span[data-v-51ec0135]", // 完整的Vue组件选择器
@@ -386,9 +424,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='note-title']"
                     ]
                 },
-                
+
                 // 笔记作者信息 - 支持explore和search_result两种页面格式
-                { "NoteAuthor", [
+                {
+                    "NoteAuthor", [
                         ".card-bottom-wrapper .author .name",   // 搜索页面作者名称
                         ".author-wrapper .author .name",        // 探索页面作者名称（如果存在）
                         ".card-bottom-wrapper .name span.name", // 搜索页面完整路径
@@ -404,18 +443,20 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 笔记链接相关 - 基于真实HTML结构 =====
-                
+
                 // 笔记隐藏链接 - 优先提取（更稳定）
-                { "NoteHiddenLink", [
+                {
+                    "NoteHiddenLink", [
                         "a[style*='display: none']",               // 隐藏的explore链接
                         "a[href*='/explore/'][style*='none']",     // 隐藏的探索链接
                         "section a:first-child[style*='display']", // 笔记项的首个隐藏链接
                         "[data-testid='hidden-link']"
                     ]
                 },
-                
+
                 // 笔记显示链接 - 备选方案
-                { "NoteVisibleLink", [
+                {
+                    "NoteVisibleLink", [
                         "a.cover.mask.ld",            // 封面链接（真实类名）
                         "a.cover[target='_self']",    // 带target属性的封面链接
                         "a[href*='/search_result/']", // 搜索结果链接
@@ -424,11 +465,12 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='visible-link']"
                     ]
                 },
-                
+
                 // ===== 时间信息相关 - 基于真实HTML结构 =====
-                
+
                 // 笔记时间信息
-                { "NoteTime", [
+                {
+                    "NoteTime", [
                         ".time span.time",              // 搜索页面时间格式
                         ".card-bottom-wrapper .time",   // 搜索页面上下文
                         "[data-v-11fd8d4e] .time span", // Vue组件内的时间
@@ -442,11 +484,12 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='note-time']"
                     ]
                 },
-                
+
                 // ===== 封面图片相关 - 基于真实HTML结构 =====
-                
+
                 // 笔记封面图片
-                { "NoteCoverImage", [
+                {
+                    "NoteCoverImage", [
                         ".cover img[data-xhs-img]",                 // 真实结构：带小红书图片标记
                         "a.cover.mask.ld img",                      // 封面链接内的图片
                         ".cover img[elementtiming='card-exposed']", // 带性能监控属性的图片
@@ -459,9 +502,10 @@ namespace XiaoHongShuMCP.Services
 
 
                 // ===== 评论交互相关 =====
-                
+
                 // 评论按钮
-                { "CommentButton", [
+                {
+                    "CommentButton", [
                         ".comment-wrapper",
                         "#comment",
                         ".comment-icon",
@@ -469,9 +513,10 @@ namespace XiaoHongShuMCP.Services
                         ".comment-btn"
                     ]
                 },
-                
+
                 // 评论输入框
-                { "CommentInput", [
+                {
+                    "CommentInput", [
                         ".comment-input",
                         "textarea[placeholder*='评论']",
                         ".comment-box textarea",
@@ -479,9 +524,10 @@ namespace XiaoHongShuMCP.Services
                         ".reply-input"
                     ]
                 },
-                
+
                 // 评论列表容器
-                { "CommentList", [
+                {
+                    "CommentList", [
                         ".comment-list",
                         ".comments-container",
                         "#comment-list",
@@ -489,9 +535,10 @@ namespace XiaoHongShuMCP.Services
                         ".comment-section"
                     ]
                 },
-                
+
                 // 单个评论项
-                { "CommentItem", [
+                {
+                    "CommentItem", [
                         ".comment-item",
                         ".comment-card",
                         ".comment",
@@ -501,9 +548,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 笔记详情页相关 =====
-                
+
                 // 笔记正文内容
-                { "NoteContent", [
+                {
+                    "NoteContent", [
                         ".note-content",
                         ".desc",
                         "#note-content",
@@ -511,9 +559,10 @@ namespace XiaoHongShuMCP.Services
                         ".note-text"
                     ]
                 },
-                
+
                 // 提交/发布按钮
-                { "SubmitButton", [
+                {
+                    "SubmitButton", [
                         ".submit-btn",
                         "button[type='submit']",
                         ".publish-btn",
@@ -523,9 +572,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 发布/创作页相关 =====
-                
+
                 // 发布页容器 - Vue.js创作平台特化
-                { "PublishContainer", [
+                {
+                    "PublishContainer", [
                         ".publish-container",
                         ".create-note",
                         ".publisher-wrapper",
@@ -538,9 +588,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 图片上传相关 - 核心功能 =====
-                
+
                 // 图片上传区域 - 必须首先处理（基于真实HTML结构）
-                { "ImageUploadArea", [
+                {
+                    "ImageUploadArea", [
                         ".upload-area",
                         ".image-uploader",
                         ".file-drop-zone",
@@ -552,9 +603,10 @@ namespace XiaoHongShuMCP.Services
                         ".image-drop-area"
                     ]
                 },
-                
+
                 // 图片上传外层容器 - 基于真实HTML结构
-                { "ImageUploadWrapper", [
+                {
+                    "ImageUploadWrapper", [
                         ".upload-wrapper",                  // 真实class名
                         "[data-v-8c223b18].upload-wrapper", // 带Vue组件ID的选择器
                         "[data-v-*].upload-wrapper",        // 通用Vue组件选择器
@@ -562,9 +614,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='upload-wrapper']"
                     ]
                 },
-                
+
                 // 拖拽上传区域 - 基于真实HTML结构
-                { "DragUploadArea", [
+                {
+                    "DragUploadArea", [
                         ".drag-over",                  // 真实class名
                         "[data-v-7cbccdb2].drag-over", // 带Vue组件ID的选择器
                         "[data-v-*].drag-over",        // 通用Vue组件选择器
@@ -573,9 +626,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='drag-area']"
                     ]
                 },
-                
+
                 // 上传按钮 - 基于真实HTML结构
-                { "UploadButton", [
+                {
+                    "UploadButton", [
                         ".el-button.upload-button",          // 真实class组合，最准确
                         ".upload-button",                    // 真实class名
                         "button:has-text('上传图片')",           // 真实按钮文本
@@ -584,9 +638,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='upload-button']"
                     ]
                 },
-                
+
                 // 拖拽提示文本 - 基于真实HTML结构
-                { "DragText", [
+                {
+                    "DragText", [
                         ".drag-text",                // 真实class名
                         "p:has-text('拖拽图片到此或点击上传')", // 真实提示文本
                         "p.drag-text",
@@ -595,9 +650,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='drag-text']"
                     ]
                 },
-                
+
                 // 上传限制信息文本
-                { "UploadInfo", [
+                {
+                    "UploadInfo", [
                         ".info",                   // 真实class名（上下文：upload-wrapper内的.info）
                         "p:has-text('最多支持上传18张')", // 真实信息文本
                         "p.info",
@@ -606,9 +662,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='upload-info']"
                     ]
                 },
-                
+
                 // 图片选择按钮（已整合到UploadButton，保留兼容性）
-                { "ImageSelectButton", [
+                {
+                    "ImageSelectButton", [
                         ".el-button.upload-button", // 使用真实的上传按钮
                         ".upload-button",
                         "button:has-text('上传图片')", // 真实按钮文本
@@ -621,9 +678,10 @@ namespace XiaoHongShuMCP.Services
                         ".file-selector-btn"
                     ]
                 },
-                
+
                 // 文件输入框 - 基于真实HTML结构
-                { "FileInput", [
+                {
+                    "FileInput", [
                         ".upload-input",                             // 真实class名
                         "input.upload-input[type='file'][multiple]", // 完整选择器
                         "input[accept='.jpg,.jpeg,.png,.webp']",     // 真实accept属性
@@ -633,9 +691,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='file-input']"
                     ]
                 },
-                
+
                 // 图片预览区域
-                { "ImagePreview", [
+                {
+                    "ImagePreview", [
                         ".image-preview",
                         ".preview-container",
                         ".image-list",
@@ -645,9 +704,10 @@ namespace XiaoHongShuMCP.Services
                         ".image-thumbnails"
                     ]
                 },
-                
+
                 // 上传进度指示器
-                { "UploadProgress", [
+                {
+                    "UploadProgress", [
                         ".upload-progress",
                         ".progress-bar",
                         ".uploading",
@@ -658,9 +718,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== Vue.js富文本编辑器相关 =====
-                
+
                 // 编辑器容器 - Vue.js特化
-                { "EditorContainer", [
+                {
+                    "EditorContainer", [
                         ".editor-container",
                         ".rich-editor",
                         ".text-editor",
@@ -671,9 +732,10 @@ namespace XiaoHongShuMCP.Services
                         ".content-editor-wrapper"
                     ]
                 },
-                
+
                 // 标题输入框 - Vue.js创作平台特化（基于真实HTML结构）
-                { "PublishTitleInput", [
+                {
+                    "PublishTitleInput", [
                         "input[placeholder*='填写标题会有更多赞哦']", // 真实placeholder文本，最准确
                         ".d-text",                          // 真实class名
                         ".title-input",
@@ -686,9 +748,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-v-*] input[type='text']"
                     ]
                 },
-                
+
                 // 内容编辑器 - TipTap富文本编辑器（基于真实HTML结构）
-                { "PublishContentInput", [
+                {
+                    "PublishContentInput", [
                         ".tiptap.ProseMirror",                         // 真实的TipTap编辑器class组合，最准确
                         "[contenteditable='true']",                    // contenteditable元素
                         "div[contenteditable='true'][role='textbox']", // 更精确的contenteditable
@@ -702,9 +765,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='content-input']"
                     ]
                 },
-                
+
                 // 标签输入框 - Vue.js特化
-                { "PublishTagInput", [
+                {
+                    "PublishTagInput", [
                         ".tag-input",
                         ".hashtag-input",
                         ".topic-input",
@@ -719,9 +783,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 发布操作按钮 =====
-                
+
                 // 暂存离开按钮 - 基于真实HTML结构
-                { "TemporarySaveButton", [
+                {
+                    "TemporarySaveButton", [
                         ".cancelBtn",              // 真实class名，最准确
                         "button:has-text('暂存离开')", // 真实按钮文本
                         "button:has-text('暂存')",
@@ -732,9 +797,10 @@ namespace XiaoHongShuMCP.Services
                         ".draft-leave-btn"
                     ]
                 },
-                
+
                 // 发布按钮 - 基于真实HTML结构
-                { "PublishButton", [
+                {
+                    "PublishButton", [
                         ".publishBtn",           // 真实class名，最准确
                         "button:has-text('发布')", // 真实按钮文本
                         ".publish-btn",
@@ -748,9 +814,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 编辑器等待和状态指示器 =====
-                
+
                 // 编辑器加载指示器
-                { "EditorLoading", [
+                {
+                    "EditorLoading", [
                         ".editor-loading",
                         ".editor-spinner",
                         ".content-loading",
@@ -758,9 +825,10 @@ namespace XiaoHongShuMCP.Services
                         ".loading-editor"
                     ]
                 },
-                
+
                 // 编辑器就绪指示器
-                { "EditorReady", [
+                {
+                    "EditorReady", [
                         ".editor-ready",
                         ".editor-active",
                         ".editor[data-ready='true']",
@@ -770,9 +838,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== Vue.js动态内容选择器 =====
-                
+
                 // Vue.js数据绑定元素
-                { "VueDataElement", [
+                {
+                    "VueDataElement", [
                         "[v-model]",
                         "[v-bind]",
                         "[data-v-*]",
@@ -781,9 +850,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid*='vue']"
                     ]
                 },
-                
+
                 // 动态渲染的表单元素
-                { "DynamicFormElement", [
+                {
+                    "DynamicFormElement", [
                         "[data-dynamic='true']",
                         ".dynamic-field",
                         ".form-field[data-loaded='true']",
@@ -793,9 +863,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 位置和地点相关 =====
-                
+
                 // 位置选择器
-                { "LocationSelector", [
+                {
+                    "LocationSelector", [
                         ".location-selector",
                         ".place-selector",
                         "input[placeholder*='位置']",
@@ -806,9 +877,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 通用UI元素 =====
-                
+
                 // 加载指示器
-                { "LoadingIndicator", [
+                {
+                    "LoadingIndicator", [
                         ".loading",
                         ".spinner",
                         ".loading-wrapper",
@@ -816,9 +888,10 @@ namespace XiaoHongShuMCP.Services
                         ".lds-ring"
                     ]
                 },
-                
+
                 // 错误提示
-                { "ErrorMessage", [
+                {
+                    "ErrorMessage", [
                         ".error-message",
                         ".error-tip",
                         ".toast-error",
@@ -826,9 +899,10 @@ namespace XiaoHongShuMCP.Services
                         ".notification.error"
                     ]
                 },
-                
+
                 // 成功提示
-                { "SuccessMessage", [
+                {
+                    "SuccessMessage", [
                         ".success-message",
                         ".success-tip",
                         ".toast-success",
@@ -836,9 +910,10 @@ namespace XiaoHongShuMCP.Services
                         ".notification.success"
                     ]
                 },
-                
+
                 // 模态框/弹窗
-                { "Modal", [
+                {
+                    "Modal", [
                         ".modal",
                         ".dialog",
                         ".popup",
@@ -846,9 +921,10 @@ namespace XiaoHongShuMCP.Services
                         ".overlay-container"
                     ]
                 },
-                
+
                 // 关闭按钮
-                { "CloseButton", [
+                {
+                    "CloseButton", [
                         ".close-btn",
                         ".modal-close",
                         "button[aria-label='关闭']",
@@ -858,9 +934,10 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // ===== 页面状态检测选择器 =====
-                
+
                 // 检测是否在上传状态（暂存后回归的状态）
-                { "UploadState", [
+                {
+                    "UploadState", [
                         ".upload-wrapper",           // 上传容器存在表示在上传状态
                         ".drag-over",                // 拖拽区域存在
                         ".el-button.upload-button",  // 上传按钮存在
@@ -868,9 +945,10 @@ namespace XiaoHongShuMCP.Services
                         "[data-testid='upload-state']"
                     ]
                 },
-                
+
                 // 检测是否在编辑状态
-                { "EditState", [
+                {
+                    "EditState", [
                         ".tiptap.ProseMirror",              // TipTap编辑器存在表示在编辑状态
                         "input[placeholder*='填写标题会有更多赞哦']", // 标题输入存在
                         ".editor-container",                // 编辑器容器存在
@@ -881,7 +959,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 笔记详情页面专用选择器 =====
 
                 // 笔记详情页面模态框容器
-                { "NoteDetailModal", [
+                {
+                    "NoteDetailModal", [
                         ".note-detail-mask[note-id]",          // 带note-id属性的详情页模态框（最准确）
                         ".note-detail-mask",                   // 详情页模态框
                         "[note-id]",                           // 任何带note-id属性的元素
@@ -892,7 +971,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 详情页关闭按钮
-                { "NoteDetailCloseButton", [
+                {
+                    "NoteDetailCloseButton", [
                         ".close-circle .close",   // 主关闭按钮（圆形）
                         ".close-box",             // 方形关闭按钮
                         ".close-circle",          // 关闭按钮容器
@@ -902,7 +982,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 详情页笔记标题（区别于列表页标题）
-                { "NoteDetailTitle", [
+                {
+                    "NoteDetailTitle", [
                         "#detail-desc .note-text span",       // 详情页标题文本（最精确）
                         "#detail-desc .desc .note-text span", // 完整路径
                         ".desc .note-text span",              // 描述区域的文本
@@ -912,7 +993,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 详情页作者信息（区别于列表页作者）
-                { "NoteDetailAuthor", [
+                {
+                    "NoteDetailAuthor", [
                         ".author-wrapper .info .name .username", // 详情页作者名（最精确）
                         ".author .info .name .username",         // 作者信息区域的用户名
                         ".username",                             // 用户名span
@@ -923,7 +1005,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 详情页作者头像
-                { "NoteDetailAuthorAvatar", [
+                {
+                    "NoteDetailAuthorAvatar", [
                         ".author-wrapper .info a img.avatar-item", // 详情页作者头像（最精确）
                         ".author .info img.avatar-item",           // 作者信息区域头像
                         ".avatar-item[crossorigin='anonymous']",   // 跨域头像图片
@@ -935,7 +1018,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 详情页评论系统专用选择器 =====
 
                 // 评论总数显示
-                { "CommentTotal", [
+                {
+                    "CommentTotal", [
                         ".comments-container .total",       // 评论总数容器（最精确）
                         ".comments-el .total",              // 评论元素总数
                         ".total[selected-disabled-search]", // 带特殊属性的总数
@@ -945,7 +1029,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 单个评论项（详情页专用）
-                { "CommentItemDetail", [
+                {
+                    "CommentItemDetail", [
                         ".comment-item[id^='comment-']",        // 带comment-ID的评论项（最精确）
                         ".parent-comment .comment-item",        // 父级评论项
                         ".comment-item:not(.comment-item-sub)", // 非子评论项
@@ -955,7 +1040,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 子评论项
-                { "CommentItemSub", [
+                {
+                    "CommentItemSub", [
                         ".comment-item.comment-item-sub[id^='comment-']", // 子评论项（最精确）
                         ".comment-item-sub",                              // 子评论项类
                         ".reply-container .comment-item",                 // 回复容器中的评论项
@@ -964,7 +1050,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 评论作者名（详情页专用）
-                { "CommentAuthorDetail", [
+                {
+                    "CommentAuthorDetail", [
                         ".comment-item .author .name",                   // 评论项中的作者名（最精确）
                         ".comment-item .author-wrapper .name",           // 评论作者包装器中的名称
                         ".comment-inner-container .right .author .name", // 完整路径
@@ -974,7 +1061,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 评论内容（详情页专用）
-                { "CommentContentDetail", [
+                {
+                    "CommentContentDetail", [
                         ".comment-item .content .note-text span",            // 评论内容文本（最精确）
                         ".comment-inner-container .content .note-text span", // 完整路径
                         ".comment-item .note-text",                          // 评论项中的笔记文本
@@ -984,7 +1072,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 评论点赞数（详情页专用）
-                { "CommentLikeCountDetail", [
+                {
+                    "CommentLikeCountDetail", [
                         ".comment-item .like-wrapper .count",       // 评论点赞数（最精确）
                         ".comment-item .interactions .like .count", // 评论交互区域点赞数
                         ".like-wrapper.like-active .count",         // 激活状态的点赞数
@@ -994,7 +1083,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 评论回复数
-                { "CommentReplyCount", [
+                {
+                    "CommentReplyCount", [
                         ".comment-item .reply .count",               // 评论回复数（最精确）
                         ".comment-item .interactions .reply .count", // 交互区域回复数
                         ".reply.icon-container .count",              // 回复图标容器数量
@@ -1004,7 +1094,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 评论时间和地点
-                { "CommentDateTime", [
+                {
+                    "CommentDateTime", [
                         ".comment-item .date span[selected-disabled-search]", // 评论日期（最精确）
                         ".comment-item .info .date",                          // 评论信息区域日期
                         ".comment-item .location",                            // 评论地点
@@ -1017,7 +1108,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 详情页评论输入区域选择器 =====
 
                 // 详情页评论输入框
-                { "DetailPageCommentInput", [
+                {
+                    "DetailPageCommentInput", [
                         "#content-textarea[contenteditable='true']",   // 详情页评论输入框（最精确）
                         ".content-input[data-tribute='true']",         // 带tribute属性的内容输入框
                         ".input-box .content-edit p[contenteditable]", // 输入框可编辑段落
@@ -1027,7 +1119,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 详情页评论发送按钮
-                { "DetailPageCommentSubmit", [
+                {
+                    "DetailPageCommentSubmit", [
                         ".right-btn-area .btn.submit",  // 详情页发送按钮（最精确）
                         ".bottom .btn.submit",          // 底部发送按钮
                         "button.submit.gray[disabled]", // 禁用状态发送按钮
@@ -1037,7 +1130,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 详情页评论取消按钮
-                { "DetailPageCommentCancel", [
+                {
+                    "DetailPageCommentCancel", [
                         ".right-btn-area .btn.cancel", // 详情页取消按钮（最精确）
                         ".bottom .btn.cancel",         // 底部取消按钮
                         ".engage-bar .cancel",         // 交互栏取消按钮
@@ -1048,7 +1142,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 动态评论交互状态选择器 =====
 
                 // 激活状态的评论区域 - 检测评论输入是否被激活
-                { "EngageBarActive", [
+                {
+                    "EngageBarActive", [
                         ".engage-bar.active",           // 激活状态的交互栏（最精确）
                         ".engage-bar[class*='active']", // 包含active类的交互栏
                         "div.engage-bar.active",        // 更具体的标签+类选择器
@@ -1057,7 +1152,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 评论输入框就绪状态 - contenteditable + tribute支持
-                { "CommentInputReady", [
+                {
+                    "CommentInputReady", [
                         "#content-textarea[contenteditable='true'][data-tribute='true']", // 完整属性匹配（最精确）
                         "p.content-input[contenteditable='true']",                        // 段落类型的可编辑输入
                         ".content-edit p[contenteditable][data-tribute]",                 // 支持@提及的可编辑段落
@@ -1067,7 +1163,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 发送按钮状态检测 - 区分启用和禁用状态
-                { "CommentSubmitEnabled", [
+                {
+                    "CommentSubmitEnabled", [
                         ".right-btn-area .btn.submit:not([disabled])", // 启用状态的发送按钮
                         ".btn.submit:not(.gray):not([disabled])",      // 非灰色非禁用的发送按钮
                         "button.submit:not([disabled]):not(.gray)",    // 启用状态的提交按钮
@@ -1075,7 +1172,8 @@ namespace XiaoHongShuMCP.Services
                     ]
                 },
 
-                { "CommentSubmitDisabled", [
+                {
+                    "CommentSubmitDisabled", [
                         ".right-btn-area .btn.submit.gray[disabled]", // 禁用状态的发送按钮（最精确）
                         ".btn.submit[disabled]",                      // 任何禁用的发送按钮
                         "button.submit.gray",                         // 灰色状态的提交按钮
@@ -1087,7 +1185,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 表情符号交互系统选择器 =====
 
                 // 最近使用的表情符号区域
-                { "RecentEmojiArea", [
+                {
+                    "RecentEmojiArea", [
                         ".emoji-area.recent-emoji",               // 最近表情区域（最精确）
                         "[class*='emoji-area'][class*='recent']", // 包含emoji-area和recent的元素
                         ".recent-emoji .click-area",              // 最近表情的点击区域
@@ -1096,7 +1195,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 单个表情符号点击区域
-                { "EmojiClickArea", [
+                {
+                    "EmojiClickArea", [
                         ".emoji-area .click-area",       // 表情区域内的点击区域（最精确）
                         ".recent-emoji .click-area img", // 最近表情的图片点击区域
                         ".emoji-area img.emoji",         // 表情区域内的表情图片
@@ -1105,7 +1205,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 表情符号触发按钮
-                { "EmojiTriggerButton", [
+                {
+                    "EmojiTriggerButton", [
                         "#showEmojiEl",                                   // 显示表情的触发元素（最精确）
                         "svg[id='showEmojiEl']",                          // SVG表情触发按钮
                         ".left-icon-area .icon svg[xlink:href='#emoji']", // 表情图标SVG
@@ -1116,7 +1217,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 底部控制按钮选择器 =====
 
                 // @提及触发按钮
-                { "MentionTriggerButton", [
+                {
+                    "MentionTriggerButton", [
                         "#showMentionEl",                                   // 显示提及的触发元素（最精确）
                         "svg[id='showMentionEl']",                          // SVG提及触发按钮
                         ".left-icon-area .icon svg[xlink:href='#mention']", // 提及图标SVG
@@ -1125,7 +1227,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 左侧图标区域（提及+表情）
-                { "LeftIconArea", [
+                {
+                    "LeftIconArea", [
                         ".left-icon-area",                   // 左侧图标区域（最精确）
                         ".bottom-inner .left-icon-area",     // 底部内部的左侧图标区域
                         ".engage-bar .left-icon-area .icon", // 交互栏左侧图标
@@ -1134,7 +1237,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 右侧按钮区域（发送+取消）
-                { "RightButtonArea", [
+                {
+                    "RightButtonArea", [
                         ".right-btn-area",               // 右侧按钮区域（最精确）
                         ".bottom-inner .right-btn-area", // 底部内部的右侧按钮区域
                         ".engage-bar .right-btn-area",   // 交互栏右侧按钮区域
@@ -1145,7 +1249,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 实时计数更新选择器 =====
 
                 // 动态点赞数 - 支持实时更新
-                { "DynamicLikeCount", [
+                {
+                    "DynamicLikeCount", [
                         ".like-wrapper.like-active .count[selected-disabled-search]", // 激活状态点赞数（最精确）
                         ".engage-bar .like-wrapper .count",                           // 交互栏点赞数
                         ".buttons.engage-bar-style .like-wrapper .count",             // 交互栏样式的点赞数
@@ -1154,7 +1259,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 动态收藏数 - 支持实时更新
-                { "DynamicCollectCount", [
+                {
+                    "DynamicCollectCount", [
                         "#note-page-collect-board-guide .count", // 收藏引导区域计数（最精确）
                         ".collect-wrapper .count",               // 收藏包装器计数
                         ".engage-bar .collect-wrapper .count",   // 交互栏收藏数
@@ -1163,7 +1269,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 动态评论数 - 支持实时更新
-                { "DynamicCommentCount", [
+                {
+                    "DynamicCommentCount", [
                         ".engage-bar .chat-wrapper .count",               // 交互栏聊天数（最精确）
                         ".buttons.engage-bar-style .chat-wrapper .count", // 交互栏样式的评论数
                         ".chat-wrapper .count",                           // 聊天包装器计数
@@ -1175,7 +1282,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 点赞功能选择器 - 支持多状态检测 =====
 
                 // 未点赞状态的点赞按钮 - 基于真实HTML结构优化
-                { "likeButton", [
+                {
+                    "likeButton", [
                         ".like-wrapper:not(.like-active)",                           // 未点赞状态（最精确）
                         ".like-wrapper svg use[xlink\\:href='#like']",               // 基于SVG图标识别未点赞状态
                         ".like-wrapper:has(use[xlink\\:href='#like'])",              // 包含未点赞图标的wrapper
@@ -1188,7 +1296,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 已点赞状态的点赞按钮 - 基于真实HTML结构优化
-                { "likeButtonActive", [
+                {
+                    "likeButtonActive", [
                         ".like-wrapper.like-active",                           // 已点赞状态（最精确）
                         ".like-wrapper svg use[xlink\\:href='#liked']",        // 基于SVG图标识别已点赞状态
                         ".like-wrapper:has(use[xlink\\:href='#liked'])",       // 包含已点赞图标的wrapper
@@ -1201,7 +1310,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 点赞操作加载状态的按钮
-                { "likeButtonLoading", [
+                {
+                    "likeButtonLoading", [
                         ".like-wrapper.loading",                         // 加载状态的点赞按钮（最精确）
                         ".like-wrapper[data-loading='true']",            // 带加载属性的点赞按钮
                         ".like-button.loading",                          // 加载状态的点赞按钮类
@@ -1215,7 +1325,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 收藏功能选择器 - 支持多状态检测 =====
 
                 // 未收藏状态的收藏按钮 - 基于真实HTML结构优化
-                { "favoriteButton", [
+                {
+                    "favoriteButton", [
                         ".collect-wrapper svg use[xlink\\:href='#collect']",               // 基于SVG图标识别未收藏状态（最精确）
                         ".collect-wrapper:has(use[xlink\\:href='#collect'])",              // 包含未收藏图标的wrapper
                         ".collect-wrapper:not(:has(use[xlink\\:href='#collected']))",      // 排除已收藏状态
@@ -1228,7 +1339,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 已收藏状态的收藏按钮 - 基于真实HTML结构优化
-                { "favoriteButtonActive", [
+                {
+                    "favoriteButtonActive", [
                         ".collect-wrapper svg use[xlink\\:href='#collected']",       // 基于SVG图标识别已收藏状态（最精确）
                         ".collect-wrapper:has(use[xlink\\:href='#collected'])",      // 包含已收藏图标的wrapper
                         ".collect-wrapper:has(.count):has(use[href*='collected'])",  // 包含计数和已收藏图标
@@ -1241,7 +1353,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 收藏操作加载状态的按钮
-                { "favoriteButtonLoading", [
+                {
+                    "favoriteButtonLoading", [
                         ".collect-wrapper.loading",                          // 加载状态的收藏按钮（最精确）
                         ".collect-wrapper[data-loading='true']",             // 带加载属性的收藏按钮
                         ".favorite-button.loading",                          // 加载状态的收藏按钮类
@@ -1255,7 +1368,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 互动数据统计选择器 - 支持实时更新 =====
 
                 // 点赞数文本显示
-                { "likeCount", [
+                {
+                    "likeCount", [
                         ".engage-bar .like-wrapper .count",                           // 详情页点赞数（最精确）
                         ".like-wrapper.like-active .count[selected-disabled-search]", // 激活状态点赞数
                         ".buttons.engage-bar-style .like-wrapper .count",             // 交互栏样式的点赞数
@@ -1268,7 +1382,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 收藏数文本显示
-                { "favoriteCount", [
+                {
+                    "favoriteCount", [
                         ".engage-bar .collect-wrapper .count",                              // 详情页收藏数（最精确）
                         ".collect-wrapper.collect-active .count[selected-disabled-search]", // 激活状态收藏数
                         ".buttons.engage-bar-style .collect-wrapper .count",                // 交互栏样式的收藏数
@@ -1281,7 +1396,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 评论数文本显示（扩展现有选择器）
-                { "commentCount", [
+                {
+                    "commentCount", [
                         ".engage-bar .chat-wrapper .count",               // 详情页评论数（最精确）
                         ".buttons.engage-bar-style .chat-wrapper .count", // 交互栏样式的评论数
                         ".chat-wrapper .count[selected-disabled-search]", // 特殊属性的评论数
@@ -1297,7 +1413,8 @@ namespace XiaoHongShuMCP.Services
                 // ===== 交互状态检测选择器 =====
 
                 // 评论区域展开状态检测
-                { "CommentAreaExpanded", [
+                {
+                    "CommentAreaExpanded", [
                         ".engage-bar.active .input-box",    // 激活状态下的输入框
                         ".engage-bar.active .content-edit", // 激活状态下的内容编辑区
                         ".engage-bar.active .bottom",       // 激活状态下的底部区域
@@ -1306,7 +1423,8 @@ namespace XiaoHongShuMCP.Services
                 },
 
                 // 按钮hover状态检测
-                { "ShareButtonHovered", [
+                {
+                    "ShareButtonHovered", [
                         ".share-icon-container.hovered", // 悬停状态的分享图标容器（最精确）
                         ".share-wrapper .hovered",       // 分享包装器内的悬停元素
                         ".share-icon-container:hover",   // CSS悬停状态
@@ -1337,7 +1455,7 @@ namespace XiaoHongShuMCP.Services
                         ".note-item[data-index]",        // 带索引的笔记项
                         ".note-item"
                     ],
-                    
+
                     // 探索页面状态检测选择器
                     ["PageContainer"] =
                     [
@@ -1345,7 +1463,7 @@ namespace XiaoHongShuMCP.Services
                         ".channel-container", // 频道容器
                         "[data-testid='explore-page']"
                     ],
-                    
+
                     // 探索页面搜索框（如果存在）
                     ["SearchInput"] =
                     [
@@ -1366,7 +1484,7 @@ namespace XiaoHongShuMCP.Services
                         ".result-list .note-item",         // 结果列表中的笔记
                         ".note-item"
                     ],
-                    
+
                     // 搜索结果页面状态检测选择器
                     ["PageContainer"] =
                     [
@@ -1374,7 +1492,7 @@ namespace XiaoHongShuMCP.Services
                         ".search-layout__main", // 搜索主容器
                         "[data-testid='search-result-page']"
                     ],
-                    
+
                     // 搜索结果页面的搜索框（原地搜索）
                     ["SearchInput"] =
                     [
@@ -1414,10 +1532,10 @@ namespace XiaoHongShuMCP.Services
                 // 如果找到页面状态特定的选择器，将其与通用选择器合并
                 var generalSelectors = GetSelectors(alias);
                 var combinedSelectors = new List<string>();
-                
+
                 // 优先使用状态特定的选择器
                 combinedSelectors.AddRange(stateSpecificSelectors);
-                
+
                 // 添加通用选择器作为备选（去重）
                 foreach (var selector in generalSelectors)
                 {
@@ -1426,7 +1544,7 @@ namespace XiaoHongShuMCP.Services
                         combinedSelectors.Add(selector);
                     }
                 }
-                
+
                 return combinedSelectors;
             }
 
@@ -1441,18 +1559,18 @@ namespace XiaoHongShuMCP.Services
             {
                 // 获取当前页面URL
                 var currentUrl = page.Url;
-                
+
                 // 基于URL进行页面状态检测
                 if (currentUrl.Contains("/search_result"))
                 {
                     return PageState.SearchResult;
                 }
-                
+
                 if (currentUrl.Contains("/explore"))
                 {
                     return PageState.Explore;
                 }
-                
+
                 // 辅助DOM特征检测
                 var exploreDetectors = _pageStateSelectors[PageState.Explore]["PageContainer"];
                 foreach (var selector in exploreDetectors)
@@ -1470,7 +1588,7 @@ namespace XiaoHongShuMCP.Services
                         // 忽略单个选择器检测失败
                     }
                 }
-                
+
                 var searchDetectors = _pageStateSelectors[PageState.SearchResult]["PageContainer"];
                 foreach (var selector in searchDetectors)
                 {
@@ -1487,7 +1605,7 @@ namespace XiaoHongShuMCP.Services
                         // 忽略单个选择器检测失败
                     }
                 }
-                
+
                 return PageState.Unknown;
             }
             catch

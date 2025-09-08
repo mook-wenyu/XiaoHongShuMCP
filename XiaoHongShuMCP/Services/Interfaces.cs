@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Text.Json.Serialization;
 using Microsoft.Playwright;
 
 namespace XiaoHongShuMCP.Services;
@@ -112,6 +113,41 @@ public interface IXiaoHongShuService
         bool includeAnalytics = true,
         bool autoExport = true,
         string? exportFileName = null);
+    
+    /// <summary>
+    /// 获取推荐笔记，确保API被正确触发
+    /// 合并自 IRecommendService.GetRecommendedNotesAsync
+    /// </summary>
+    /// <param name="limit">获取数量限制</param>
+    /// <param name="timeout">超时时间</param>
+    /// <returns>推荐结果</returns>
+    Task<OperationResult<RecommendListResult>> GetRecommendedNotesAsync(int limit = 20, TimeSpan? timeout = null);
+    
+    /// <summary>
+    /// 导航到发现页面并确保API被正确触发
+    /// 合并自 IDiscoverPageNavigationService.NavigateToDiscoverPageAsync
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="timeout">超时时间</param>
+    /// <returns>导航结果</returns>
+    Task<DiscoverNavigationResult> NavigateToDiscoverPageAsync(IPage page, TimeSpan? timeout = null);
+    
+    /// <summary>
+    /// 获取当前页面状态 - 通用版本
+    /// 支持多种页面类型的检测和状态分析
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="expectedPageType">期望的页面类型（可选，用于优化检测）</param>
+    /// <returns>通用页面状态信息</returns>
+    Task<PageStatusInfo> GetCurrentPageStatusAsync(IPage page, PageType? expectedPageType = null);
+    
+    /// <summary>
+    /// 获取发现页面状态 - 向后兼容方法
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <returns>发现页面状态</returns>
+    [Obsolete("请使用 GetCurrentPageStatusAsync(IPage, PageType?) 方法替代，传入 PageType.Discover 作为期望类型")]
+    Task<DiscoverPageStatus> GetDiscoverPageStatusAsync(IPage page);
 }
 /// <summary>
 /// 账号管理服务接口
@@ -172,7 +208,7 @@ public interface IAccountManager
     string GetUserInfoSummary();
 }
 /// <summary>
-/// 浏览器管理服务接口 - 单用户模式
+/// 浏览器管理服务接口
 /// </summary>
 public interface IBrowserManager
 {
@@ -180,6 +216,11 @@ public interface IBrowserManager
     /// 获取或创建浏览器实例
     /// </summary>
     Task<IBrowserContext> GetBrowserContextAsync();
+
+    /// <summary>
+    /// 获取页面
+    /// </summary>
+    Task<IPage> GetPageAsync();
 
     /// <summary>
     /// 释放浏览器资源
@@ -195,6 +236,16 @@ public interface IBrowserManager
     /// 检查浏览器连接是否健康
     /// </summary>
     Task<bool> IsConnectionHealthyAsync();
+
+    /// <summary>
+    /// 标记开始一段关键浏览器操作，健康检查将暂缓重连
+    /// </summary>
+    void BeginOperation();
+
+    /// <summary>
+    /// 标记结束关键浏览器操作
+    /// </summary>
+    void EndOperation();
 }
 /// <summary>
 /// DOM元素管理服务接口 - 支持页面状态感知
@@ -459,6 +510,25 @@ public enum PageState
     /// <summary>未知页面状态</summary>
     Unknown
 }
+
+/// <summary>
+/// 通用页面类型枚举 - 支持多种页面类型检测
+/// </summary>
+public enum PageType
+{
+    /// <summary>发现页面 (https://www.xiaohongshu.com/explore)</summary>
+    Discover,
+    /// <summary>搜索页面 (https://www.xiaohongshu.com/search_result)</summary>
+    Search,
+    /// <summary>个人页面 (https://www.xiaohongshu.com/user/profile)</summary>
+    Profile,
+    /// <summary>笔记详情页面 (https://www.xiaohongshu.com/discovery/item)</summary>
+    NoteDetail,
+    /// <summary>首页 (https://www.xiaohongshu.com/)</summary>
+    Home,
+    /// <summary>未知页面类型</summary>
+    Unknown
+}
 /// <summary>
 /// 拟人化等待类型枚举
 /// 定义不同场景下的等待行为模式
@@ -537,6 +607,67 @@ public class NoteInfo
 
     public string CoverImage { get; set; } = string.Empty;
     public string? Content { get; set; }
+    public List<string> Images { get; set; } = [];
+
+    /// <summary>
+    /// 描述/内容预览（来自搜索结果 note_card.desc）
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 视频直链（如果是视频笔记）
+    /// </summary>
+    public string VideoUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 视频时长（秒）
+    /// </summary>
+    public int? VideoDuration { get; set; }
+
+    /// <summary>
+    /// 是否已点赞（若可用）
+    /// </summary>
+    public bool IsLiked { get; set; }
+
+    /// <summary>
+    /// 是否已收藏（若可用）
+    /// </summary>
+    public bool IsCollected { get; set; }
+
+    /// <summary>
+    /// 分享数（若可用）
+    /// </summary>
+    public int? ShareCount { get; set; }
+
+    /// <summary>
+    /// 页面令牌（若可用）
+    /// </summary>
+    public string? PageToken { get; set; }
+
+    /// <summary>
+    /// 搜索ID（若可用）
+    /// </summary>
+    public string? SearchId { get; set; }
+
+    /// <summary>
+    /// 视频详细信息（若可用）
+    /// </summary>
+    public RecommendedVideoInfo? VideoInfo { get; set; }
+
+    /// <summary>
+    /// 封面详细信息（若可用）
+    /// </summary>
+    public RecommendedCoverInfo? CoverInfo { get; set; }
+
+    /// <summary>
+    /// 互动详细信息（若可用）
+    /// </summary>
+    public RecommendedInteractInfo? InteractInfo { get; set; }
+
+    /// <summary>
+    /// 用户详细信息（若可用）
+    /// </summary>
+    public RecommendedUserInfo? UserInfo { get; set; }
 
     /// <summary>
     /// 扩展字段：作者用户ID
@@ -687,15 +818,9 @@ public class NoteInfo
 public class NoteDetail : NoteInfo
 {
     public new string Content { get; set; } = string.Empty;
-    public List<string> Images { get; set; } = [];
+    public new List<string> Images { get; set; } = [];
     public List<string> Tags { get; set; } = [];
     public List<CommentInfo> Comments { get; set; } = [];
-    public string VideoUrl { get; set; } = string.Empty;
-    
-    /// <summary>
-    /// 视频时长（秒）- 从原始JSON数据中提取
-    /// </summary>
-    public int? VideoDuration { get; set; }
     
     /// <summary>
     /// 是否为视频笔记
@@ -813,6 +938,16 @@ public class UserInfo : BaseUserInfo
 {
     public bool IsLoggedIn { get; set; }
     public DateTime LastActiveTime { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// 向后兼容字段：Username 等同于 Nickname
+    /// 旧版测试和调用方使用 Username 字段，此处提供映射以保持兼容
+    /// </summary>
+    public string Username
+    {
+        get => Nickname;
+        set => Nickname = value;
+    }
 
     // === 个人页面扩展数据 ===
 
@@ -1066,7 +1201,18 @@ public record BatchNoteResult(
     DataQuality OverallQuality,
     BatchProcessingStatistics Statistics,
     SimpleExportInfo? ExportInfo = null
-);
+)
+{
+    /// <summary>
+    /// 向后兼容属性：等同于 SuccessfulNotes
+    /// </summary>
+    public List<NoteDetail> NoteDetails => SuccessfulNotes;
+
+    /// <summary>
+    /// 向后兼容属性：等同于 ProcessedCount
+    /// </summary>
+    public int TotalProcessed => ProcessedCount;
+}
 /// <summary>
 /// 处理模式枚举 - 智能处理策略
 /// 根据内容复杂度和系统负载动态调整处理速度
@@ -1089,6 +1235,20 @@ public record ExportOptions(
     bool IncludeComments = false
 );
 #endregion
+
+/// <summary>
+/// 搜索请求模型（用于测试与参数验证）
+/// </summary>
+public class SearchRequest
+{
+    public string Keyword { get; set; } = string.Empty;
+    public int MaxResults { get; set; }
+    
+    public bool IsValid()
+    {
+        return !string.IsNullOrWhiteSpace(Keyword) && MaxResults > 0;
+    }
+}
 
 #region 推荐服务接口
 
@@ -1145,6 +1305,19 @@ public interface ISmartCollectionController
         RecommendCollectionMode collectionMode = RecommendCollectionMode.Standard,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
+
+    
+    /// <summary>
+    /// 执行纯数据收集（不包含API监听）
+    /// </summary>
+    /// <param name="context">浏览器上下文</param>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="targetCount">目标收集数量</param>
+    /// <param name="collectionMode">收集模式</param>
+    /// <param name="timeout">超时时间</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>数据收集结果</returns>
+    // 原 ExecuteDataCollectionAsync（DOM 收集）已移除：统一改为通过 API 监听获取数据。
 
     /// <summary>
     /// 获取当前收集状态
@@ -1231,14 +1404,54 @@ public class DiscoverNavigationResult
 }
 
 /// <summary>
-/// 发现页面状态
+/// 发现页面状态 - 向后兼容类，继承自通用PageStatusInfo
 /// </summary>
-public class DiscoverPageStatus
+public class DiscoverPageStatus : PageStatusInfo
 {
     /// <summary>
-    /// 是否在发现页面
+    /// 初始化新实例
     /// </summary>
-    public bool IsOnDiscoverPage { get; set; }
+    public DiscoverPageStatus()
+    {
+        PageType = PageType.Discover;
+    }
+
+    /// <summary>
+    /// 是否在发现页面 - 兼容性属性
+    /// </summary>
+    public bool IsOnDiscoverPage
+    {
+        get => PageType == PageType.Discover && IsPageReady;
+        set
+        {
+            if (value)
+            {
+                PageType = PageType.Discover;
+                IsPageReady = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 可见的发现页面元素数量 - 兼容性属性
+    /// </summary>
+    public int DiscoverElementsCount
+    {
+        get => ElementsDetected.GetValueOrDefault("discover_elements", 0);
+        set => ElementsDetected["discover_elements"] = value;
+    }
+}
+
+/// <summary>
+/// 通用页面状态信息
+/// 支持多种页面类型的状态检测和信息记录
+/// </summary>
+public class PageStatusInfo
+{
+    /// <summary>
+    /// 页面类型
+    /// </summary>
+    public PageType PageType { get; set; } = PageType.Unknown;
 
     /// <summary>
     /// 当前页面URL
@@ -1246,19 +1459,58 @@ public class DiscoverPageStatus
     public string CurrentUrl { get; set; } = string.Empty;
 
     /// <summary>
-    /// 页面状态
+    /// 传统页面状态（兼容性）
     /// </summary>
-    public PageState PageState { get; set; }
+    public PageState PageState { get; set; } = PageState.Unknown;
 
     /// <summary>
-    /// 可见的发现页面元素数量
+    /// 检测到的页面元素信息
+    /// Key: 元素类型名称, Value: 元素数量
     /// </summary>
-    public int DiscoverElementsCount { get; set; }
+    public Dictionary<string, int> ElementsDetected { get; set; } = new();
 
     /// <summary>
-    /// API请求特征
+    /// API功能特征列表
     /// </summary>
-    public List<string> ApiFeatures { get; set; } = [];
+    public List<string> ApiFeatures { get; set; } = new();
+
+    /// <summary>
+    /// 页面是否就绪
+    /// </summary>
+    public bool IsPageReady { get; set; }
+
+    /// <summary>
+    /// 检测时间
+    /// </summary>
+    public DateTime DetectedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// 检测详细日志
+    /// </summary>
+    public List<string> DetectionLog { get; set; } = new();
+
+    /// <summary>
+    /// 检查指定页面类型是否匹配
+    /// </summary>
+    /// <param name="expectedType">期望的页面类型</param>
+    /// <returns>是否匹配</returns>
+    public bool IsPageType(PageType expectedType) => PageType == expectedType && IsPageReady;
+
+    /// <summary>
+    /// 获取指定类型元素的数量
+    /// </summary>
+    /// <param name="elementType">元素类型</param>
+    /// <returns>元素数量</returns>
+    public int GetElementCount(string elementType) => ElementsDetected.GetValueOrDefault(elementType, 0);
+
+    /// <summary>
+    /// 添加检测日志
+    /// </summary>
+    /// <param name="logEntry">日志条目</param>
+    public void AddDetectionLog(string logEntry)
+    {
+        DetectionLog.Add($"[{DateTime.UtcNow:HH:mm:ss.fff}] {logEntry}");
+    }
 }
 
 /// <summary>
@@ -1292,6 +1544,47 @@ public record SmartCollectionResult
     public CollectionStatus CollectionDetails { get; init; } = new();
     public bool ReachedTarget { get; init; }
     public double EfficiencyScore { get; init; }
+    
+    /// <summary>
+    /// 创建自定义结果（用于数据合并场景）
+    /// </summary>
+    public SmartCollectionResult(
+        bool success,
+        string? errorMessage,
+        List<NoteInfo> collectedNotes,
+        int targetCount,
+        int actuallyCollected,
+        TimeSpan duration,
+        bool apiDataAvailable = false,
+        double efficiencyScore = 0.0)
+    {
+        Success = success;
+        ErrorMessage = errorMessage;
+        CollectedNotes = collectedNotes;
+        CollectedCount = actuallyCollected;
+        TargetCount = targetCount;
+        RequestCount = 0; // 合并场景下不计算请求数
+        Duration = duration;
+        ReachedTarget = actuallyCollected >= targetCount;
+        EfficiencyScore = efficiencyScore;
+        
+        // 为合并场景设置特殊的性能指标
+        PerformanceMetrics = new CollectionPerformanceMetrics
+        {
+            ApiDataAvailable = apiDataAvailable,
+            TotalDuration = duration,
+            EfficiencyRating = efficiencyScore > 80 ? "High" : 
+                             efficiencyScore > 60 ? "Medium" : "Low"
+        };
+        
+        CollectionDetails = new CollectionStatus
+        {
+            Phase = CollectionPhase.Completed,
+            Progress = actuallyCollected,
+            TargetCount = targetCount,
+            LastUpdateTime = DateTime.UtcNow
+        };
+    }
 
     /// <summary>
     /// 创建成功结果
@@ -1303,18 +1596,16 @@ public record SmartCollectionResult
         TimeSpan duration, 
         CollectionPerformanceMetrics performanceMetrics)
     {
-        return new SmartCollectionResult
-        {
-            Success = true,
-            CollectedNotes = collectedNotes,
-            CollectedCount = collectedNotes.Count,
-            TargetCount = targetCount,
-            RequestCount = requestCount,
-            Duration = duration,
-            PerformanceMetrics = performanceMetrics,
-            ReachedTarget = collectedNotes.Count >= targetCount,
-            EfficiencyScore = targetCount > 0 ? (double)collectedNotes.Count / targetCount : 1.0
-        };
+        return new SmartCollectionResult(
+            success: true,
+            errorMessage: null,
+            collectedNotes: collectedNotes,
+            targetCount: targetCount,
+            actuallyCollected: collectedNotes.Count,
+            duration: duration,
+            apiDataAvailable: false,
+            efficiencyScore: targetCount > 0 ? (double)collectedNotes.Count / targetCount * 100 : 100.0
+        );
     }
 
     /// <summary>
@@ -1328,18 +1619,16 @@ public record SmartCollectionResult
         TimeSpan duration = default)
     {
         var collected = partialResults ?? [];
-        return new SmartCollectionResult
-        {
-            Success = false,
-            ErrorMessage = errorMessage,
-            CollectedNotes = collected,
-            CollectedCount = collected.Count,
-            TargetCount = targetCount,
-            RequestCount = requestCount,
-            Duration = duration,
-            ReachedTarget = false,
-            EfficiencyScore = 0.0
-        };
+        return new SmartCollectionResult(
+            success: false,
+            errorMessage: errorMessage,
+            collectedNotes: collected,
+            targetCount: targetCount,
+            actuallyCollected: collected.Count,
+            duration: duration,
+            apiDataAvailable: false,
+            efficiencyScore: 0.0
+        );
     }
 }
 
@@ -1381,6 +1670,9 @@ public class CollectionPerformanceMetrics
     public TimeSpan Duration { get; set; }
     public double RequestSuccessRate => RequestCount > 0 ? (double)SuccessfulRequests / RequestCount : 0;
     public double ScrollEfficiency => ScrollCount > 0 ? (double)SuccessfulRequests / ScrollCount : 0;
+    public TimeSpan TotalDuration { get; set; }
+    public string EfficiencyRating { get; set; } = "Unknown";
+    public bool ApiDataAvailable { get; set; }
 
     /// <summary>
     /// 默认构造函数
@@ -1414,69 +1706,9 @@ public class CollectionPerformanceMetrics
 public class RecommendedNote : NoteInfo
 {
     /// <summary>
-    /// 笔记描述/内容预览
-    /// </summary>
-    public string Description { get; set; } = string.Empty;
-
-    /// <summary>
     /// 图片列表信息
     /// </summary>
-    public List<RecommendedImageInfo> Images { get; set; } = [];
-
-    /// <summary>
-    /// 视频信息（如果是视频笔记）
-    /// </summary>
-    public RecommendedVideoInfo? VideoInfo { get; set; }
-
-    /// <summary>
-    /// 封面图片详细信息
-    /// </summary>
-    public RecommendedCoverInfo? CoverInfo { get; set; }
-
-    /// <summary>
-    /// 互动信息详情
-    /// </summary>
-    public RecommendedInteractInfo? InteractInfo { get; set; }
-
-    /// <summary>
-    /// 用户信息详情
-    /// </summary>
-    public RecommendedUserInfo? UserInfo { get; set; }
-
-    /// <summary>
-    /// 是否已点赞
-    /// </summary>
-    public bool IsLiked { get; set; }
-
-    /// <summary>
-    /// 是否已收藏
-    /// </summary>
-    public bool IsCollected { get; set; }
-
-    /// <summary>
-    /// 分享数
-    /// </summary>
-    public int? ShareCount { get; set; }
-
-    /// <summary>
-    /// 页面令牌，用于后续操作
-    /// </summary>
-    public string? PageToken { get; set; }
-
-    /// <summary>
-    /// 搜索ID，用于跟踪
-    /// </summary>
-    public string? SearchId { get; set; }
-
-    /// <summary>
-    /// 视频URL（继承并添加视频相关属性）
-    /// </summary>
-    public string VideoUrl { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 视频时长（秒）
-    /// </summary>
-    public int? VideoDuration { get; set; }
+    public new List<RecommendedImageInfo> Images { get; set; } = [];
 
     /// <summary>
     /// 获取格式化的视频时长文本（重写基类方法以支持新的视频数据结构）
@@ -2207,10 +2439,10 @@ public class SearchImageInfo
 /// <param name="Msg">响应消息</param>
 /// <param name="Success">是否成功</param>
 public record HomefeedResponse(
-    int Code,
-    HomefeedData? Data,
-    string Msg,
-    bool Success
+    [property: JsonPropertyName("code")] int Code,
+    [property: JsonPropertyName("data")] HomefeedData? Data,
+    [property: JsonPropertyName("msg")] string Msg,
+    [property: JsonPropertyName("success")] bool Success
 );
 
 /// <summary>
@@ -2219,8 +2451,8 @@ public record HomefeedResponse(
 /// <param name="CursorScore">分页游标标识</param>
 /// <param name="Items">推荐项目列表</param>
 public record HomefeedData(
-    string CursorScore,
-    List<HomefeedItem> Items
+    [property: JsonPropertyName("cursor_score")] string CursorScore,
+    [property: JsonPropertyName("items")] List<HomefeedItem> Items
 );
 
 /// <summary>
@@ -2233,12 +2465,12 @@ public record HomefeedData(
 /// <param name="TrackId">跟踪ID，用于分析</param>
 /// <param name="XsecToken">安全令牌</param>
 public record HomefeedItem(
-    string Id,
-    bool Ignore,
-    string ModelType,
-    NoteCard? NoteCard,
-    string? TrackId,
-    string? XsecToken
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("ignore")] bool Ignore,
+    [property: JsonPropertyName("model_type")] string ModelType,
+    [property: JsonPropertyName("note_card")] NoteCard? NoteCard,
+    [property: JsonPropertyName("track_id")] string? TrackId,
+    [property: JsonPropertyName("xsec_token")] string? XsecToken
 );
 
 /// <summary>
@@ -2252,13 +2484,13 @@ public record HomefeedItem(
 /// <param name="Video">视频信息（视频笔记专用）</param>
 /// <param name="NoteId">笔记ID</param>
 public record NoteCard(
-    UserCard User,
-    CoverInfo Cover,
-    string DisplayTitle,
-    InteractInfo InteractInfo,
-    string Type,
-    VideoInfo? Video = null,
-    string? NoteId = null
+    [property: JsonPropertyName("user")] UserCard User,
+    [property: JsonPropertyName("cover")] CoverInfo Cover,
+    [property: JsonPropertyName("display_title")] string DisplayTitle,
+    [property: JsonPropertyName("interact_info")] InteractInfo InteractInfo,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("video")] VideoInfo? Video = null,
+    [property: JsonPropertyName("note_id")] string? NoteId = null
 );
 
 /// <summary>
@@ -2266,7 +2498,7 @@ public record NoteCard(
 /// </summary>
 /// <param name="Capa">视频能力信息，包含时长等元数据</param>
 public record VideoInfo(
-    VideoCapa Capa
+    [property: JsonPropertyName("capa")] VideoCapa Capa
 );
 
 /// <summary>
@@ -2274,7 +2506,7 @@ public record VideoInfo(
 /// </summary>
 /// <param name="Duration">视频时长（秒）</param>
 public record VideoCapa(
-    int Duration
+    [property: JsonPropertyName("duration")] int Duration
 );
 
 /// <summary>
@@ -2285,11 +2517,16 @@ public record VideoCapa(
 /// <param name="XsecToken">用户安全令牌</param>
 /// <param name="Avatar">头像URL</param>
 public record UserCard(
-    string Nickname,
-    string UserId,
-    string? XsecToken,
-    string Avatar
-);
+    [property: JsonPropertyName("nickname")] string Nickname,
+    [property: JsonPropertyName("user_id")] string UserId,
+    [property: JsonPropertyName("xsec_token")] string? XsecToken,
+    [property: JsonPropertyName("avatar")] string Avatar
+)
+{
+    // 兼容另一种字段名：nick_name
+    [JsonPropertyName("nick_name")]
+    public string? NicknameAlt { get; init; }
+}
 
 /// <summary>
 /// 封面图片信息
@@ -2302,13 +2539,13 @@ public record UserCard(
 /// <param name="Height">图片高度</param>
 /// <param name="FileId">文件ID</param>
 public record CoverInfo(
-    List<ImageInfo> InfoList,
-    string Url,
-    string UrlDefault,
-    string UrlPre,
-    int Width,
-    int Height,
-    string FileId
+    [property: JsonPropertyName("info_list")] List<ImageInfo> InfoList,
+    [property: JsonPropertyName("url")] string Url,
+    [property: JsonPropertyName("url_default")] string UrlDefault,
+    [property: JsonPropertyName("url_pre")] string UrlPre,
+    [property: JsonPropertyName("width")] int Width,
+    [property: JsonPropertyName("height")] int Height,
+    [property: JsonPropertyName("file_id")] string FileId
 );
 
 /// <summary>
@@ -2317,8 +2554,8 @@ public record CoverInfo(
 /// <param name="ImageScene">图片场景，如"WB_PRV"、"WB_DFT"</param>
 /// <param name="Url">图片URL</param>
 public record ImageInfo(
-    string ImageScene,
-    string Url
+    [property: JsonPropertyName("image_scene")] string ImageScene,
+    [property: JsonPropertyName("url")] string Url
 );
 
 /// <summary>
@@ -2353,8 +2590,8 @@ public abstract class BaseInteractInfo
 }
 
 public record InteractInfo(
-    bool Liked,
-    string LikedCount
+    [property: JsonPropertyName("liked")] bool Liked,
+    [property: JsonPropertyName("liked_count")] string LikedCount
 );
 
 #endregion
@@ -2367,6 +2604,48 @@ public record InteractInfo(
 /// </summary>
 public static class HomefeedConverter
 {
+    private static bool TryParseCount(string? raw, out int value)
+    {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+
+        raw = raw.Trim();
+
+        // 处理中文“万”/“亿”以及带小数的形式，如 "1.5万"
+        try
+        {
+            if (raw.EndsWith("万", StringComparison.Ordinal))
+            {
+                if (double.TryParse(raw.TrimEnd('万'), out var num))
+                {
+                    value = (int)Math.Round(num * 10000);
+                    return true;
+                }
+                return false;
+            }
+            if (raw.EndsWith("亿", StringComparison.Ordinal))
+            {
+                if (double.TryParse(raw.TrimEnd('亿'), out var num))
+                {
+                    value = (int)Math.Round(num * 100000000);
+                    return true;
+                }
+                return false;
+            }
+
+            // 纯数字
+            if (int.TryParse(raw, out var n))
+            {
+                value = n;
+                return true;
+            }
+        }
+        catch
+        {
+            // 忽略解析异常
+        }
+        return false;
+    }
 
     /// <summary>
     /// 将单个推荐项目转换为NoteInfo - 增强视频数据支持
@@ -2384,13 +2663,16 @@ public static class HomefeedConverter
             var missingFields = new List<string>();
 
             // 创建NoteInfo实例
+            // 选取昵称（nickname 或 nick_name）
+            var authorName = !string.IsNullOrWhiteSpace(noteCard.User.Nickname)
+                ? noteCard.User.Nickname
+                : (noteCard.User.NicknameAlt ?? string.Empty);
+
             var noteInfo = new NoteInfo
             {
                 Id = item.Id,
                 Title = noteCard.DisplayTitle,
-                Author = !string.IsNullOrEmpty(noteCard.User.Nickname) 
-                    ? noteCard.User.Nickname 
-                    : "未知用户",
+                Author = !string.IsNullOrWhiteSpace(authorName) ? authorName : "未知用户",
                 AuthorId = noteCard.User.UserId,
                 AuthorAvatar = noteCard.User.Avatar,
                 Url = $"https://www.xiaohongshu.com/explore/{item.Id}",
@@ -2399,8 +2681,9 @@ public static class HomefeedConverter
                 ExtractedAt = DateTime.UtcNow
             };
 
-            // 解析点赞数
-            if (int.TryParse(noteCard.InteractInfo.LikedCount, out int likeCount))
+            // 解析点赞数（增加空值保护）
+            var likedRaw = noteCard.InteractInfo?.LikedCount;
+            if (TryParseCount(likedRaw, out int likeCount))
             {
                 noteInfo.LikeCount = likeCount;
             }
@@ -2430,10 +2713,10 @@ public static class HomefeedConverter
             // 根据可用信息推断笔记类型（增强的视频识别）
             noteInfo.Type = DetermineNoteType(noteCard);
             
-            // 如果是NoteDetail，额外处理视频时长信息
-            if (noteInfo is NoteDetail noteDetail && noteCard.Video?.Capa.Duration > 0)
+            // 视频时长（若能从推荐API拿到）
+            if (noteCard.Video?.Capa.Duration > 0)
             {
-                noteDetail.VideoDuration = noteCard.Video.Capa.Duration;
+                noteInfo.VideoDuration = noteCard.Video.Capa.Duration;
             }
 
             return noteInfo;
@@ -2721,6 +3004,120 @@ public class PageLoadWaitResult
             ErrorType = errorType,
             Duration = duration,
             RetryCount = retryCount
+        };
+    }
+}
+
+#endregion
+
+#region 通用API监听服务接口
+
+/// <summary>
+/// API端点类型枚举
+/// </summary>
+public enum ApiEndpointType
+{
+    Homefeed,       // 推荐笔记 /api/sns/web/v1/homefeed
+    Feed,           // 笔记详情 /api/sns/web/v1/feed
+    SearchNotes     // 搜索笔记 /api/sns/web/v1/search/notes
+}
+
+/// <summary>
+/// 通用API监听服务接口
+/// </summary>
+public interface IUniversalApiMonitor : IDisposable
+{
+    /// <summary>
+    /// 设置通用API监听器
+    /// </summary>
+    /// <param name="page">浏览器页面实例</param>
+    /// <param name="endpointsToMonitor">要监听的端点类型</param>
+    /// <returns>设置是否成功</returns>
+    bool SetupMonitor(IPage page, HashSet<ApiEndpointType> endpointsToMonitor);
+
+    /// <summary>
+    /// 等待指定端点的API响应
+    /// </summary>
+    /// <param name="endpointType">端点类型</param>
+    /// <param name="expectedCount">期望响应数量</param>
+    /// <returns>是否成功等待到响应</returns>
+    Task<bool> WaitForResponsesAsync(ApiEndpointType endpointType, int expectedCount = 1);
+
+    /// <summary>
+    /// 获取指定端点监听到的笔记详情
+    /// </summary>
+    /// <param name="endpointType">端点类型</param>
+    /// <returns>笔记详情列表</returns>
+    List<NoteDetail> GetMonitoredNoteDetails(ApiEndpointType endpointType);
+
+    /// <summary>
+    /// 获取指定端点监听到的原始响应数据
+    /// </summary>
+    /// <param name="endpointType">端点类型</param>
+    /// <returns>原始响应数据列表</returns>
+    List<MonitoredApiResponse> GetRawResponses(ApiEndpointType endpointType);
+
+    /// <summary>
+    /// 清理指定端点的监听数据
+    /// </summary>
+    /// <param name="endpointType">端点类型，null表示清理所有端点</param>
+    void ClearMonitoredData(ApiEndpointType? endpointType = null);
+
+    /// <summary>
+    /// 停止API监听
+    /// </summary>
+    Task StopMonitoringAsync();
+}
+
+/// <summary>
+/// API触发结果
+/// </summary>
+public class ApiTriggerResult
+{
+    /// <summary>
+    /// 是否成功触发API
+    /// </summary>
+    public bool Success { get; set; }
+    
+    /// <summary>
+    /// 错误消息（失败时）
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+    
+    /// <summary>
+    /// 获取到的数据项数量
+    /// </summary>
+    public int DataCount { get; set; }
+    
+    /// <summary>
+    /// 操作耗时
+    /// </summary>
+    public TimeSpan Duration { get; set; }
+    
+    /// <summary>
+    /// 创建成功结果
+    /// </summary>
+    public static ApiTriggerResult CreateSuccess(int dataCount, TimeSpan duration)
+    {
+        return new ApiTriggerResult
+        {
+            Success = true,
+            DataCount = dataCount,
+            Duration = duration
+        };
+    }
+    
+    /// <summary>
+    /// 创建失败结果
+    /// </summary>
+    public static ApiTriggerResult CreateFailure(string errorMessage, TimeSpan duration)
+    {
+        return new ApiTriggerResult
+        {
+            Success = false,
+            ErrorMessage = errorMessage,
+            DataCount = 0,
+            Duration = duration
         };
     }
 }

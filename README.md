@@ -300,7 +300,7 @@ XiaoHongShuMCP/
 │   ├── Tools/               # MCP 工具集
 │   │   └── XiaoHongShuTools.cs            # MCP 工具定义
 │   ├── Program.cs           # 程序入口
-│   └── appsettings.json     # 配置文件（生产运行时使用）
+│   └── Program.cs           # 程序入口（内置默认配置 + 覆盖机制）
 ├── Tests/                   # 单元测试（约 51 个）
 │   ├── Services/           # 服务测试
 │   ├── Models/             # 模型测试  
@@ -332,44 +332,32 @@ dotnet test Tests --filter "ClassName=DomElementManagerTests"
 dotnet test Tests --collect:"XPlat Code Coverage"
 ```
 
-### 配置选项
+### 配置与覆盖
 
-编辑 `XiaoHongShuMCP/appsettings.json` 文件（运行时读取）：
+项目不再使用 `appsettings.json`。默认配置在 `Program.cs` 内部定义（`CreateDefaultSettings()`）。如需调整，推荐通过以下两种方式覆盖：
 
-```json
-{
-  "BaseUrl": "https://www.xiaohongshu.com/explore",
-  "DefaultTimeout": 180000,
-  "MaxRetries": 3,
-  "UniversalApiMonitor": {
-    "EnableDetailedLogging": true
-  },
-  "BrowserSettings": {
-    "Headless": false,
-    "RemoteDebuggingPort": 9222,
-    "ConnectionTimeoutSeconds": 30
-  },
-  "McpSettings": {
-    "EnableProgressReporting": true,
-    "MaxBatchSize": 10,
-    "DelayBetweenOperations": 1000,
-    "RequestTimeoutMinutes": 10
-  },
-  "PageLoadWaitConfig": {
-    "DOMContentLoadedTimeout": 15000,
-    "LoadTimeout": 30000,
-    "NetworkIdleTimeout": 600000,
-    "MaxRetries": 3,
-    "RetryDelayMs": 2000,
-    "EnableDegradation": true,
-    "FastModeTimeout": 10000
-  },
-  "SearchTimeoutsConfig": {
-    "UiWaitMs": 12000,
-    "ApiCollectionMaxWaitMs": 60000
-  }
-}
-```
+- 环境变量（推荐，前缀 `XHS__`，双下划线映射冒号）
+  - Windows/跨平台示例：
+    - `XHS__Serilog__MinimumLevel=Debug`
+    - `XHS__BrowserSettings__Headless=true`
+    - `XHS__PageLoadWaitConfig__NetworkIdleTimeout=300000`
+  - 说明：`XHS__Section__Key` 对应配置键 `Section:Key`。
+
+- 命令行参数（覆盖优先级最高）
+  - 示例：
+    - `dotnet run --project XiaoHongShuMCP -- Serilog:MinimumLevel=Debug BrowserSettings:Headless=true`
+    - `XiaoHongShuMCP.exe Serilog:MinimumLevel=Debug PageLoadWaitConfig:MaxRetries=5`
+
+常用键位于以下节：`Serilog`, `UniversalApiMonitor`, `BrowserSettings`, `McpSettings`, `PageLoadWaitConfig`, `SearchTimeoutsConfig`。
+
+#### 按命名空间覆盖日志等级
+- 任意命名空间/类名可单独调级：`Logging:Overrides:<Namespace>=<Level>`
+- 环境变量示例：
+  - `XHS__Logging__Overrides__XiaoHongShuMCP.Services.UniversalApiMonitor=Debug`
+  - `XHS__Logging__Overrides__XiaoHongShuMCP.Services.PlaywrightBrowserManager=Information`
+- 命令行示例：
+  - `dotnet run --project XiaoHongShuMCP -- Logging:Overrides:XiaoHongShuMCP.Services.UniversalApiMonitor=Debug`
+  - `Logging:Overrides:XiaoHongShuMCP.Services.PlaywrightBrowserManager=Information`
 
 ### 构建和部署
 
