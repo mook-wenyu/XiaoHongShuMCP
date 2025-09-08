@@ -248,7 +248,7 @@ update_plan: [ {step: 探索代码, in_progress}, {step: 实现修复, pending} 
 - 自我改进：成功→沉淀决策与经验；失败→更新流程并标注风险与回避策略。
 
 ## Project Structure & Modules
-- `XiaoHongShuMCP/`: .NET 9 console app and MCP server entry (`Program.cs`).
+- `XiaoHongShuMCP/`: .NET 8 console app and MCP server entry (`Program.cs`).
 - `XiaoHongShuMCP/Services/`: core services including:
   - `UniversalApiMonitor.cs`: multi-endpoint API monitoring system
   - `SmartCollectionController.cs`: intelligent collection controller (refactored)
@@ -268,7 +268,7 @@ dotnet test Tests                   # run NUnit tests
 dotnet run --project XiaoHongShuMCP # start MCP server (Dev)
 dotnet publish -c Release           # produce release build
 ```
-Playwright (first run): `pwsh ./XiaoHongShuMCP/bin/Debug/net9.0/playwright.ps1 install` after build.
+Playwright (first run): `pwsh ./XiaoHongShuMCP/bin/Debug/net8.0/playwright.ps1 install` after build.
 
 ## Coding Style & Naming
 - C#: 4-space indent; `nullable enable`; favor async/await over blocking calls.
@@ -277,7 +277,7 @@ Playwright (first run): `pwsh ./XiaoHongShuMCP/bin/Debug/net9.0/playwright.ps1 i
 - Logging: use Serilog; avoid logging secrets. Prefer structured logs.
 
 ## Testing Guidelines
-- Frameworks: NUnit + Moq (+ Playwright where appropriate). Target `net9.0`.
+- Frameworks: NUnit + Moq (+ Playwright where appropriate). Target `net8.0`.
 - Run all: `dotnet test Tests`
 - Coverage: `dotnet test Tests --collect:"XPlat Code Coverage"`
 - Naming: files end with `*Tests.cs`; methods describe behavior (e.g., `Search_returns_results_for_valid_keyword`).

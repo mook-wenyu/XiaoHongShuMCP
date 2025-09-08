@@ -132,5 +132,5 @@ dotnet test Tests --verbosity normal
 ---
 
 *测试创建日期: 2025年9月4日*  
-*框架版本: .NET 9.0*  
+*框架版本: .NET 8.0*  
 *测试状态: ✅ 全部通过*

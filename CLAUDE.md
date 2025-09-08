@@ -1,6 +1,6 @@
 # CLAUDE.md - XiaoHongShuMCP 项目指南
 
-这是一个基于 .NET 9.0 和 Model Context Protocol (MCP) 的小红书智能自动化服务器实现。
+这是一个基于 .NET 8.0 和 Model Context Protocol (MCP) 的小红书智能自动化服务器实现。
 
 ## 🎯 项目概述
 
@@ -19,7 +19,7 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 ## 🏗️ 技术架构
 
 ### 核心技术栈
-- **.NET 9.0**: 最新 .NET 框架，支持现代 C# 特性
+- **.NET 8.0**: LTS 版 .NET 框架，支持现代 C# 特性
 - **Model Context Protocol 0.3.0-preview.4**: MCP 协议实现
 - **Microsoft Playwright 1.54.0**: 浏览器自动化引擎
 - **Serilog**: 结构化日志记录
@@ -138,7 +138,7 @@ XiaoHongShuMCP/
 ## 🛠️ 开发环境配置
 
 ### 系统要求
-- **.NET 9.0 SDK** 或更高版本
+- **.NET 8.0 SDK** 或更高版本
 - **Visual Studio 2022** 或 **JetBrains Rider**
 - **Chrome/Edge 浏览器** (远程调试支持)
 - **Windows 10/11** 或 **macOS/Linux**
@@ -287,7 +287,7 @@ dotnet publish -c Release -r osx-x64 --self-contained
 {
   "mcpServers": {
     "xiaohongshu-mcp": {
-      "command": "D:\\RiderProjects\\XiaoHongShuMCP\\XiaoHongShuMCP\\bin\\Release\\net9.0\\XiaoHongShuMCP.exe",
+      "command": "D:\\RiderProjects\\XiaoHongShuMCP\\XiaoHongShuMCP\\bin\\Release\\net8.0\\XiaoHongShuMCP.exe",
       "args": [],
       "env": {
         "DOTNET_ENVIRONMENT": "Production"

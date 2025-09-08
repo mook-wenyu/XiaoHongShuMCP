@@ -1,8 +1,8 @@
 # XiaoHongShuMCP
 
-> 基于 .NET 9.0 和 Model Context Protocol (MCP) 的小红书智能自动化服务器
+> 基于 .NET 8.0 和 Model Context Protocol (MCP) 的小红书智能自动化服务器
 
-[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![MCP](https://img.shields.io/badge/MCP-0.3.0--preview.4-FF6B6B)](https://modelcontextprotocol.io/)
 [![Tests](https://img.shields.io/badge/Tests-57%20✅-4CAF50)](./Tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
@@ -19,13 +19,13 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 - **🧪 完整测试** - 51 个单元测试，100% 通过率，保证代码质量
 - **🔧 模块化架构** - 全新的UniversalApiMonitor和重构的SmartCollectionController
 - **📡 多端点监听** - 支持推荐、笔记详情、搜索等多个API端点监听
-- **⚡ 现代架构** - 基于最新 .NET 9.0，使用依赖注入和异步编程模式
+- **⚡ 现代架构** - 基于稳定的 .NET 8.0，使用依赖注入和异步编程模式
 
 ## 🚀 快速开始
 
 ### 前置要求
 
-- [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) 或更高版本
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) 或更高版本
 - Chrome/Edge 浏览器（支持远程调试）
 - [Claude Desktop](https://claude.ai/) (MCP 客户端)
 
@@ -115,7 +115,7 @@ dotnet test Tests
 {
   "mcpServers": {
     "xiaohongshu-mcp": {
-      "command": "D:\\RiderProjects\\XiaoHongShuMCP\\XiaoHongShuMCP\\bin\\Release\\net9.0\\XiaoHongShuMCP.exe",
+      "command": "D:\\RiderProjects\\XiaoHongShuMCP\\XiaoHongShuMCP\\bin\\Release\\net8.0\\XiaoHongShuMCP.exe",
       "args": [],
       "env": {
         "DOTNET_ENVIRONMENT": "Production"
@@ -358,7 +358,7 @@ XiaoHongShuMCP/
 
 ### 核心技术栈
 
-- **[.NET 9.0](https://dotnet.microsoft.com/)** - 现代 C# 开发框架
+- **[.NET 8.0](https://dotnet.microsoft.com/)** - 现代 C# 开发框架
 - **[Model Context Protocol](https://modelcontextprotocol.io/)** - AI 助手工具协议
 - **[Microsoft Playwright](https://playwright.dev/dotnet/)** - 浏览器自动化
 - **[Serilog](https://serilog.net/)** - 结构化日志记录
@@ -938,7 +938,7 @@ A: 解决步骤：
 **Q3: MCP 服务器无法启动**
 ```
 A: 诊断步骤：
-1. 检查 .NET 9.0 SDK 是否正确安装：dotnet --version
+1. 检查 .NET 8.0 SDK 是否正确安装：dotnet --version
 2. 验证项目路径是否正确
 3. 运行 dotnet restore 恢复依赖
 4. 检查 claude_desktop_config.json 语法是否正确
@@ -1064,7 +1064,7 @@ grep "2025-09-06" logs/xiaohongshu-mcp-*.txt
 ## 🔗 相关链接
 
 - [Model Context Protocol 官方文档](https://modelcontextprotocol.io/)
-- [.NET 9.0 文档](https://docs.microsoft.com/dotnet/)
+- [.NET 8.0 文档](https://learn.microsoft.com/dotnet/)
 - [Microsoft Playwright 文档](https://playwright.dev/dotnet/)
 - [Claude Desktop 下载](https://claude.ai/)
 
