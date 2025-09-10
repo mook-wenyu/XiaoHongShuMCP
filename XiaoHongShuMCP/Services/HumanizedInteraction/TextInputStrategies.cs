@@ -33,13 +33,14 @@ public abstract class BaseTextInputStrategy : ITextInputStrategy
     }
     
     /// <summary>
-    /// 获取语义单位的检查延时
+    /// 等待语义单位的检查停顿（按单位长度/结束标点分类）
     /// </summary>
-    protected int GetSemanticUnitReviewDelay(string unit)
+    protected async Task WaitSemanticUnitReviewAsync(string unit)
     {
-        return unit.Length > 4 || ContainsEndPunctuation(unit) 
-            ? delayManager.GetReviewPauseDelay() 
-            : delayManager.GetSemanticUnitDelay();
+        if (unit.Length > 4 || ContainsEndPunctuation(unit))
+            await delayManager.WaitAsync(HumanWaitType.ReviewPause);
+        else
+            await delayManager.WaitAsync(HumanWaitType.TypingSemanticUnit);
     }
 }
 
@@ -81,7 +82,7 @@ public class RegularInputStrategy : BaseTextInputStrategy
             await element.ClickAsync();
             
             // 2. 初始思考停顿
-            await Task.Delay(delayManager.GetThinkingPauseDelay());
+            await delayManager.WaitAsync(HumanWaitType.ThinkingPause);
             
             // 3. 智能分割文本为语义单位
             var semanticUnits = SmartTextSplitter.SplitBySemanticUnits(text);
@@ -94,19 +95,18 @@ public class RegularInputStrategy : BaseTextInputStrategy
                 // 思考停顿（每个语义单位前）
                 if (i > 0)
                 {
-                    await Task.Delay(delayManager.GetThinkingPauseDelay());
+                    await delayManager.WaitAsync(HumanWaitType.ThinkingPause);
                 }
                 
                 // 快速连续输入整个语义单位
                 foreach (var character in unit)
                 {
                     await page.Keyboard.TypeAsync(character.ToString());
-                    await Task.Delay(delayManager.GetCharacterTypingDelay());
+                    await delayManager.WaitAsync(HumanWaitType.TypingCharacter);
                 }
                 
                 // 检查停顿
-                var reviewDelay = GetSemanticUnitReviewDelay(unit);
-                await Task.Delay(reviewDelay);
+                await WaitSemanticUnitReviewAsync(unit);
             }
         }
         catch (Exception ex)
@@ -152,7 +152,7 @@ public class ContentEditableInputStrategy : BaseTextInputStrategy
         {
             // 1. 点击元素获得焦点
             await element.ClickAsync();
-            await Task.Delay(delayManager.GetThinkingPauseDelay());
+            await delayManager.WaitAsync(HumanWaitType.ThinkingPause);
             
             // 2. 确保元素处于可编辑状态
             await page.EvaluateAsync(@"(element) => {
@@ -163,7 +163,7 @@ public class ContentEditableInputStrategy : BaseTextInputStrategy
                 }
             }", element);
             
-            await Task.Delay(500); // 等待编辑器响应焦点事件
+            await delayManager.WaitAsync(HumanWaitType.ContentLoading); // 等待编辑器响应焦点事件
             
             // 3. 使用语义单位进行智能输入
             var semanticUnits = SmartTextSplitter.SplitBySemanticUnits(text);
@@ -175,19 +175,19 @@ public class ContentEditableInputStrategy : BaseTextInputStrategy
                 // 思考停顿
                 if (i > 0)
                 {
-                    await Task.Delay(delayManager.GetThinkingPauseDelay());
+                    await delayManager.WaitAsync(HumanWaitType.ThinkingPause);
                 }
                 
                 // 使用键盘输入替代过时的 ElementHandle.TypeAsync
                 await element.FocusAsync();
-                await page.Keyboard.TypeAsync(unit, new Microsoft.Playwright.KeyboardTypeOptions
+                foreach (var ch in unit)
                 {
-                    Delay = delayManager.GetCharacterTypingDelay()
-                });
+                    await page.Keyboard.TypeAsync(ch.ToString());
+                    await delayManager.WaitAsync(HumanWaitType.TypingCharacter);
+                }
                 
                 // 检查停顿
-                var reviewDelay = GetSemanticUnitReviewDelay(unit);
-                await Task.Delay(reviewDelay);
+                await WaitSemanticUnitReviewAsync(unit);
             }
             
             // 4. 触发输入事件，确保Vue/TipTap检测到内容变化

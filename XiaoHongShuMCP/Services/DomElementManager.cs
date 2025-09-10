@@ -291,6 +291,21 @@ namespace XiaoHongShuMCP.Services
                     ]
                 },
 
+                // 主滚动容器（用于容器滚动页面的鼠标定位）
+                {
+                    "MainScrollContainer", [
+                        "#exploreFeeds",               // 探索页主容器
+                        ".channel-container",          // 频道容器
+                        ".search-layout__main",        // 搜索主容器
+                        ".search-content",             // 搜索内容区域
+                        ".result-list",                // 结果列表
+                        ".note-list, .note-feed",      // 通用笔记流容器
+                        ".home-layout__main",          // 首页布局主区域（如存在）
+                        "main",                         // 语义化主标签兜底
+                        "body"                          // 最终兜底
+                    ]
+                },
+
                 // 搜索按钮 - 基于用户提供的HTML结构分析
                 {
                     "SearchButton", [
@@ -1138,6 +1153,17 @@ namespace XiaoHongShuMCP.Services
                     ]
                 },
 
+                // 详情页评论按钮（展开评论输入区域/面板）
+                {
+                    "DetailPageCommentButton", [
+                        ".engage-bar .chat-wrapper",               // 评论图标区域（优先）
+                        ".buttons.engage-bar-style .chat-wrapper", // 交互栏样式的评论按钮
+                        ".input-box .not-active",                   // 未激活时的占位区域
+                        "#content-textarea",                        // 直接点击输入框也可激活
+                        "[data-testid='detail-page-comment-button']"
+                    ]
+                },
+
                 // 详情页评论取消按钮
                 {
                     "DetailPageCommentCancel", [
@@ -1290,31 +1316,31 @@ namespace XiaoHongShuMCP.Services
 
                 // ===== 点赞功能选择器 - 支持多状态检测 =====
 
-                // 未点赞状态的点赞按钮 - 基于真实HTML结构优化
+                // 未点赞状态的点赞按钮（破坏性变更：移除易误判的类名判断 like-active）
                 {
                     "likeButton", [
-                        ".like-wrapper:not(.like-active)",                           // 未点赞状态（最精确）
-                        ".like-wrapper svg use[xlink\\:href='#like']",               // 基于SVG图标识别未点赞状态
-                        ".like-wrapper:has(use[xlink\\:href='#like'])",              // 包含未点赞图标的wrapper
-                        ".like-wrapper:not(:has(.like-active))",                     // 排除已点赞状态
-                        ".engage-bar .like-wrapper:not(.like-active)",               // 详情页未激活的点赞按钮
-                        ".buttons.engage-bar-style .like-wrapper:not(.like-active)", // 交互栏样式未激活点赞
-                        "[data-testid='like-button']:not([aria-pressed='true'])",    // 测试ID未按下状态
-                        ".like-icon:not(.liked)"
+                        ".interactions.engage-bar .buttons .left .like-wrapper:has(use[xlink\\:href='#like'])",
+                        ".interactions.engage-bar .buttons .left .like-wrapper:has(use[href='#like'])",
+                        ".engage-bar .like-wrapper:has(use[xlink\\:href='#like'])",
+                        ".engage-bar .like-wrapper:has(use[href='#like'])",
+                        ".like-wrapper:has(use[xlink\\:href='#like'])",              // 基于SVG use 未点赞
+                        ".like-wrapper:has(use[href='#like'])",                       // 兼容不带 xlink 的 href 写法
+                        "[data-testid='like-button']:not([aria-pressed='true'])",    // ARIA 未按下
+                        ".like-wrapper:has(.like-icon):not(:has(use[xlink\\:href='#liked']))", // 兜底：存在图标且未出现已赞图标
+                        ".like-wrapper:has(.like-icon):not(:has(use[href='#liked']))"           // 兜底：兼容 href 版本
                     ]
                 },
 
-                // 已点赞状态的点赞按钮 - 基于真实HTML结构优化
+                // 已点赞状态的点赞按钮（破坏性变更：移除 like-active 等类名判断，改为图标/ARIA）
                 {
                     "likeButtonActive", [
-                        ".like-wrapper.like-active",                           // 已点赞状态（最精确）
-                        ".like-wrapper svg use[xlink\\:href='#liked']",        // 基于SVG图标识别已点赞状态
-                        ".like-wrapper:has(use[xlink\\:href='#liked'])",       // 包含已点赞图标的wrapper
-                        ".like-wrapper.like-active:has(.count)",               // 激活状态且包含计数的点赞按钮
-                        ".engage-bar .like-wrapper.like-active",               // 详情页激活的点赞按钮
-                        ".buttons.engage-bar-style .like-wrapper.like-active", // 交互栏样式激活点赞
-                        "[data-testid='like-button'][aria-pressed='true']",    // 测试ID按下状态
-                        ".like-icon.liked.active"
+                        ".interactions.engage-bar .buttons .left .like-wrapper:has(use[xlink\\:href='#liked'])",
+                        ".interactions.engage-bar .buttons .left .like-wrapper:has(use[href='#liked'])",
+                        ".engage-bar .like-wrapper:has(use[xlink\\:href='#liked'])",
+                        ".engage-bar .like-wrapper:has(use[href='#liked'])",
+                        ".like-wrapper:has(use[xlink\\:href='#liked'])",       // 基于SVG use 已点赞
+                        ".like-wrapper:has(use[href='#liked'])",                 // 兼容不带 xlink 的 href 写法
+                        "[data-testid='like-button'][aria-pressed='true']"       // ARIA 已按下
                     ]
                 },
 
@@ -1333,31 +1359,31 @@ namespace XiaoHongShuMCP.Services
 
                 // ===== 收藏功能选择器 - 支持多状态检测 =====
 
-                // 未收藏状态的收藏按钮 - 基于真实HTML结构优化
+                // 未收藏状态的收藏按钮（破坏性变更：移除 collect-active 等类名判断）
                 {
                     "favoriteButton", [
-                        ".collect-wrapper svg use[xlink\\:href='#collect']",               // 基于SVG图标识别未收藏状态（最精确）
-                        ".collect-wrapper:has(use[xlink\\:href='#collect'])",              // 包含未收藏图标的wrapper
-                        ".collect-wrapper:not(:has(use[xlink\\:href='#collected']))",      // 排除已收藏状态
-                        ".collect-wrapper",                                                // 通用收藏按钮
-                        ".engage-bar .collect-wrapper:not(.collect-active)",               // 详情页未激活的收藏按钮
-                        ".buttons.engage-bar-style .collect-wrapper:not(.collect-active)", // 交互栏样式未激活收藏
-                        "[data-testid='favorite-button']:not([aria-pressed='true'])",      // 测试ID未按下状态
-                        ".collect-icon:not(.collected)"
+                        "#note-page-collect-board-guide.collect-wrapper:has(use[xlink\\:href='#collect'])",
+                        "#note-page-collect-board-guide.collect-wrapper:has(use[href='#collect'])",
+                        ".engage-bar .collect-wrapper:has(use[xlink\\:href='#collect'])",
+                        ".engage-bar .collect-wrapper:has(use[href='#collect'])",
+                        ".collect-wrapper:has(use[xlink\\:href='#collect'])",              // 基于SVG use 未收藏
+                        ".collect-wrapper:has(use[href='#collect'])",                       // 兼容 href 写法
+                        "[data-testid='favorite-button']:not([aria-pressed='true'])",      // ARIA 未按下
+                        ".collect-wrapper:has(.collect-icon):not(:has(use[xlink\\:href='#collected']))", // 兜底
+                        ".collect-wrapper:has(.collect-icon):not(:has(use[href='#collected']))"           // 兜底：兼容 href 版本
                     ]
                 },
 
-                // 已收藏状态的收藏按钮 - 基于真实HTML结构优化
+                // 已收藏状态的收藏按钮（破坏性变更：移除类名判断，改为图标/ARIA）
                 {
                     "favoriteButtonActive", [
-                        ".collect-wrapper svg use[xlink\\:href='#collected']",       // 基于SVG图标识别已收藏状态（最精确）
-                        ".collect-wrapper:has(use[xlink\\:href='#collected'])",      // 包含已收藏图标的wrapper
-                        ".collect-wrapper:has(.count):has(use[href*='collected'])",  // 包含计数和已收藏图标
-                        ".collect-wrapper[aria-pressed='true']",                     // 按下状态的收藏按钮
-                        ".engage-bar .collect-wrapper.collect-active",               // 详情页激活的收藏按钮
-                        ".buttons.engage-bar-style .collect-wrapper.collect-active", // 交互栏样式激活收藏
-                        "[data-testid='favorite-button'][aria-pressed='true']",      // 测试ID按下状态
-                        ".collect-icon.collected.active"
+                        "#note-page-collect-board-guide.collect-wrapper:has(use[xlink\\:href='#collected'])",
+                        "#note-page-collect-board-guide.collect-wrapper:has(use[href='#collected'])",
+                        ".engage-bar .collect-wrapper:has(use[xlink\\:href='#collected'])",
+                        ".engage-bar .collect-wrapper:has(use[href='#collected'])",
+                        ".collect-wrapper:has(use[xlink\\:href='#collected'])",  // 基于SVG use 已收藏
+                        ".collect-wrapper:has(use[href='#collected'])",           // 兼容 href 写法
+                        "[data-testid='favorite-button'][aria-pressed='true']"    // ARIA 已按下
                     ]
                 },
 

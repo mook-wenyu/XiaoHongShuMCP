@@ -36,8 +36,8 @@ $env:XHS__Serilog__MinimumLevel = 'Information'
 function Run-Demo([string]$label) {
   Write-Host "`n--- $label ---" -ForegroundColor Green
   Write-Host "参数：`n  threshold=$env:XHS__DetailMatchConfig__WeightedThreshold; fuzzy=$env:XHS__DetailMatchConfig__UseFuzzy; maxDist=$env:XHS__DetailMatchConfig__MaxDistanceCap; pinyin=$env:XHS__DetailMatchConfig__UsePinyin"
-  dotnet run --project $Project -- callTool LikeNote --json "{`"keywords`": $KeywordsJson, `"forceAction`": false}" | Write-Output
-  dotnet run --project $Project -- callTool FavoriteNote --json "{`"keywords`": $KeywordsJson, `"forceAction`": false}" | Write-Output
+  dotnet run --project $Project -- callTool LikeNote --json "{`"keywords`": $KeywordsJson}" | Write-Output
+  dotnet run --project $Project -- callTool FavoriteNote --json "{`"keywords`": $KeywordsJson}" | Write-Output
   dotnet run --project $Project -- callTool PostComment --json "{`"keywords`": $KeywordsJson, `"content`": `"E2E自动化演示评论`"}" | Write-Output
 }
 

@@ -29,18 +29,51 @@ public static class FeedApiConverter
             ExtractedAt = DateTime.UtcNow
         };
 
+        // 原始类型与作者 token
+        noteDetail.RawNoteType = noteCard.Type;
+        if (!string.IsNullOrEmpty(noteCard.User?.XsecToken))
+        {
+            noteDetail.AuthorXsecToken = noteCard.User!.XsecToken;
+        }
+
+        // 用户详情
+        if (noteCard.User != null)
+        {
+            noteDetail.AuthorId = noteCard.User.UserId;
+            noteDetail.AuthorAvatar = noteCard.User.Avatar;
+            noteDetail.UserInfo = new RecommendedUserInfo
+            {
+                UserId = noteCard.User.UserId,
+                Nickname = authorName,
+                Avatar = noteCard.User.Avatar,
+                IsVerified = false,
+                Description = string.Empty
+            };
+        }
+
         // 设置发布时间（时间戳转换）
         if (noteCard.Time > 0)
         {
             noteDetail.PublishTime = DateTimeOffset.FromUnixTimeMilliseconds(noteCard.Time).DateTime;
         }
 
+        // 最后更新时间
+        if (noteCard.LastUpdateTime > 0)
+        {
+            noteDetail.LastUpdateTime = DateTimeOffset.FromUnixTimeMilliseconds(noteCard.LastUpdateTime).DateTime;
+        }
+
         // 设置交互信息
         if (noteCard.InteractInfo != null)
         {
-            noteDetail.LikeCount = noteCard.InteractInfo.LikedCount;
-            noteDetail.CommentCount = noteCard.InteractInfo.CommentCount;
-            noteDetail.FavoriteCount = noteCard.InteractInfo.CollectedCount;
+            // 计数支持中文单位解析
+            noteDetail.LikeCount = SafeParseCount(noteCard.InteractInfo.LikedCountRaw);
+            noteDetail.CommentCount = SafeParseCount(noteCard.InteractInfo.CommentCountRaw);
+            noteDetail.FavoriteCount = SafeParseCount(noteCard.InteractInfo.CollectedCountRaw);
+            noteDetail.ShareCount = SafeParseCount(noteCard.InteractInfo.ShareCountRaw);
+
+            noteDetail.IsLiked = noteCard.InteractInfo.Liked;
+            noteDetail.IsCollected = noteCard.InteractInfo.Collected;
         }
 
         // 设置图片信息
@@ -52,6 +85,24 @@ public static class FeedApiConverter
                 .ToList();
             
             noteDetail.CoverImage = noteDetail.Images.FirstOrDefault() ?? string.Empty;
+
+            // 填充封面详细信息（首图）
+            var first = noteCard.ImageList.First();
+            var scenes = new List<ImageSceneInfo>();
+            foreach (var inf in first.InfoList ?? new List<FeedApiImageInfo>())
+            {
+                if (!string.IsNullOrEmpty(inf.Url))
+                    scenes.Add(new ImageSceneInfo { SceneType = inf.ImageScene, Url = inf.Url });
+            }
+            noteDetail.CoverInfo = new RecommendedCoverInfo
+            {
+                DefaultUrl = first.UrlDefault ?? string.Empty,
+                PreviewUrl = first.UrlPre ?? string.Empty,
+                Width = first.Width,
+                Height = first.Height,
+                FileId = first.FileId ?? string.Empty,
+                Scenes = scenes
+            };
         }
 
         // 设置视频信息
@@ -65,12 +116,51 @@ public static class FeedApiConverter
             {
                 noteDetail.VideoUrl = videoUrl;
             }
+
+            // 可选：填充视频详细结构
+            if ((noteCard.Video.Capa?.Duration ?? 0) > 0 || !string.IsNullOrEmpty(noteDetail.VideoUrl))
+            {
+                noteDetail.VideoInfo = new RecommendedVideoInfo
+                {
+                    Duration = noteDetail.VideoDuration ?? 0,
+                    Cover = string.Empty,
+                    Url = noteDetail.VideoUrl,
+                    Width = 0,
+                    Height = 0
+                };
+            }
         }
 
         // 设置标签信息
         if (noteCard.TagList != null && noteCard.TagList.Count != 0)
         {
             noteDetail.Tags = noteCard.TagList.Select(tag => tag.Name).ToList();
+        }
+
+        // IP属地
+        if (!string.IsNullOrEmpty(noteCard.IpLocation))
+        {
+            noteDetail.IpLocation = noteCard.IpLocation;
+        }
+
+        // @用户列表
+        if (noteCard.AtUserList != null && noteCard.AtUserList.Count != 0)
+        {
+            foreach (var au in noteCard.AtUserList)
+            {
+                noteDetail.AtUsers.Add(new AtUserInfo
+                {
+                    UserId = au.UserId,
+                    Nickname = au.Nickname,
+                    XsecToken = string.IsNullOrEmpty(au.XsecToken) ? null : au.XsecToken
+                });
+            }
+        }
+
+        // 分享开关
+        if (noteCard.ShareInfo != null)
+        {
+            noteDetail.ShareDisabled = noteCard.ShareInfo.UnShare;
         }
 
         // 自动确定笔记类型
@@ -113,6 +203,30 @@ public static class FeedApiConverter
             .FirstOrDefault();
 
         return bestStream?.MasterUrl ?? string.Empty;
+    }
+
+    /// <summary>
+    /// 解析包含中文单位的计数字符串
+    /// </summary>
+    private static int SafeParseCount(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return 0;
+        raw = raw.Trim();
+        try
+        {
+            if (raw.EndsWith("万", StringComparison.Ordinal))
+            {
+                if (double.TryParse(raw[..^1], out var n)) return (int)Math.Round(n * 10000);
+                return 0;
+            }
+            if (raw.EndsWith("亿", StringComparison.Ordinal))
+            {
+                if (double.TryParse(raw[..^1], out var n)) return (int)Math.Round(n * 100000000);
+                return 0;
+            }
+            return int.TryParse(raw, out var i) ? i : 0;
+        }
+        catch { return 0; }
     }
 
     /// <summary>
@@ -165,6 +279,7 @@ public static class FeedApiConverter
                 try
                 {
                     var noteDetail = ConvertToNoteDetail(item.NoteCard, item.Id ?? string.Empty);
+                    noteDetail.ModelType = item.ModelType;
                     noteDetails.Add(noteDetail);
                 }
                 catch (Exception ex)
@@ -200,6 +315,7 @@ public static class FeedApiConverter
                     try
                     {
                         var noteDetail = ConvertToNoteDetail(item.NoteCard, response.SourceNoteId);
+                        noteDetail.ModelType = item.ModelType;
                         noteDetails.Add(noteDetail);
                     }
                     catch (Exception ex)

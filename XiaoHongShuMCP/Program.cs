@@ -109,6 +109,8 @@ try
         .AddInMemoryCollection(defaultSettings)
         .AddEnvironmentVariables(prefix: "XHS__")
         .AddCommandLine(args);
+    // 支持统一 Configs:* 键的兼容映射
+    // 已移除兼容映射：请直接使用新节名（如 BrowserSettings:*, InteractionCache:*）
 
     // 配置日志（统一使用 Serilog，并输出到标准错误流）
     builder.Logging.ClearProviders();
@@ -126,6 +128,9 @@ try
     // 配置端点等待重试（来源于内存配置）
     builder.Services.Configure<EndpointRetryConfig>(
         builder.Configuration.GetSection("EndpointRetry"));
+    // 配置临时交互缓存 TTL（来源于内存配置）
+    builder.Services.Configure<InteractionCacheConfig>(
+        builder.Configuration.GetSection("InteractionCache"));
 
     // 配置详情匹配（权重/阈值/拼音）
     builder.Services.Configure<DetailMatchConfig>(
@@ -147,6 +152,7 @@ try
         .AddSingleton<ITextInputStrategy, ContentEditableInputStrategy>()
         .AddSingleton<IHumanizedInteractionService, HumanizedInteractionService>()
         .AddSingleton<IUniversalApiMonitor, UniversalApiMonitor>()
+        .AddSingleton<IPageStateGuard, PageStateGuard>()
         .AddSingleton<ISmartCollectionController, SmartCollectionController>()
         .AddSingleton<IXiaoHongShuService, XiaoHongShuService>()
         .AddSingleton<IPageLoadWaitService, PageLoadWaitService>();
@@ -254,6 +260,9 @@ static Dictionary<string, string?> CreateDefaultSettings()
         ["DetailMatchConfig:IgnoreSpaces"] = "true",
         ["DetailMatchConfig:UsePinyin"] = "true",
         ["DetailMatchConfig:PinyinInitialsOnly"] = "true"
+        ,
+        // 交互缓存（单位：分钟）
+        ["InteractionCache:TtlMinutes"] = "3"
     };
 }
 
@@ -298,9 +307,11 @@ static async Task<bool> TryHandleCallTool(string[] args, IConfiguration configur
             .AddInMemoryCollection(CreateDefaultSettings())
             .AddEnvironmentVariables(prefix: "XHS__")
             .AddCommandLine(args);
+        // 兼容映射已移除
         builder.Services.Configure<PageLoadWaitConfig>(builder.Configuration.GetSection("PageLoadWaitConfig"));
         builder.Services.Configure<SearchTimeoutsConfig>(builder.Configuration.GetSection("SearchTimeoutsConfig"));
         builder.Services.Configure<EndpointRetryConfig>(builder.Configuration.GetSection("EndpointRetry"));
+        builder.Services.Configure<InteractionCacheConfig>(builder.Configuration.GetSection("InteractionCache"));
         builder.Services.Configure<McpSettings>(builder.Configuration.GetSection("McpSettings"));
         builder.Services.Configure<DetailMatchConfig>(builder.Configuration.GetSection("DetailMatchConfig"));
 
@@ -549,3 +560,9 @@ static object? ConvertJsonToType(JsonElement el, Type targetType)
 }
 
 static object? GetDefault(Type t) => t.IsValueType ? Activator.CreateInstance(t) : null;
+
+/// <summary>
+/// 兼容映射：将统一的 Configs:* 键映射为原有的节键，便于逐步迁移。
+/// 例如：Configs:Headless -> BrowserSettings:Headless；Configs:TtlMinutes -> InteractionCache:TtlMinutes。
+/// </summary>
+// 兼容配置映射函数已删除：不再支持 Configs:* 到旧节名的自动转发。

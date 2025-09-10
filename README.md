@@ -214,8 +214,7 @@ dotnet run --project XiaoHongShuMCP --configuration Release
 - `GetSearchNotes`：搜索指定关键词笔记
 - `GetNoteDetail`：基于单个关键词获取笔记详情
 - `PostComment`：基于单个关键词定位并发布评论
-- `LikeNote`：基于单个关键词定位并点赞
-- `FavoriteNote`：基于单个关键词定位并收藏
+- `InteractNote`：基于单个关键词定位并执行点赞/收藏（可组合）
 - `SaveContentDraft`：保存笔记为草稿（创作平台）
 - `BatchGetNoteDetails`：批量获取笔记详情（基于 SearchNotes 端点的纯监听实现，无 DOM 依赖）
   
@@ -253,7 +252,7 @@ scripts/e2e_entry_match_demo.sh wrong-detail '["iPhone 15","苹果"]'
 powershell -ExecutionPolicy Bypass -File scripts/e2e_entry_match_demo.ps1 -Scenario profile -KeywordsJson '["美食","杭州"]'
 ```
 
-脚本会分三轮执行（严格/模糊/拼音），每轮分别调用 LikeNote / FavoriteNote / PostComment，并打印当前参数与结果。
+脚本会分三轮执行（严格/模糊/拼音），每轮分别调用 InteractNote（like/favorite 组合）与 PostComment，并打印当前参数与结果。
 
 
 ## 📋 主要功能
@@ -715,18 +714,14 @@ await callTool("PostComment", {
 });
 ```
 
-**点赞笔记**：
+**点赞/收藏笔记（可组合）**：
 ```typescript
-await callTool("LikeNote", {
-  keyword: "健身餐",
-});
-```
-
-**收藏笔记**：
-```typescript
-await callTool("FavoriteNote", {
-  keyword: "健身餐",
-});
+// 点赞
+await callTool("InteractNote", { keyword: "健身餐", like: true, favorite: false });
+// 收藏
+await callTool("InteractNote", { keyword: "健身餐", like: false, favorite: true });
+// 同时点赞+收藏
+await callTool("InteractNote", { keyword: "健身餐", like: true, favorite: true });
 ```
 
 **保存为草稿（创作平台）**：

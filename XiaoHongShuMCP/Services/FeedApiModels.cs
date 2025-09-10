@@ -387,6 +387,9 @@ public class FeedApiAtUser
     
     [JsonPropertyName("nickname")]
     public string Nickname { get; set; } = string.Empty;
+
+    [JsonPropertyName("xsec_token")]
+    public string XsecToken { get; set; } = string.Empty;
 }
 
 /// <summary>

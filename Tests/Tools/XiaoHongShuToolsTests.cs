@@ -82,7 +82,7 @@ public class XiaoHongShuToolsTests
     public async Task BatchGetNoteDetailsOptimized_WithValidParameters_ReturnsEnhancedResult()
     {
         // Arrange
-        var keywords = new List<string> { "美食", "火锅" };
+        var keyword = "美食";
         var expectedNoteDetails = new List<NoteDetail>
         {
             new NoteDetail 
@@ -137,12 +137,12 @@ public class XiaoHongShuToolsTests
         );
 
         _mockXiaoHongShuService.Setup(x => x.BatchGetNoteDetailsAsync(
-                keywords, 10, false, true, null))
+                keyword, 10, false, true, null))
             .ReturnsAsync(OperationResult<BatchNoteResult>.Ok(expectedResult));
 
         // Act
         var result = await XiaoHongShuTools.BatchGetNoteDetails(
-            keywords, 10, false, true, null, _serviceProvider);
+            keyword, 10, false, true, null, _serviceProvider);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -161,21 +161,21 @@ public class XiaoHongShuToolsTests
     public async Task BatchGetNoteDetailsOptimized_WithServiceFailure_ReturnsEmptyResult()
     {
         // Arrange
-        var keywords = new List<string> { "测试关键词" };
+        var keyword = "测试关键词";
         _mockXiaoHongShuService.Setup(x => x.BatchGetNoteDetailsAsync(
-                It.IsAny<List<string>>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>()))
+                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>()))
             .ReturnsAsync(OperationResult<BatchNoteResult>.Fail("批量获取失败"));
 
         // Act
         var result = await XiaoHongShuTools.BatchGetNoteDetails(
-            keywords, 10, false, true, null, _serviceProvider);
+            keyword, 10, false, true, null, _serviceProvider);
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.NoteDetails, Is.Empty);
+        Assert.That(result.SuccessfulNotes, Is.Empty);
         Assert.That(result.FailedNotes, Has.Count.EqualTo(1));
         Assert.That(result.FailedNotes.First().Item1, Is.EqualTo("测试关键词"));
-        Assert.That(result.TotalProcessed, Is.EqualTo(0));
+        Assert.That(result.ProcessedCount, Is.EqualTo(0));
         Assert.That(result.OverallQuality, Is.EqualTo(DataQuality.Minimal));
     }
 
@@ -183,21 +183,21 @@ public class XiaoHongShuToolsTests
     public async Task BatchGetNoteDetailsOptimized_WithException_ReturnsErrorResult()
     {
         // Arrange
-        var keywords = new List<string> { "测试关键词" };
+        var keyword = "测试关键词";
         _mockXiaoHongShuService.Setup(x => x.BatchGetNoteDetailsAsync(
-                It.IsAny<List<string>>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>()))
+                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>()))
             .ThrowsAsync(new Exception("测试异常"));
 
         // Act
         var result = await XiaoHongShuTools.BatchGetNoteDetails(
-            keywords, 10, false, true, null, _serviceProvider);
+            keyword, 10, false, true, null, _serviceProvider);
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.NoteDetails, Is.Empty);
+        Assert.That(result.SuccessfulNotes, Is.Empty);
         Assert.That(result.FailedNotes, Has.Count.EqualTo(1));
         Assert.That(result.FailedNotes.First().Item2, Contains.Substring("测试异常"));
-        Assert.That(result.TotalProcessed, Is.EqualTo(0));
+        Assert.That(result.ProcessedCount, Is.EqualTo(0));
         Assert.That(result.OverallQuality, Is.EqualTo(DataQuality.Minimal));
     }
 
@@ -207,7 +207,7 @@ public class XiaoHongShuToolsTests
     public async Task BatchGetNoteDetailsOptimized_WithDifferentAutoExportOptions_CallsServiceWithCorrectParameters(bool autoExport)
     {
         // Arrange
-        var keywords = new List<string> { "测试" };
+        var keyword = "测试";
         var emptyResult = new BatchNoteResult(
             new List<NoteDetail>(),
             new List<(string, string)>(),
@@ -220,16 +220,16 @@ public class XiaoHongShuToolsTests
         );
 
         _mockXiaoHongShuService.Setup(x => x.BatchGetNoteDetailsAsync(
-                It.IsAny<List<string>>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>()))
+                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<string>()))
             .ReturnsAsync(OperationResult<BatchNoteResult>.Ok(emptyResult));
 
         // Act
         await XiaoHongShuTools.BatchGetNoteDetails(
-            keywords, 10, false, autoExport, null, _serviceProvider);
+            keyword, 10, false, autoExport, null, _serviceProvider);
 
         // Assert
         _mockXiaoHongShuService.Verify(x => x.BatchGetNoteDetailsAsync(
-            It.Is<List<string>>(k => k.SequenceEqual(keywords)),
+            It.Is<string>(k => k == keyword),
             It.Is<int>(c => c == 10),
             It.Is<bool>(ic => ic == false),
             It.Is<bool>(ae => ae == autoExport),

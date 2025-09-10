@@ -48,8 +48,8 @@ run_demo() {
   echo
   echo "--- $label ---"
   echo "匹配参数：threshold=$XHS__DetailMatchConfig__WeightedThreshold, fuzzy=$XHS__DetailMatchConfig__UseFuzzy, maxDist=$XHS__DetailMatchConfig__MaxDistanceCap, pinyin=$XHS__DetailMatchConfig__UsePinyin"
-  dotnet run --project "$PROJECT" -- callTool LikeNote --json "{\"keywords\": $KEYWORDS_JSON, \"forceAction\": false}" || true
-  dotnet run --project "$PROJECT" -- callTool FavoriteNote --json "{\"keywords\": $KEYWORDS_JSON, \"forceAction\": false}" || true
+  dotnet run --project "$PROJECT" -- callTool LikeNote --json "{\"keywords\": $KEYWORDS_JSON}" || true
+  dotnet run --project "$PROJECT" -- callTool FavoriteNote --json "{\"keywords\": $KEYWORDS_JSON}" || true
   dotnet run --project "$PROJECT" -- callTool PostComment --json "{\"keywords\": $KEYWORDS_JSON, \"content\": \"E2E自动化演示评论\"}" || true
 }
 

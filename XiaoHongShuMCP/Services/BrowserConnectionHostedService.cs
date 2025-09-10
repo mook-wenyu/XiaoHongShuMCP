@@ -66,7 +66,7 @@ public class BrowserConnectionHostedService : BackgroundService
             else
             {
                 _logger.LogWarning("浏览器连接失败: {Error}", result.ErrorMessage);
-                
+
                 // 输出详细的用户指导
                 _logger.LogError("╔══════════════════════════════════════════════════╗");
                 _logger.LogError("║                浏览器自动连接失败                ║");
@@ -101,7 +101,7 @@ public class BrowserConnectionHostedService : BackgroundService
                 _logger.LogError("║ 第五步：重新尝试连接                             ║");
                 _logger.LogError("║   在 AI 客户端中调用 ConnectToBrowser 工具       ║");
                 _logger.LogError("╚══════════════════════════════════════════════════╝");
-                
+
                 _logger.LogInformation("提示：MCP服务器已正常启动，浏览器连接可稍后手动建立");
             }
         }
@@ -114,7 +114,7 @@ public class BrowserConnectionHostedService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "自动连接浏览器异常");
-            
+
             // 对于未预期的错误，提供通用的故障排除指导
             _logger.LogError("发生了未预期的错误，建议故障排除步骤：");
             _logger.LogError("1. 重启应用程序");
@@ -122,7 +122,7 @@ public class BrowserConnectionHostedService : BackgroundService
             _logger.LogError("3. 检查防火墙设置是否阻止了端口 9222");
             _logger.LogError("4. 尝试以管理员权限运行应用程序");
             _logger.LogError("5. 如问题持续存在，请联系技术支持");
-            
+
             _logger.LogInformation("如需手动连接，请在AI客户端调用 ConnectToBrowser 工具");
         }
     }
@@ -136,7 +136,7 @@ public class BrowserConnectionHostedService : BackgroundService
         try
         {
             var page = await browserManager.GetPageAsync();
-            
+
             if (page == null)
             {
                 _logger.LogWarning("无法获取浏览器页面，跳过用户信息API监听设置");
@@ -149,15 +149,15 @@ public class BrowserConnectionHostedService : BackgroundService
                 try
                 {
                     var url = response.Url;
-                    if (url.Contains("edith.xiaohongshu.com/api/sns/web/v2/user/me") && 
-                        response.Request.Method == "GET" && 
+                    if (url.Contains("edith.xiaohongshu.com/api/sns/web/v2/user/me") &&
+                        response.Request.Method == "GET" &&
                         response.Status == 200)
                     {
                         var responseBody = await response.TextAsync();
-                        
+
                         using var scope = _serviceProvider.CreateScope();
                         var accountManager = scope.ServiceProvider.GetRequiredService<IAccountManager>();
-                        
+
                         if (accountManager.UpdateFromApiResponse(responseBody))
                         {
                             _logger.LogDebug("用户信息API响应已更新: {UserSummary}", accountManager.GetUserInfoSummary());
@@ -193,9 +193,12 @@ public class BrowserConnectionHostedService : BackgroundService
             var targetUrl = configuration["BaseUrl"] ?? "https://www.xiaohongshu.com/explore";
 
             var page = await browserManager.GetPageAsync();
-            var currentUrl = page.Url ?? string.Empty;
+            var currentUrl = page.Url;
 
-            if (currentUrl.Contains("xiaohongshu.com") && currentUrl.Contains("/explore"))
+            if (currentUrl.Contains("xiaohongshu.com")
+                && currentUrl.Contains("/explore")
+                && !currentUrl.Contains("/explore/")
+                && !currentUrl.Contains("/explore?"))
             {
                 _logger.LogInformation("已位于小红书探索/主页，无需跳转。当前: {Url}", currentUrl);
                 return;

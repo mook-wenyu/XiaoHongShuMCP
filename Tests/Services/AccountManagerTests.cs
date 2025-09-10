@@ -34,8 +34,8 @@ public class AccountManagerTests
             var mockDomElementManager = new Mock<IDomElementManager>();
             
             // 这里不实际创建 AccountManager，而是测试相关的数据模型
-            var userInfo = new UserInfo { Username = "test" };
-            Assert.That(userInfo.Username, Is.EqualTo("test"));
+            var userInfo = new UserInfo { Nickname = "test" };
+            Assert.That(userInfo.Nickname, Is.EqualTo("test"));
         });
     }
 
@@ -46,7 +46,7 @@ public class AccountManagerTests
         var userInfo = new UserInfo
         {
             RedId = "27456090856",
-            Username = "testuser",
+            Nickname = "testuser",
             AvatarUrl = "https://avatar.example.com/test.jpg",
             FollowingCount = 100,
             FollowersCount = 1000,

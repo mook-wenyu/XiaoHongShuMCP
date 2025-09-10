@@ -15,11 +15,14 @@ namespace XiaoHongShuMCP.Services;
 public static class KeywordMatcher
 {
     /// <summary>
-    /// 匹配入口：任意一个关键字命中即返回 true。
+    /// 匹配入口（破坏性变更）：基于“单一关键词”命中即返回 true。
+    /// 用途：例如 文本=“我要去旅游了”，关键词=“旅游”→ 返回 true（子串命中，不要求全文等价）。
+    /// 兼顾大小写/全半角/去标点/模糊/短语覆盖等鲁棒性处理。
     /// </summary>
-    public static bool Matches(string text, List<string> keywords, KeywordMatchOptions? options = null)
+    public static bool Matches(string text, string keyword, KeywordMatchOptions? options = null)
     {
-        if (string.IsNullOrWhiteSpace(text) || keywords == null || keywords.Count == 0)
+        // 空保护
+        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(keyword))
             return false;
 
         options ??= KeywordMatchOptions.Default;
@@ -28,29 +31,25 @@ public static class KeywordMatcher
         var normTextKeepSpace = Normalize(text, removeSpaces: false);
         var normText = options.IgnoreSpaces ? Normalize(text, removeSpaces: true) : normTextKeepSpace;
 
-        foreach (var rawKw in keywords)
+        // 预处理关键词（两份：保留空格 vs 去空格）
+        var kwKeepSpace = Normalize(keyword, removeSpaces: false);
+        var kw = options.IgnoreSpaces ? Normalize(keyword, removeSpaces: true) : kwKeepSpace;
+        if (kw.Length == 0) return false;
+
+        // 1) 直接子串命中（核心场景）
+        if (normText.Contains(kw, StringComparison.Ordinal))
+            return true;
+
+        // 2) 短语覆盖度（以保留空格的标准化版本判断）
+        if (LooksLikePhrase(kwKeepSpace) && PhraseCovered(normTextKeepSpace, kwKeepSpace, options.TokenCoverageThreshold))
+            return true;
+
+        // 3) 近似匹配（长度足够时采用，避免短关键字误报）
+        if (options.UseFuzzy && AllowFuzzyForLength(kw.Length))
         {
-            if (string.IsNullOrWhiteSpace(rawKw)) continue;
-
-            var kwKeepSpace = Normalize(rawKw, removeSpaces: false);
-            var kw = options.IgnoreSpaces ? Normalize(rawKw, removeSpaces: true) : kwKeepSpace;
-            if (kw.Length == 0) continue;
-
-            // 1) 直接子串命中
-            if (normText.Contains(kw, StringComparison.Ordinal))
+            var maxDist = AllowedDistance(kw.Length, options.MaxDistanceCap);
+            if (FuzzyContains(normText, kw, maxDist))
                 return true;
-
-            // 2) 短语覆盖度（以保留空格的标准化版本判断）
-            if (LooksLikePhrase(kwKeepSpace) && PhraseCovered(normTextKeepSpace, kwKeepSpace, options.TokenCoverageThreshold))
-                return true;
-
-            // 3) 近似匹配（长度足够时采用，避免短关键字误报）
-            if (options.UseFuzzy && AllowFuzzyForLength(kw.Length))
-            {
-                var maxDist = AllowedDistance(kw.Length, options.MaxDistanceCap);
-                if (FuzzyContains(normText, kw, maxDist))
-                    return true;
-            }
         }
 
         return false;
@@ -289,4 +288,3 @@ public sealed class KeywordMatchOptions
 
     public static KeywordMatchOptions Default { get; } = new();
 }
-

@@ -54,8 +54,8 @@ public class ElementFinder : IElementFinder
             // 如果所有选择器都失败了，等待一段时间再重试
             if (attempt < retries)
             {
-                var retryDelay = _delayManager.GetRetryDelay(attempt);
-                await Task.Delay(retryDelay);
+                // 统一改为 WaitAsync（加速版退避）
+                await _delayManager.WaitAsync(HumanWaitType.RetryBackoff, attempt);
             }
         }
         

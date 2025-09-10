@@ -10,44 +10,44 @@ namespace XiaoHongShuMCP.Services;
 public interface IXiaoHongShuService
 {
     /// <summary>
-    /// 查找单个笔记详情（基于关键词列表）
-    /// 通过关键词列表搜索并定位到第一个匹配的笔记，获取其详细信息
-    /// 使用统一的LocateAndOperateNoteAsync架构实现
+    /// 查找单个笔记详情（基于关键词字符串）
+    /// 通过单一关键词搜索并定位到第一个匹配的笔记，获取其详细信息
+    /// 直接实现：在详情页命中则就地处理；否则从列表定位后打开详情。
     /// </summary>
-    /// <param name="keywords">搜索关键词列表（必需）</param>
+    /// <param name="keyword">搜索关键词（必需）</param>
     /// <param name="includeComments">是否包含评论数据</param>
     /// <returns>笔记详情操作结果</returns>
     Task<OperationResult<NoteDetail>> GetNoteDetailAsync(
-        List<string> keywords,
+        string keyword,
         bool includeComments = false);
 
     /// <summary>
     /// 批量查找笔记详情（重构版） - 三位一体功能
-    /// 基于简单关键词列表批量获取笔记详情，并集成统计分析和异步导出功能
+    /// 基于单一关键词批量获取笔记详情，并集成统计分析和异步导出功能
     /// 参考 SearchDataService 的设计模式，提供同步统计计算和异步导出
     /// </summary>
-    /// <param name="keywords">关键词列表（简化参数）</param>
+    /// <param name="keyword">关键词（简化参数）</param>
     /// <param name="maxCount">最大查找数量</param>
     /// <param name="includeComments">是否包含评论数据</param>
     /// <param name="autoExport">是否自动导出到Excel</param>
     /// <param name="exportFileName">导出文件名（可选）</param>
     /// <returns>增强的批量笔记结果，包含统计分析和导出信息</returns>
     Task<OperationResult<BatchNoteResult>> BatchGetNoteDetailsAsync(
-        List<string> keywords,
+        string keyword,
         int maxCount = 10,
         bool includeComments = false,
         bool autoExport = true,
         string? exportFileName = null);
 
     /// <summary>
-    /// 基于关键词列表发布评论
-    /// 使用新的统一架构，通过关键词列表定位笔记并在详情页发布评论
+    /// 基于关键词发布评论
+    /// 使用新的统一架构，通过单一关键词定位笔记并在详情页发布评论
     /// </summary>
-    /// <param name="keywords">搜索关键词列表（匹配任意关键词）</param>
+    /// <param name="keyword">搜索关键词</param>
     /// <param name="content">评论内容</param>
     /// <returns>评论操作结果</returns>
     Task<OperationResult<CommentResult>> PostCommentAsync(
-        List<string> keywords,
+        string keyword,
         string content);
 
     /// <summary>
@@ -70,24 +70,37 @@ public interface IXiaoHongShuService
         List<string>? tags);
 
     /// <summary>
-    /// 基于关键词列表定位并点赞笔记
+    /// 基于关键词定位并点赞笔记
     /// </summary>
-    /// <param name="keywords">关键词列表，匹配任意一个即可</param>
-    /// <param name="forceAction">是否强制执行，即使已经点赞</param>
+    /// <param name="keyword">关键词</param>
     /// <returns>点赞操作结果</returns>
-    Task<OperationResult<InteractionResult>> LikeNoteAsync(
-        List<string> keywords,
-        bool forceAction = false);
+    Task<OperationResult<InteractionResult>> LikeNoteAsync(string keyword);
 
     /// <summary>
-    /// 基于关键词列表定位并收藏笔记
+    /// 基于关键词定位并收藏笔记
     /// </summary>
-    /// <param name="keywords">关键词列表，匹配任意一个即可</param>
-    /// <param name="forceAction">是否强制执行，即使已经收藏</param>
+    /// <param name="keyword">关键词</param>
     /// <returns>收藏操作结果</returns>
-    Task<OperationResult<InteractionResult>> FavoriteNoteAsync(
-        List<string> keywords,
-        bool forceAction = false);
+    Task<OperationResult<InteractionResult>> FavoriteNoteAsync(string keyword);
+
+    /// <summary>
+    /// 统一交互：基于关键词定位并执行点赞/收藏（可组合）。
+    /// </summary>
+    Task<OperationResult<InteractionBundleResult>> InteractNoteAsync(string keyword, bool doLike, bool doFavorite);
+
+    /// <summary>
+    /// 基于关键词定位并取消点赞（新）
+    /// </summary>
+    /// <param name="keyword">关键词</param>
+    /// <returns>取消点赞操作结果</returns>
+    Task<OperationResult<InteractionResult>> UnlikeNoteAsync(string keyword);
+
+    /// <summary>
+    /// 基于关键词定位并取消收藏（新）
+    /// </summary>
+    /// <param name="keyword">关键词</param>
+    /// <returns>取消收藏操作结果</returns>
+    Task<OperationResult<InteractionResult>> UncollectNoteAsync(string keyword);
 
 
     /// <summary>
@@ -113,7 +126,7 @@ public interface IXiaoHongShuService
         bool includeAnalytics = true,
         bool autoExport = true,
         string? exportFileName = null);
-    
+
     /// <summary>
     /// 获取推荐笔记，确保API被正确触发
     /// 合并自 IRecommendService.GetRecommendedNotesAsync
@@ -122,7 +135,7 @@ public interface IXiaoHongShuService
     /// <param name="timeout">超时时间</param>
     /// <returns>推荐结果</returns>
     Task<OperationResult<RecommendListResult>> GetRecommendedNotesAsync(int limit = 20, TimeSpan? timeout = null);
-    
+
     /// <summary>
     /// 导航到发现页面并确保API被正确触发
     /// 合并自 IDiscoverPageNavigationService.NavigateToDiscoverPageAsync
@@ -131,7 +144,7 @@ public interface IXiaoHongShuService
     /// <param name="timeout">超时时间</param>
     /// <returns>导航结果</returns>
     Task<DiscoverNavigationResult> NavigateToDiscoverPageAsync(IPage page, TimeSpan? timeout = null);
-    
+
     /// <summary>
     /// 获取当前页面状态 - 通用版本
     /// 支持多种页面类型的检测和状态分析
@@ -140,14 +153,7 @@ public interface IXiaoHongShuService
     /// <param name="expectedPageType">期望的页面类型（可选，用于优化检测）</param>
     /// <returns>通用页面状态信息</returns>
     Task<PageStatusInfo> GetCurrentPageStatusAsync(IPage page, PageType? expectedPageType = null);
-    
-    /// <summary>
-    /// 获取发现页面状态 - 向后兼容方法
-    /// </summary>
-    /// <param name="page">浏览器页面实例</param>
-    /// <returns>发现页面状态</returns>
-    [Obsolete("请使用 GetCurrentPageStatusAsync(IPage, PageType?) 方法替代，传入 PageType.Recommend 作为期望类型")]
-    Task<DiscoverPageStatus> GetDiscoverPageStatusAsync(IPage page);
+
 }
 /// <summary>
 /// 账号管理服务接口
@@ -279,54 +285,11 @@ public interface IDomElementManager
 public interface IDelayManager
 {
     /// <summary>
-    /// 获取思考停顿延时
+    /// 统一的拟人化等待控制（加速版）。
+    /// - waitType：等待场景类型（通过枚举统一管理）；
+    /// - attemptNumber：重试次数（用于指数/线性退避，默认 1）。
     /// </summary>
-    int GetThinkingPauseDelay();
-
-    /// <summary>
-    /// 获取检查停顿延时
-    /// </summary>
-    int GetReviewPauseDelay();
-
-    /// <summary>
-    /// 获取点击延时
-    /// </summary>
-    int GetClickDelay();
-
-    /// <summary>
-    /// 获取滚动延时
-    /// </summary>
-    int GetScrollDelay();
-
-    /// <summary>
-    /// 获取悬停延时
-    /// </summary>
-    int GetHoverDelay();
-
-    /// <summary>
-    /// 获取字符输入延时
-    /// </summary>
-    int GetCharacterTypingDelay();
-
-    /// <summary>
-    /// 获取语义单位间延时
-    /// </summary>
-    int GetSemanticUnitDelay();
-
-    /// <summary>
-    /// 获取重试延时（根据重试次数递增）
-    /// </summary>
-    int GetRetryDelay(int attemptNumber);
-
-    /// <summary>
-    /// 获取动作间延时
-    /// </summary>
-    int GetBetweenActionsDelay();
-
-    /// <summary>
-    /// 统一的拟人化等待控制
-    /// </summary>
-    Task WaitAsync(HumanWaitType waitType);
+    Task WaitAsync(HumanWaitType waitType, int attemptNumber = 1, CancellationToken cancellationToken = default);
 }
 /// <summary>
 /// 元素查找器接口
@@ -414,12 +377,12 @@ public interface IHumanizedInteractionService
     /// <summary>
     /// 模拟真人点击操作
     /// </summary>
-    Task HumanClickAsync(IPage page, string selectorAlias);
+    Task HumanClickAsync(string selectorAlias);
 
     /// <summary>
     /// 模拟真人点击操作（直接传入元素）
     /// </summary>
-    Task HumanClickAsync(IPage page, IElementHandle element);
+    Task HumanClickAsync(IElementHandle element);
 
     /// <summary>
     /// 模拟真人输入操作
@@ -429,7 +392,7 @@ public interface IHumanizedInteractionService
     /// <summary>
     /// 模拟真人滚动操作
     /// </summary>
-    Task HumanScrollAsync(IPage page);
+    Task HumanScrollAsync(IPage page, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 参数化的人性化滚动操作 - 支持虚拟化列表的滚动搜索需求
@@ -438,17 +401,17 @@ public interface IHumanizedInteractionService
     /// <param name="targetDistance">目标滚动距离（像素），0表示使用随机距离</param>
     /// <param name="waitForLoad">是否等待新内容加载</param>
     /// <returns></returns>
-    Task HumanScrollAsync(IPage page, int targetDistance, bool waitForLoad = true);
+    Task HumanScrollAsync(IPage page, int targetDistance, bool waitForLoad = true, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 模拟真人悬停操作
     /// </summary>
-    Task HumanHoverAsync(IPage page, string selectorAlias);
+    Task HumanHoverAsync(string selectorAlias);
 
     /// <summary>
     /// 模拟真人悬停操作（直接传入元素）
     /// </summary>
-    Task HumanHoverAsync(IPage page, IElementHandle element);
+    Task HumanHoverAsync(IElementHandle element);
 
     /// <summary>
     /// 查找元素，支持重试、多选择器和自定义超时
@@ -458,28 +421,34 @@ public interface IHumanizedInteractionService
     /// <summary>
     /// 查找元素，支持页面状态感知
     /// </summary>
-    Task<IElementHandle?> FindElementAsync(IPage page, string selectorAlias, PageState pageState, int retries = 3, int timeout = 3000);
+    Task<IElementHandle?> FindElementAsync(IPage page, string selectorAlias, PageState pageState, int retries = 3, int timeout = 3000, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 统一的拟人化等待控制方法
     /// </summary>
-    Task HumanWaitAsync(HumanWaitType waitType);
+    Task HumanWaitAsync(HumanWaitType waitType, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 重试延时方法
     /// </summary>
-    Task HumanRetryDelayAsync(int attemptNumber);
+    Task HumanRetryDelayAsync(int attemptNumber, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 动作间延时方法
     /// </summary>
-    Task HumanBetweenActionsDelayAsync();
+    Task HumanBetweenActionsDelayAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 拟人化点赞操作
     /// 检测当前点赞状态，执行点赞操作，并验证结果
     /// </summary>
-    Task<InteractionResult> HumanLikeAsync(IPage page);
+    Task<InteractionResult> HumanLikeAsync();
+
+    /// <summary>
+    /// 拟人化“取消点赞”操作（新）
+    /// 检测当前点赞状态，若已点赞则点击取消；若本就未点赞则返回成功（幂等）。
+    /// </summary>
+    Task<InteractionResult> HumanUnlikeAsync(IPage page);
 
     /// <summary>
     /// 拟人化收藏操作
@@ -488,12 +457,20 @@ public interface IHumanizedInteractionService
     Task<InteractionResult> HumanFavoriteAsync(IPage page);
 
     /// <summary>
+    /// 拟人化“取消收藏”操作（新）
+    /// 检测当前收藏状态，若已收藏则点击取消；若本就未收藏则返回成功（幂等）。
+    /// </summary>
+    Task<InteractionResult> HumanUnfavoriteAsync(IPage page);
+
+    // 破坏性变更：移除 Direct* 直击交互（已废弃）。仅保留拟人化交互接口。
+
+    /// <summary>
     /// 执行自然滚动操作
     /// </summary>
     /// <param name="page">页面对象</param>
     /// <param name="distance">滚动距离</param>
     /// <param name="duration">滚动时长</param>
-    Task PerformNaturalScrollAsync(IPage page, int distance, TimeSpan duration);
+    Task PerformNaturalScrollAsync(IPage page, int distance, TimeSpan duration, CancellationToken cancellationToken = default);
 }
 #region 数据模型
 /// <summary>
@@ -510,7 +487,6 @@ public enum PageState
     /// <summary>未知页面状态</summary>
     Unknown
 }
-
 /// <summary>
 /// 通用页面类型枚举 - 支持多种页面类型检测
 /// </summary>
@@ -535,40 +511,39 @@ public enum PageType
 /// </summary>
 public enum HumanWaitType
 {
-    /// <summary>思考停顿 - 用户在思考下一步操作时的自然停顿</summary>
+    /// <summary>思考停顿：决定下一步前的最短思考</summary>
     ThinkingPause,
-
-    /// <summary>检查停顿 - 用户检查页面内容或状态时的停顿</summary>
+    /// <summary>检查停顿：浏览/确认元素与内容</summary>
     ReviewPause,
-
-    /// <summary>动作间隔 - 连续动作之间的自然间隔</summary>
+    /// <summary>动作间隔：连续动作之间的最小停顿</summary>
     BetweenActions,
-
-    /// <summary>等待模态窗口 - 等待弹窗或模态窗口出现</summary>
+    /// <summary>点击准备：Hover/聚焦后到点击前的最短停顿</summary>
+    ClickPreparation,
+    /// <summary>悬停停顿：Hover 后的短暂停留</summary>
+    HoverPause,
+    /// <summary>字符输入：单字符之间的停顿</summary>
+    TypingCharacter,
+    /// <summary>语义单位间：输入语义片段后的检查停顿</summary>
+    TypingSemanticUnit,
+    /// <summary>重试退避：基于 attempt 计算的退避等待</summary>
+    RetryBackoff,
+    /// <summary>等待模态：模态/弹窗渲染或消失</summary>
     ModalWaiting,
-
-    /// <summary>等待页面加载 - 等待页面内容完全加载</summary>
+    /// <summary>页面加载：页面主资源完成渲染</summary>
     PageLoading,
-
-    /// <summary>等待网络响应 - 等待网络请求完成</summary>
+    /// <summary>网络响应：等待请求/响应完成</summary>
     NetworkResponse,
-
-    /// <summary>等待内容加载 - 虚拟化列表新内容渲染时的等待</summary>
+    /// <summary>内容加载：虚拟化/懒加载内容渲染</summary>
     ContentLoading,
-
-    /// <summary>滚动准备 - 滚动前的观察和准备时间</summary>
+    /// <summary>滚动准备：滚动前的观察准备</summary>
     ScrollPreparation,
-
-    /// <summary>滚动执行 - 滚动步骤之间的间隔</summary>
+    /// <summary>滚动执行：滚动步骤间的节奏</summary>
     ScrollExecution,
-
-    /// <summary>滚动完成 - 滚动完成后的观察时间</summary>
+    /// <summary>滚动完成：滚动后的观察</summary>
     ScrollCompletion,
-
-    /// <summary>虚拟列表更新 - 等待虚拟化列表更新DOM的专用延时</summary>
+    /// <summary>虚拟列表更新：等待虚拟列表 DOM 更新</summary>
     VirtualListUpdate
 }
-
 /// <summary>
 /// 详情页关键词匹配配置（权重/阈值/拼音）。
 /// 可通过配置节 DetailMatchConfig 或环境变量 XHS__DetailMatchConfig__* 覆盖。
@@ -614,7 +589,7 @@ public enum TypeIdentificationConfidence
     High     // 高置信度
 }
 /// <summary>
-/// 笔记基本信息 - 诚实数据模型
+/// 笔记基本信息
 /// </summary>
 public class NoteInfo
 {
@@ -622,6 +597,11 @@ public class NoteInfo
     public string Title { get; set; } = string.Empty;
     public string Author { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 顶层模型类型（如：note）。来源：item.model_type
+    /// </summary>
+    public string ModelType { get; set; } = string.Empty;
 
     // 可能为空的数据字段，明确标记为可空
     public int? LikeCount { get; set; }
@@ -637,6 +617,11 @@ public class NoteInfo
     /// 描述/内容预览（来自搜索结果 note_card.desc）
     /// </summary>
     public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 原始笔记类型字符串（来自 note_card.type，示例：normal、video）
+    /// </summary>
+    public string? RawNoteType { get; set; }
 
     /// <summary>
     /// 视频直链（如果是视频笔记）
@@ -704,6 +689,11 @@ public class NoteInfo
     public string AuthorAvatar { get; set; } = string.Empty;
 
     /// <summary>
+    /// 扩展字段：作者级 xsec_token（来源 note_card.user.xsec_token）
+    /// </summary>
+    public string? AuthorXsecToken { get; set; }
+
+    /// <summary>
     /// 扩展字段：跟踪ID，用于分析和后续请求
     /// </summary>
     public string? TrackId { get; set; }
@@ -727,6 +717,11 @@ public class NoteInfo
     /// 缺失字段列表
     /// </summary>
     public List<string> MissingFields { get; set; } = [];
+
+    /// <summary>
+    /// 角标标签（如发布日角标）。来源：note_card.corner_tag_info
+    /// </summary>
+    public List<CornerTag> CornerTags { get; set; } = [];
 
     /// <summary>
     /// 数据提取时间
@@ -772,7 +767,7 @@ public class NoteInfo
             {
                 return NoteType.Video;
             }
-            
+
             // 优先级2：视频URL（直接视频标识）
             if (!string.IsNullOrEmpty(detail.VideoUrl))
             {
@@ -811,26 +806,26 @@ public class NoteInfo
         if (this is NoteDetail detail)
         {
             // 视频时长信息 - 最高置信度
-            if (detail.VideoDuration is > 0) 
+            if (detail.VideoDuration is > 0)
                 return TypeIdentificationConfidence.High;
-            
+
             // 视频URL - 高置信度
-            if (!string.IsNullOrEmpty(detail.VideoUrl)) 
+            if (!string.IsNullOrEmpty(detail.VideoUrl))
                 return TypeIdentificationConfidence.High;
-                
+
             // 图片存在 - 高置信度
-            if (detail.Images.Count != 0) 
+            if (detail.Images.Count != 0)
                 return TypeIdentificationConfidence.High;
-                
+
             // 长文本 - 中等置信度
-            if (detail.Content.Length > 500) 
+            if (detail.Content.Length > 500)
                 return TypeIdentificationConfidence.Medium;
         }
 
         // 基于基础信息的低置信度判断
-        if (!string.IsNullOrEmpty(CoverImage)) 
+        if (!string.IsNullOrEmpty(CoverImage))
             return TypeIdentificationConfidence.Low;
-        if (!string.IsNullOrEmpty(Content) && Content.Length > 300) 
+        if (!string.IsNullOrEmpty(Content) && Content.Length > 300)
             return TypeIdentificationConfidence.Low;
 
         return TypeIdentificationConfidence.Unknown;
@@ -845,12 +840,37 @@ public class NoteDetail : NoteInfo
     public new List<string> Images { get; set; } = [];
     public List<string> Tags { get; set; } = [];
     public List<CommentInfo> Comments { get; set; } = [];
-    
+
+    /// <summary>
+    /// IP属地（如果可用，来源：feed.note_card.ip_location）
+    /// </summary>
+    public string IpLocation { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 最后更新时间（如果可用，来源：feed.note_card.last_update_time）
+    /// </summary>
+    public DateTime? LastUpdateTime { get; set; }
+
+    /// <summary>
+    /// @的用户列表（如果可用，来源：feed.note_card.at_user_list）
+    /// </summary>
+    public List<AtUserInfo> AtUsers { get; set; } = [];
+
+    /// <summary>
+    /// 分享是否被禁止（如果可用，来源：feed.note_card.share_info.un_share）
+    /// </summary>
+    public bool? ShareDisabled { get; set; }
+
     /// <summary>
     /// 是否为视频笔记
     /// </summary>
     public bool IsVideo => !string.IsNullOrEmpty(VideoUrl) || VideoDuration.HasValue;
-    
+
+    /// <summary>
+    /// 数据来源端点（用于去重机制）
+    /// </summary>
+    public ApiEndpointType? SourceEndpoint { get; set; }
+
     /// <summary>
     /// 获取格式化的视频时长文本
     /// </summary>
@@ -859,7 +879,7 @@ public class NoteDetail : NoteInfo
     {
         if (!VideoDuration.HasValue || VideoDuration.Value <= 0)
             return string.Empty;
-            
+
         int minutes = VideoDuration.Value / 60;
         int seconds = VideoDuration.Value % 60;
         return $"{minutes}:{seconds:D2}";
@@ -880,6 +900,16 @@ public class CommentInfo
 
     public List<CommentInfo> Replies { get; set; } = [];
 
+    // 扩展字段（来自评论API）
+    public string NoteId { get; set; } = string.Empty;
+    public string AuthorId { get; set; } = string.Empty;
+    public string AuthorAvatar { get; set; } = string.Empty;
+    public string? AuthorXsecToken { get; set; }
+    public string IpLocation { get; set; } = string.Empty;
+    public bool? Liked { get; set; }
+    public List<string> PictureUrls { get; set; } = [];
+    public List<string> ShowTags { get; set; } = [];
+
     /// <summary>
     /// 评论数据质量评级
     /// </summary>
@@ -889,6 +919,57 @@ public class CommentInfo
     /// 评论数据提取时间
     /// </summary>
     public DateTime ExtractedAt { get; set; } = DateTime.UtcNow;
+}
+/// <summary>
+/// 页面状态守护接口（IPageStateGuard）。
+/// - 职责：在执行搜索、推荐、批量操作等需要处于“列表/发现/搜索”上下文的流程前，
+///         检查是否处于“笔记详情”页；若是，则尝试优雅退出（点击关闭按钮/遮罩/ESC）。
+/// - 设计：独立于业务服务，遵循单一职责，便于复用与单元测试。
+/// </summary>
+public interface IPageStateGuard
+{
+    /// <summary>
+    /// 若当前处于“笔记详情”页面，则尝试退出；否则直接返回 true。
+    /// 成功判定：退出后页面不再是 NoteDetail。
+    /// </summary>
+    /// <param name="page">浏览器页面</param>
+    /// <returns>是否保证当前不在笔记详情页</returns>
+    Task<bool> EnsureExitNoteDetailIfPresentAsync(IPage page);
+
+    /// <summary>
+    /// 确保当前处于“发现/搜索”入口上下文：
+    /// 1) 若在详情页，先尝试退出；
+    /// 2) 若已在 发现(Recommend)/搜索(Search) 则直接通过；
+    /// 3) 否则尝试点击侧边栏发现链接；失败则回退为直接URL导航；
+    /// 4) 导航后再次检测，判定成功与否。
+    /// </summary>
+    /// <param name="page">浏览器页面</param>
+    /// <returns>是否处于发现/搜索入口上下文</returns>
+    Task<bool> EnsureOnDiscoverOrSearchAsync(IPage page);
+}
+/// <summary>
+/// 被@的用户信息（简化版）
+/// </summary>
+public class AtUserInfo
+{
+    public string UserId { get; set; } = string.Empty;
+    public string Nickname { get; set; } = string.Empty;
+    public string? XsecToken { get; set; }
+}
+/// <summary>
+/// 卡片角标信息（如发布时间角标）
+/// </summary>
+public class CornerTag
+{
+    /// <summary>
+    /// 角标类型（示例：publish_time）
+    /// </summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 文本（示例：08-30、昨天、今天）
+    /// </summary>
+    public string Text { get; set; } = string.Empty;
 }
 /// <summary>
 /// 统一的操作结果类，支持泛型数据类型
@@ -919,7 +1000,8 @@ public enum ErrorType
     ValidationError,
     FileOperation,
     NavigationError,
-    CollectionError
+    CollectionError,
+    OperationCancelled
 }
 /// <summary>
 /// 数据质量枚举
@@ -954,7 +1036,6 @@ public abstract class BaseUserInfo
     /// </summary>
     public string Avatar { get; set; } = string.Empty;
 }
-
 /// <summary>
 /// 完整的用户信息类（继承自BaseUserInfo）
 /// </summary>
@@ -964,14 +1045,7 @@ public class UserInfo : BaseUserInfo
     public DateTime LastActiveTime { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// 向后兼容字段：Username 等同于 Nickname
-    /// 旧版测试和调用方使用 Username 字段，此处提供映射以保持兼容
-    /// </summary>
-    public string Username
-    {
-        get => Nickname;
-        set => Nickname = value;
-    }
+    // Username 兼容别名已删除，请使用 Nickname
 
     // === 个人页面扩展数据 ===
 
@@ -1227,15 +1301,7 @@ public record BatchNoteResult(
     SimpleExportInfo? ExportInfo = null
 )
 {
-    /// <summary>
-    /// 向后兼容属性：等同于 SuccessfulNotes
-    /// </summary>
-    public List<NoteDetail> NoteDetails => SuccessfulNotes;
-
-    /// <summary>
-    /// 向后兼容属性：等同于 ProcessedCount
-    /// </summary>
-    public int TotalProcessed => ProcessedCount;
+    // NoteDetails/TotalProcessed 兼容属性已删除，请直接使用 SuccessfulNotes/ProcessedCount
 }
 /// <summary>
 /// 处理模式枚举 - 智能处理策略
@@ -1259,7 +1325,6 @@ public record ExportOptions(
     bool IncludeComments = false
 );
 #endregion
-
 /// <summary>
 /// 搜索请求模型（用于测试与参数验证）
 /// </summary>
@@ -1267,15 +1332,13 @@ public class SearchRequest
 {
     public string Keyword { get; set; } = string.Empty;
     public int MaxResults { get; set; }
-    
+
     public bool IsValid()
     {
         return !string.IsNullOrWhiteSpace(Keyword) && MaxResults > 0;
     }
 }
-
 #region 推荐服务接口
-
 /// <summary>
 /// 增强的推荐服务接口
 /// 负责管理小红书推荐API的调用和数据收集
@@ -1290,7 +1353,6 @@ public interface IRecommendService
     /// <returns>推荐结果</returns>
     Task<OperationResult<RecommendListResult>> GetRecommendedNotesAsync(int limit = 20, TimeSpan? timeout = null);
 }
-
 /// <summary>
 /// 发现页面导航服务接口
 /// 负责管理到发现页面的导航和API触发验证
@@ -1305,7 +1367,6 @@ public interface IDiscoverPageNavigationService
     /// <returns>导航结果</returns>
     Task<DiscoverNavigationResult> NavigateToDiscoverPageAsync(IPage page, TimeSpan? timeout = null);
 }
-
 /// <summary>
 /// 智能收集控制器接口
 /// 负责管理分批收集推荐笔记的整体流程，包括进度跟踪、滚动策略和性能监控
@@ -1330,7 +1391,7 @@ public interface ISmartCollectionController
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
-    
+
     /// <summary>
     /// 执行纯数据收集（不包含API监听）
     /// </summary>
@@ -1353,7 +1414,6 @@ public interface ISmartCollectionController
     /// </summary>
     void ResetCollectionState();
 }
-
 /// <summary>
 /// API连接状态
 /// 用于验证推荐API的连接和触发状态
@@ -1385,7 +1445,6 @@ public class ApiConnectionStatus
     /// </summary>
     public List<string> Details { get; set; } = [];
 }
-
 /// <summary>
 /// 发现页面导航结果
 /// </summary>
@@ -1426,38 +1485,7 @@ public class DiscoverNavigationResult
     /// </summary>
     public List<string> NavigationLog { get; set; } = [];
 }
-
-/// <summary>
-/// 发现页面状态 - 向后兼容类，继承自通用PageStatusInfo
-/// </summary>
-public class DiscoverPageStatus : PageStatusInfo
-{
-    /// <summary>
-    /// 初始化新实例
-    /// </summary>
-    public DiscoverPageStatus()
-    {
-        PageType = PageType.Recommend;
-    }
-
-    /// <summary>
-    /// 是否在发现页面 - 兼容性属性
-    /// </summary>
-    public bool IsOnDiscoverPage
-    {
-        get => PageType == PageType.Recommend && IsPageReady;
-        set
-        {
-            if (value)
-            {
-                PageType = PageType.Recommend;
-                IsPageReady = true;
-            }
-        }
-    }
-
-}
-
+// DiscoverPageStatus 兼容类已删除，请改用通用 PageStatusInfo。
 /// <summary>
 /// 通用页面状态信息
 /// 支持多种页面类型的状态检测和信息记录
@@ -1528,7 +1556,6 @@ public class PageStatusInfo
         DetectionLog.Add($"[{DateTime.UtcNow:HH:mm:ss.fff}] {logEntry}");
     }
 }
-
 /// <summary>
 /// 导航方式枚举
 /// </summary>
@@ -1543,7 +1570,6 @@ public enum DiscoverNavigationMethod
     /// <summary>失败</summary>
     Failed
 }
-
 /// <summary>
 /// 智能收集结果
 /// </summary>
@@ -1560,7 +1586,7 @@ public record SmartCollectionResult
     public CollectionStatus CollectionDetails { get; init; } = new();
     public bool ReachedTarget { get; init; }
     public double EfficiencyScore { get; init; }
-    
+
     /// <summary>
     /// 创建自定义结果（用于数据合并场景）
     /// </summary>
@@ -1583,16 +1609,16 @@ public record SmartCollectionResult
         Duration = duration;
         ReachedTarget = actuallyCollected >= targetCount;
         EfficiencyScore = efficiencyScore;
-        
+
         // 为合并场景设置特殊的性能指标
         PerformanceMetrics = new CollectionPerformanceMetrics
         {
             ApiDataAvailable = apiDataAvailable,
             TotalDuration = duration,
-            EfficiencyRating = efficiencyScore > 80 ? "High" : 
-                             efficiencyScore > 60 ? "Medium" : "Low"
+            EfficiencyRating = efficiencyScore > 80 ? "High" :
+                efficiencyScore > 60 ? "Medium" : "Low"
         };
-        
+
         CollectionDetails = new CollectionStatus
         {
             Phase = CollectionPhase.Completed,
@@ -1606,10 +1632,10 @@ public record SmartCollectionResult
     /// 创建成功结果
     /// </summary>
     public static SmartCollectionResult CreateSuccess(
-        List<NoteInfo> collectedNotes, 
-        int targetCount, 
-        int requestCount, 
-        TimeSpan duration, 
+        List<NoteInfo> collectedNotes,
+        int targetCount,
+        int requestCount,
+        TimeSpan duration,
         CollectionPerformanceMetrics performanceMetrics)
     {
         return new SmartCollectionResult(
@@ -1628,10 +1654,10 @@ public record SmartCollectionResult
     /// 创建失败结果
     /// </summary>
     public static SmartCollectionResult CreateFailure(
-        string errorMessage, 
-        List<NoteInfo>? partialResults = null, 
-        int targetCount = 0, 
-        int requestCount = 0, 
+        string errorMessage,
+        List<NoteInfo>? partialResults = null,
+        int targetCount = 0,
+        int requestCount = 0,
         TimeSpan duration = default)
     {
         var collected = partialResults ?? [];
@@ -1647,7 +1673,6 @@ public record SmartCollectionResult
         );
     }
 }
-
 /// <summary>
 /// 收集状态
 /// </summary>
@@ -1661,7 +1686,6 @@ public class CollectionStatus
     public DateTime StartTime { get; set; }
     public DateTime LastUpdateTime { get; set; }
 }
-
 /// <summary>
 /// 收集阶段
 /// </summary>
@@ -1673,7 +1697,6 @@ public enum CollectionPhase
     Completed,
     Failed
 }
-
 /// <summary>
 /// 收集性能指标
 /// </summary>
@@ -1709,12 +1732,8 @@ public class CollectionPerformanceMetrics
         Duration = duration;
     }
 }
-
 #endregion
-
 #region GetRecommendedNotes
-
-
 /// <summary>
 /// 推荐笔记数据模型 - 基于API监听的完整笔记信息
 /// 包含从小红书搜索API中提取的所有可用数据
@@ -1737,7 +1756,7 @@ public class RecommendedNote : NoteInfo
             int seconds = VideoInfo.Duration % 60;
             return $"{minutes}:{seconds:D2}";
         }
-        
+
         if (VideoDuration is > 0)
         {
             int minutes = VideoDuration.Value / 60;
@@ -1753,7 +1772,6 @@ public class RecommendedNote : NoteInfo
     /// </summary>
     public bool IsVideoEnhanced => VideoInfo?.Duration > 0 || !string.IsNullOrEmpty(VideoUrl) || VideoDuration.HasValue;
 }
-
 /// <summary>
 /// 推荐图片信息
 /// 基于API返回的图片数据结构
@@ -1780,7 +1798,6 @@ public class RecommendedImageInfo
     /// </summary>
     public List<ImageSceneInfo> Scenes { get; set; } = [];
 }
-
 /// <summary>
 /// 图片场景信息
 /// 对应不同尺寸和质量的图片版本
@@ -1797,7 +1814,6 @@ public class ImageSceneInfo
     /// </summary>
     public string Url { get; set; } = string.Empty;
 }
-
 /// <summary>
 /// 推荐视频信息
 /// 基于API返回的视频数据结构
@@ -1829,7 +1845,6 @@ public class RecommendedVideoInfo
     /// </summary>
     public int Height { get; set; }
 }
-
 /// <summary>
 /// 推荐封面信息
 /// 基于API返回的封面数据结构
@@ -1866,7 +1881,6 @@ public class RecommendedCoverInfo
     /// </summary>
     public List<ImageSceneInfo> Scenes { get; set; } = [];
 }
-
 /// <summary>
 /// 推荐互动信息
 /// 基于API返回的互动数据结构
@@ -1886,7 +1900,6 @@ public class RecommendedInteractInfo : BaseInteractInfo
     /// </summary>
     public int ShareCount { get; set; }
 }
-
 /// <summary>
 /// 推荐用户信息
 /// 基于API返回的用户数据结构
@@ -1918,8 +1931,6 @@ public class RecommendedUserInfo
     /// </summary>
     public string Description { get; set; } = string.Empty;
 }
-
-
 /// <summary>
 /// 搜索参数信息
 /// 记录本次搜索使用的所有参数
@@ -1938,7 +1949,6 @@ public record SearchParametersInfo(
     int MaxResults,
     DateTime RequestedAt
 );
-
 /// <summary>
 /// 搜索API监听器配置
 /// 用于配置网络请求监听的参数
@@ -1959,9 +1969,7 @@ public class SearchMonitorConfig : BaseMonitorConfig
         TimeoutMs = 15000;
     }
 }
-
 #endregion
-
 #region MCP工具强类型返回值定义
 /// <summary>
 /// 浏览器连接结果
@@ -2011,6 +2019,19 @@ public record InteractionResult(
     string Message,
     string? ErrorCode = null
 );
+
+/// <summary>
+/// 组合交互结果（点赞/收藏可组合执行的统一返回）。
+/// - Success：当且仅当所有被请求的交互均成功时为 true。
+/// - Like/Favorite：分别为具体交互结果，未请求则为 null。
+/// </summary>
+public record InteractionBundleResult(
+    bool Success,
+    InteractionResult? Like,
+    InteractionResult? Favorite,
+    string Message,
+    string? ErrorCode = null
+);
 #endregion
 #region 推荐列表数据模型
 /// <summary>
@@ -2033,7 +2054,6 @@ public record RecommendListResult(
     SimpleExportInfo? ExportInfo = null,
     RecommendCollectionDetails? CollectionDetails = null
 );
-
 /// <summary>
 /// 推荐统计数据
 /// 基于 SearchStatistics 的设计模式
@@ -2056,7 +2076,6 @@ public record RecommendStatistics(
     Dictionary<string, int> AuthorDistribution,
     DateTime CalculatedAt
 );
-
 /// <summary>
 /// 推荐收集详细信息
 /// </summary>
@@ -2076,7 +2095,6 @@ public record RecommendCollectionDetails(
     DataQuality DataQuality,
     RecommendCollectionMode CollectionMode
 );
-
 /// <summary>
 /// 推荐收集模式
 /// </summary>
@@ -2089,7 +2107,6 @@ public enum RecommendCollectionMode
     /// <summary>谨慎收集：最大防检测，适用于大量数据</summary>
     Careful
 }
-
 /// <summary>
 /// 网络监听器配置
 /// </summary>
@@ -2118,7 +2135,6 @@ public abstract class BaseMonitorConfig
     /// </summary>
     public bool EnableDetailedLogging { get; set; } = true;
 }
-
 /// <summary>
 /// 通用监听器配置类（继承自BaseMonitorConfig）
 /// </summary>
@@ -2151,9 +2167,7 @@ public class MonitorConfig : BaseMonitorConfig
     }
 }
 #endregion
-
 #region 小红书搜索API真实响应数据模型（用于拟人化操作+API监听）
-
 /// <summary>
 /// 小红书搜索API响应的根级数据结构
 /// 对应 /api/sns/web/v1/search/notes 接口的真实响应格式
@@ -2181,7 +2195,6 @@ public class SearchNotesApiResponse
     /// </summary>
     public SearchNotesData? Data { get; set; }
 }
-
 /// <summary>
 /// 搜索笔记API数据部分
 /// </summary>
@@ -2212,7 +2225,6 @@ public class SearchNotesData
     /// </summary>
     public string? SearchId { get; set; }
 }
-
 /// <summary>
 /// 搜索笔记项目数据
 /// </summary>
@@ -2248,7 +2260,6 @@ public class SearchNoteItem
     /// </summary>
     public Dictionary<string, object> DisplayTags { get; set; } = new();
 }
-
 /// <summary>
 /// 搜索笔记基础信息
 /// </summary>
@@ -2294,7 +2305,6 @@ public class SearchNoteInfo
     /// </summary>
     public List<SearchImageInfo> ImageList { get; set; } = [];
 }
-
 /// <summary>
 /// 搜索封面信息
 /// </summary>
@@ -2335,7 +2345,6 @@ public class SearchCoverInfo
     /// </summary>
     public List<SearchImageSceneInfo> InfoList { get; set; } = [];
 }
-
 /// <summary>
 /// 搜索图片场景信息
 /// </summary>
@@ -2351,7 +2360,6 @@ public class SearchImageSceneInfo
     /// </summary>
     public string Url { get; set; } = string.Empty;
 }
-
 /// <summary>
 /// 搜索用户信息
 /// </summary>
@@ -2365,7 +2373,6 @@ public class SearchUserInfo : BaseUserInfo
     /// </summary>
     public bool Verified { get; set; }
 }
-
 /// <summary>
 /// 搜索互动信息
 /// </summary>
@@ -2384,7 +2391,6 @@ public class SearchInteractInfo : BaseInteractInfo
     /// </summary>
     public int ShareCount { get; set; }
 }
-
 /// <summary>
 /// 搜索视频信息
 /// </summary>
@@ -2415,7 +2421,6 @@ public class SearchVideoInfo
     /// </summary>
     public int Height { get; set; }
 }
-
 /// <summary>
 /// 搜索图片信息
 /// </summary>
@@ -2441,11 +2446,8 @@ public class SearchImageInfo
     /// </summary>
     public List<SearchImageSceneInfo> InfoList { get; set; } = [];
 }
-
 #endregion
-
 #region 小红书推荐API真实响应数据模型
-
 /// <summary>
 /// 小红书推荐API响应的根级数据结构
 /// 对应 /api/sns/web/v1/homefeed 接口的真实响应格式
@@ -2460,7 +2462,6 @@ public record HomefeedResponse(
     [property: JsonPropertyName("msg")] string Msg,
     [property: JsonPropertyName("success")] bool Success
 );
-
 /// <summary>
 /// 推荐API数据部分
 /// </summary>
@@ -2470,7 +2471,6 @@ public record HomefeedData(
     [property: JsonPropertyName("cursor_score")] string CursorScore,
     [property: JsonPropertyName("items")] List<HomefeedItem> Items
 );
-
 /// <summary>
 /// 单个推荐项目数据
 /// </summary>
@@ -2488,7 +2488,6 @@ public record HomefeedItem(
     [property: JsonPropertyName("track_id")] string? TrackId,
     [property: JsonPropertyName("xsec_token")] string? XsecToken
 );
-
 /// <summary>
 /// 笔记卡片核心数据
 /// </summary>
@@ -2508,7 +2507,6 @@ public record NoteCard(
     [property: JsonPropertyName("video")] VideoInfo? Video = null,
     [property: JsonPropertyName("note_id")] string? NoteId = null
 );
-
 /// <summary>
 /// 视频信息 - 视频笔记专用数据模型
 /// </summary>
@@ -2516,7 +2514,6 @@ public record NoteCard(
 public record VideoInfo(
     [property: JsonPropertyName("capa")] VideoCapa Capa
 );
-
 /// <summary>
 /// 视频能力信息 - 包含视频时长等元数据
 /// </summary>
@@ -2524,7 +2521,6 @@ public record VideoInfo(
 public record VideoCapa(
     [property: JsonPropertyName("duration")] int Duration
 );
-
 /// <summary>
 /// 用户卡片信息
 /// </summary>
@@ -2543,7 +2539,6 @@ public record UserCard(
     [JsonPropertyName("nick_name")]
     public string? NicknameAlt { get; init; }
 }
-
 /// <summary>
 /// 封面图片信息
 /// </summary>
@@ -2563,7 +2558,6 @@ public record CoverInfo(
     [property: JsonPropertyName("height")] int Height,
     [property: JsonPropertyName("file_id")] string FileId
 );
-
 /// <summary>
 /// 图片信息，包含不同场景的URL
 /// </summary>
@@ -2573,7 +2567,6 @@ public record ImageInfo(
     [property: JsonPropertyName("image_scene")] string ImageScene,
     [property: JsonPropertyName("url")] string Url
 );
-
 /// <summary>
 /// 基础交互信息类，包含所有交互信息的共同字段
 /// </summary>
@@ -2604,16 +2597,12 @@ public abstract class BaseInteractInfo
     /// </summary>
     public bool Collected { get; set; }
 }
-
 public record InteractInfo(
     [property: JsonPropertyName("liked")] bool Liked,
     [property: JsonPropertyName("liked_count")] string LikedCount
 );
-
 #endregion
-
 #region 数据转换器和映射逻辑
-
 /// <summary>
 /// 推荐API响应到NoteInfo的转换器
 /// 处理真实API数据到现有模型的映射
@@ -2694,6 +2683,8 @@ public static class HomefeedConverter
                 Url = $"https://www.xiaohongshu.com/explore/{item.Id}",
                 TrackId = item.TrackId,
                 XsecToken = item.XsecToken,
+                AuthorXsecToken = noteCard.User.XsecToken,
+                ModelType = item.ModelType,
                 ExtractedAt = DateTime.UtcNow
             };
 
@@ -2710,6 +2701,19 @@ public static class HomefeedConverter
 
             // 选择最佳封面图片
             noteInfo.CoverImage = SelectBestCoverImage(noteCard.Cover);
+
+            // 映射封面结构
+            noteInfo.CoverInfo = new RecommendedCoverInfo
+            {
+                DefaultUrl = noteCard.Cover.UrlDefault,
+                PreviewUrl = noteCard.Cover.UrlPre,
+                Width = noteCard.Cover.Width,
+                Height = noteCard.Cover.Height,
+                FileId = noteCard.Cover.FileId,
+                Scenes = (noteCard.Cover.InfoList ?? new List<ImageInfo>())
+                    .Select(i => new ImageSceneInfo {SceneType = i.ImageScene, Url = i.Url})
+                    .ToList()
+            };
 
             // 缺失字段标记
             if (noteInfo.CommentCount == null) missingFields.Add("CommentCount");
@@ -2728,7 +2732,8 @@ public static class HomefeedConverter
 
             // 根据可用信息推断笔记类型（增强的视频识别）
             noteInfo.Type = DetermineNoteType(noteCard);
-            
+            noteInfo.RawNoteType = noteCard.Type;
+
             // 视频时长（若能从推荐API拿到）
             if (noteCard.Video?.Capa.Duration > 0)
             {
@@ -2781,13 +2786,13 @@ public static class HomefeedConverter
         {
             return NoteType.Video;
         }
-        
+
         // 优先级2：检查是否包含视频信息（最可靠）
         if (noteCard.Video?.Capa.Duration > 0)
         {
             return NoteType.Video;
         }
-        
+
         // 优先级3：基于type字段的其他值判断
         if (string.Equals(noteCard.Type, "normal", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(noteCard.Type, "image", StringComparison.OrdinalIgnoreCase))
@@ -2812,9 +2817,7 @@ public static class HomefeedConverter
 
 }
 #endregion
-
 #region 页面加载等待策略接口和配置
-
 /// <summary>
 /// 页面加载等待策略服务接口
 /// 提供多级等待策略，解决WaitForLoadStateAsync硬编码超时问题
@@ -2865,7 +2868,6 @@ public interface IPageLoadWaitService
     /// <returns>是否等待成功</returns>
     Task<bool> WaitForLoadCompleteAsync(IPage page, TimeSpan timeout);
 }
-
 /// <summary>
 /// 页面加载等待策略枚举
 /// 定义不同级别的页面加载完成标准
@@ -2874,14 +2876,13 @@ public enum PageLoadStrategy
 {
     /// <summary>DOM内容加载完成，最快的等待策略</summary>
     DOMContentLoaded,
-    
+
     /// <summary>页面完全加载（包括图片、样式表等），平衡策略</summary>
     Load,
-    
+
     /// <summary>网络空闲状态，最严格的等待策略</summary>
     NetworkIdle
 }
-
 /// <summary>
 /// 页面加载等待配置类
 /// 提供所有等待策略的超时时间和重试配置
@@ -2931,7 +2932,6 @@ public class PageLoadWaitConfig
     /// </summary>
     public int CustomValidationTimeout { get; set; } = 5000;
 }
-
 /// <summary>
 /// 页面加载等待结果
 /// 包含等待策略执行的详细信息和结果
@@ -3023,21 +3023,26 @@ public class PageLoadWaitResult
         };
     }
 }
-
 #endregion
-
 #region 通用API监听服务接口
-
 /// <summary>
 /// API端点类型枚举
 /// </summary>
 public enum ApiEndpointType
 {
-    Homefeed,       // 推荐笔记 /api/sns/web/v1/homefeed
-    Feed,           // 笔记详情 /api/sns/web/v1/feed
-    SearchNotes     // 搜索笔记 /api/sns/web/v1/search/notes
-}
+    Homefeed,    // 推荐笔记 /api/sns/web/v1/homefeed
+    Feed,        // 笔记详情 /api/sns/web/v1/feed
+    SearchNotes, // 搜索笔记 /api/sns/web/v1/search/notes
+    Comments,    // 评论列表 /api/sns/web/v2/comment/page
 
+    // ===== 互动动作端点（破坏性变更：新增并作为权威信号） =====
+    LikeNote,      // 点赞 /api/sns/web/v1/note/like
+    DislikeNote,   // 取消点赞 /api/sns/web/v1/note/dislike
+    CollectNote,   // 收藏 /api/sns/web/v1/note/collect
+    UncollectNote, // 取消收藏 /api/sns/web/v1/note/uncollect
+    CommentPost,   // 发表评论 /api/sns/web/v1/comment/post
+    CommentDelete  // 删除自己的评论 /api/sns/web/v1/comment/delete
+}
 /// <summary>
 /// 通用API监听服务接口
 /// </summary>
@@ -3094,7 +3099,6 @@ public interface IUniversalApiMonitor : IDisposable
     /// </summary>
     Task StopMonitoringAsync();
 }
-
 /// <summary>
 /// API触发结果
 /// </summary>
@@ -3104,22 +3108,22 @@ public class ApiTriggerResult
     /// 是否成功触发API
     /// </summary>
     public bool Success { get; set; }
-    
+
     /// <summary>
     /// 错误消息（失败时）
     /// </summary>
     public string? ErrorMessage { get; set; }
-    
+
     /// <summary>
     /// 获取到的数据项数量
     /// </summary>
     public int DataCount { get; set; }
-    
+
     /// <summary>
     /// 操作耗时
     /// </summary>
     public TimeSpan Duration { get; set; }
-    
+
     /// <summary>
     /// 创建成功结果
     /// </summary>
@@ -3132,7 +3136,7 @@ public class ApiTriggerResult
             Duration = duration
         };
     }
-    
+
     /// <summary>
     /// 创建失败结果
     /// </summary>
@@ -3147,5 +3151,4 @@ public class ApiTriggerResult
         };
     }
 }
-
 #endregion

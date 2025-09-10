@@ -46,7 +46,8 @@
       "mcp__deepwiki__ask_question",
       "Bash(if [ -f appsettings.json ])",
       "Bash(then mv appsettings.json appsettings.json.backup)",
-      "Bash(fi)"
+      "Bash(fi)",
+      "mcp__memory__add_observations"
     ],
     "deny": [],
     "ask": []

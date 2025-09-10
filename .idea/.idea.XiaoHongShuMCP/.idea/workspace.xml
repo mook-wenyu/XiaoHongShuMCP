@@ -8,23 +8,43 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="d72be0d4-4fc2-4455-917c-4657a6b6ae8e" name="更改" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/.idea.XiaoHongShuMCP/.idea/copilot.data.migration.agent.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/.idea.XiaoHongShuMCP/.idea/copilot.data.migration.edit.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Tests/Services/CommentsResponseProcessorTests.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Tests/Services/FeedApiConverterTests.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Tests/Services/HumanizedInteractionUnlikeUncollectTests.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Tests/Services/HumanizedInteractionVirtualScrollImprovementsTests.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Tests/Services/PageStateGuardTests.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Tests/Services/UniversalApiMonitorActionsTests.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Tests/Services/UniversalApiMonitorDeduplicationTests.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Tests/Services/UniversalApiMonitorIdentifyTests.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Properties/AssemblyInfo.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/InteractionCacheConfig.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/InteractionStateCache.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/PageStateGuard.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.claude/settings.local.json" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/settings.local.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/.idea.XiaoHongShuMCP/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.XiaoHongShuMCP/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AGENTS.md" beforeDir="false" afterPath="$PROJECT_DIR$/AGENTS.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Tests/Services/DomElementManagerTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Tests/Services/DomElementManagerTests.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Tests/Services/HumanizedInteractionServiceTests.cs" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/Tests/Services/KeywordMatcherTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Tests/Services/KeywordMatcherTests.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Tests/Tools/XiaoHongShuToolsTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Tests/Tools/XiaoHongShuToolsTests.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Program.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Program.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/BrowserConnectionHostedService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/BrowserConnectionHostedService.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/DomElementManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/DomElementManager.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/FeedApiConverter.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/FeedApiConverter.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/FeedApiModels.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/FeedApiModels.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/HumanizedInteraction/DelayManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/HumanizedInteraction/DelayManager.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/HumanizedInteraction/ElementFinder.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/HumanizedInteraction/ElementFinder.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/HumanizedInteraction/HumanizedInteractionService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/HumanizedInteraction/HumanizedInteractionService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/HumanizedInteraction/SmartTextSplitter.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/HumanizedInteraction/SmartTextSplitter.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/HumanizedInteraction/TextInputStrategies.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/HumanizedInteraction/TextInputStrategies.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/Interfaces.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/Interfaces.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/PageLoadWaitService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/PageLoadWaitService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/SmartCollectionController.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/SmartCollectionController.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/KeywordMatcher.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/KeywordMatcher.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/UniversalApiMonitor.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/UniversalApiMonitor.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Services/XiaoHongShuService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Services/XiaoHongShuService.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/XiaoHongShuMCP/Tools/XiaoHongShuTools.cs" beforeDir="false" afterPath="$PROJECT_DIR$/XiaoHongShuMCP/Tools/XiaoHongShuTools.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/e2e_entry_match_demo.ps1" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/e2e_entry_match_demo.ps1" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/e2e_entry_match_demo.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/e2e_entry_match_demo.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -155,7 +175,25 @@
       <workItem from="1757312126743" duration="1480000" />
       <workItem from="1757314421604" duration="687000" />
       <workItem from="1757317614016" duration="1616000" />
-      <workItem from="1757322680993" duration="232000" />
+      <workItem from="1757322680993" duration="1102000" />
+      <workItem from="1757334601323" duration="3100000" />
+      <workItem from="1757340627764" duration="1839000" />
+      <workItem from="1757344369772" duration="3373000" />
+      <workItem from="1757390884720" duration="1028000" />
+      <workItem from="1757392459404" duration="803000" />
+      <workItem from="1757393287154" duration="744000" />
+      <workItem from="1757406262910" duration="1043000" />
+      <workItem from="1757410287949" duration="978000" />
+      <workItem from="1757411316346" duration="9749000" />
+      <workItem from="1757435768723" duration="1624000" />
+      <workItem from="1757437553930" duration="399000" />
+      <workItem from="1757437978286" duration="608000" />
+      <workItem from="1757439442057" duration="3483000" />
+      <workItem from="1757442981349" duration="183000" />
+      <workItem from="1757443181110" duration="1456000" />
+      <workItem from="1757444690820" duration="2857000" />
+      <workItem from="1757468114979" duration="7858000" />
+      <workItem from="1757485830567" duration="63000" />
     </task>
     <task id="LOCAL-00001" summary="提交">
       <option name="closed" value="true" />

@@ -34,6 +34,11 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     private HashSet<ApiEndpointType> _activeEndpoints;
     private long _responseEventSeq;
 
+    // 数据去重相关字段
+    private readonly HashSet<string> _processedNoteIds;
+    private readonly Dictionary<string, NoteDetail> _uniqueNoteDetails;
+    private DeduplicationStats _deduplicationStats;
+
     public UniversalApiMonitor(ILogger<UniversalApiMonitor> logger, Microsoft.Extensions.Options.IOptions<McpSettings> mcp)
     {
         _logger = logger;
@@ -41,6 +46,11 @@ public class UniversalApiMonitor : IUniversalApiMonitor
         _monitoredResponses = new Dictionary<ApiEndpointType, List<MonitoredApiResponse>>();
         _processors = new Dictionary<ApiEndpointType, IApiResponseProcessor>();
         _activeEndpoints = [];
+
+        // 初始化数据去重相关字段
+        _processedNoteIds = new HashSet<string>();
+        _uniqueNoteDetails = new Dictionary<string, NoteDetail>();
+        _deduplicationStats = new DeduplicationStats();
 
         // 初始化各端点的响应存储
         foreach (ApiEndpointType endpointType in Enum.GetValues<ApiEndpointType>())
@@ -60,6 +70,15 @@ public class UniversalApiMonitor : IUniversalApiMonitor
         _processors[ApiEndpointType.Homefeed] = new HomefeedResponseProcessor(_logger);
         _processors[ApiEndpointType.Feed] = new FeedResponseProcessor(_logger);
         _processors[ApiEndpointType.SearchNotes] = new SearchNotesResponseProcessor(_logger);
+        _processors[ApiEndpointType.Comments] = new CommentsResponseProcessor(_logger);
+
+        // 互动动作端点（点赞/收藏/评论）的权威响应处理器
+        _processors[ApiEndpointType.LikeNote] = new LikeActionResponseProcessor(_logger);
+        _processors[ApiEndpointType.DislikeNote] = new DislikeActionResponseProcessor(_logger);
+        _processors[ApiEndpointType.CollectNote] = new CollectActionResponseProcessor(_logger);
+        _processors[ApiEndpointType.UncollectNote] = new UncollectActionResponseProcessor(_logger);
+        _processors[ApiEndpointType.CommentPost] = new CommentPostResponseProcessor(_logger);
+        _processors[ApiEndpointType.CommentDelete] = new CommentDeleteResponseProcessor(_logger);
     }
 
     /// <summary>
@@ -139,6 +158,9 @@ public class UniversalApiMonitor : IUniversalApiMonitor
                     lock (_lock)
                     {
                         _monitoredResponses[endpointType.Value].Add(processedResponse);
+                        
+                        // 应用数据去重机制
+                        ApplyDeduplication(processedResponse, endpointType.Value);
                     }
 
                     _logger.LogDebug("[Resp] 处理完成 | endpoint={Endpoint} items={Count}", endpointType, processedResponse.ProcessedDataCount);
@@ -186,16 +208,40 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     /// <summary>
     /// 识别 API 端点类型（基于 URL 片段的轻量规则）。
     /// </summary>
-    private static ApiEndpointType? IdentifyApiEndpoint(string url)
+    /// <summary>
+    /// 识别 API 端点类型（改为版本无关正则，兼容 v1/v2/v3...）。
+    /// - 示例：
+    ///   https://edith.xiaohongshu.com/api/sns/web/v1/feed → Feed
+    ///   https://edith.xiaohongshu.com/api/sns/web/v2/comment/page?... → Comments
+    /// </summary>
+    internal static ApiEndpointType? IdentifyApiEndpoint(string url)
     {
-        if (url.Contains("/api/sns/web/v1/homefeed"))
+        // 使用不区分大小写的编译正则，兼容所有 vN 版本
+        if (Regex.IsMatch(url, @"/api/sns/web/v\d+/homefeed", RegexOptions.IgnoreCase | RegexOptions.Compiled))
             return ApiEndpointType.Homefeed;
 
-        if (url.Contains("/api/sns/web/v1/feed"))
+        if (Regex.IsMatch(url, @"/api/sns/web/v\d+/feed(\b|/|\?)", RegexOptions.IgnoreCase | RegexOptions.Compiled))
             return ApiEndpointType.Feed;
 
-        if (url.Contains("/api/sns/web/v1/search/notes"))
+        if (Regex.IsMatch(url, @"/api/sns/web/v\d+/search/notes(\b|/|\?)", RegexOptions.IgnoreCase | RegexOptions.Compiled))
             return ApiEndpointType.SearchNotes;
+
+        if (Regex.IsMatch(url, @"/api/sns/web/v\d+/comment/page(\b|/|\?)", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+            return ApiEndpointType.Comments;
+
+        // ===== 新增：互动动作端点（版本无关） =====
+        if (Regex.IsMatch(url, @"/api/sns/web/v\d+/note/like(\b|/|\?)", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+            return ApiEndpointType.LikeNote;
+        if (Regex.IsMatch(url, @"/api/sns/web/v\d+/note/dislike(\b|/|\?)", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+            return ApiEndpointType.DislikeNote;
+        if (Regex.IsMatch(url, @"/api/sns/web/v\d+/note/collect(\b|/|\?)", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+            return ApiEndpointType.CollectNote;
+        if (Regex.IsMatch(url, @"/api/sns/web/v\d+/note/uncollect(\b|/|\?)", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+            return ApiEndpointType.UncollectNote;
+        if (Regex.IsMatch(url, @"/api/sns/web/v\d+/comment/post(\b|/|\?)", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+            return ApiEndpointType.CommentPost;
+        if (Regex.IsMatch(url, @"/api/sns/web/v\d+/comment/delete(\b|/|\?)", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+            return ApiEndpointType.CommentDelete;
 
         return null;
     }
@@ -251,26 +297,21 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     }
 
     /// <summary>
-    /// 获取指定端点监听到的“结构化笔记详情”集合（累积）。
+    /// 获取指定端点监听到的"结构化笔记详情"集合（累积）。
     /// 数据来源于各端点处理器对原始响应的解析产物。
+    /// 注意：返回的数据已经过去重处理。
     /// </summary>
     public List<NoteDetail> GetMonitoredNoteDetails(ApiEndpointType endpointType)
     {
         lock (_lock)
         {
-            var responses = _monitoredResponses[endpointType];
-            var noteDetails = new List<NoteDetail>();
+            // 从去重缓存中获取指定端点的数据
+            var endpointNotes = _uniqueNoteDetails.Values
+                .Where(note => GetNoteSourceEndpoint(note) == endpointType)
+                .ToList();
 
-            foreach (var response in responses)
-            {
-                if (response.ProcessedNoteDetails != null)
-                {
-                    noteDetails.AddRange(response.ProcessedNoteDetails);
-                }
-            }
-
-            _logger.LogDebug("从 {EndpointType} 获取到 {Count} 个笔记详情", endpointType, noteDetails.Count);
-            return noteDetails;
+            _logger.LogDebug("从 {EndpointType} 获取到 {Count} 个去重后的笔记详情", endpointType, endpointNotes.Count);
+            return endpointNotes;
         }
     }
 
@@ -299,6 +340,10 @@ public class UniversalApiMonitor : IUniversalApiMonitor
             {
                 var count = _monitoredResponses[endpointType.Value].Count;
                 _monitoredResponses[endpointType.Value].Clear();
+                
+                // 清理该端点相关的去重数据
+                ClearDeduplicationDataForEndpoint(endpointType.Value);
+                
                 _logger.LogDebug("清理了 {EndpointType} 的 {Count} 个响应", endpointType, count);
             }
             else
@@ -309,6 +354,10 @@ public class UniversalApiMonitor : IUniversalApiMonitor
                 {
                     responses.Clear();
                 }
+                
+                // 清理所有去重数据
+                ClearDeduplicationData();
+                
                 _logger.LogDebug("清理了所有端点的 {Count} 个响应", totalCount);
             }
         }
@@ -334,6 +383,134 @@ public class UniversalApiMonitor : IUniversalApiMonitor
         }
 
         await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 应用数据去重机制
+    /// </summary>
+    /// <param name="response">API响应数据</param>
+    /// <param name="endpointType">端点类型</param>
+    private void ApplyDeduplication(MonitoredApiResponse response, ApiEndpointType endpointType)
+    {
+        if (response.ProcessedNoteDetails == null || response.ProcessedNoteDetails.Count == 0)
+            return;
+
+        int totalProcessed = 0;
+        int duplicatesFound = 0;
+        int newUnique = 0;
+
+        foreach (var noteDetail in response.ProcessedNoteDetails)
+        {
+            totalProcessed++;
+            
+            if (string.IsNullOrEmpty(noteDetail.Id))
+            {
+                _logger.LogWarning("发现笔记ID为空，跳过去重处理");
+                continue;
+            }
+
+            if (_processedNoteIds.Contains(noteDetail.Id))
+            {
+                duplicatesFound++;
+                _logger.LogDebug("发现重复笔记ID: {NoteId}，已跳过", noteDetail.Id);
+            }
+            else
+            {
+                // 添加到去重缓存
+                _processedNoteIds.Add(noteDetail.Id);
+                
+                // 标记数据来源端点
+                noteDetail.SourceEndpoint = endpointType;
+                _uniqueNoteDetails[noteDetail.Id] = noteDetail;
+                
+                newUnique++;
+            }
+        }
+
+        // 更新统计信息
+        _deduplicationStats.TotalProcessed += totalProcessed;
+        _deduplicationStats.DuplicatesFound += duplicatesFound;
+        _deduplicationStats.UniqueNotesCount = _uniqueNoteDetails.Count;
+
+        if (duplicatesFound > 0 || _logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogInformation("去重统计 [{Endpoint}]: 处理={Total}, 新增={New}, 重复={Duplicate}, 总唯一数={Unique}", 
+                endpointType, totalProcessed, newUnique, duplicatesFound, _uniqueNoteDetails.Count);
+        }
+    }
+
+    /// <summary>
+    /// 获取笔记的来源端点
+    /// </summary>
+    private ApiEndpointType GetNoteSourceEndpoint(NoteDetail note)
+    {
+        // 如果笔记有SourceEndpoint属性，直接返回
+        if (note.SourceEndpoint.HasValue)
+            return note.SourceEndpoint.Value;
+
+        // 否则返回Unknown
+        return ApiEndpointType.Homefeed; // 默认值
+    }
+
+    /// <summary>
+    /// 清理所有去重数据
+    /// </summary>
+    private void ClearDeduplicationData()
+    {
+        var prevCount = _uniqueNoteDetails.Count;
+        _processedNoteIds.Clear();
+        _uniqueNoteDetails.Clear();
+        _deduplicationStats = new DeduplicationStats();
+        
+        _logger.LogDebug("清理了所有去重数据，原有唯一笔记数: {Count}", prevCount);
+    }
+
+    /// <summary>
+    /// 清理指定端点的去重数据
+    /// </summary>
+    private void ClearDeduplicationDataForEndpoint(ApiEndpointType endpointType)
+    {
+        var notesToRemove = _uniqueNoteDetails.Values
+            .Where(note => GetNoteSourceEndpoint(note) == endpointType)
+            .Select(note => note.Id)
+            .ToList();
+
+        foreach (var noteId in notesToRemove)
+        {
+            _processedNoteIds.Remove(noteId);
+            _uniqueNoteDetails.Remove(noteId);
+        }
+
+        _deduplicationStats.UniqueNotesCount = _uniqueNoteDetails.Count;
+        
+        _logger.LogDebug("清理了端点 {EndpointType} 的 {Count} 个去重数据", endpointType, notesToRemove.Count);
+    }
+
+    /// <summary>
+    /// 获取去重统计信息
+    /// </summary>
+    public DeduplicationStats GetDeduplicationStats()
+    {
+        lock (_lock)
+        {
+            return new DeduplicationStats
+            {
+                TotalProcessed = _deduplicationStats.TotalProcessed,
+                DuplicatesFound = _deduplicationStats.DuplicatesFound,
+                UniqueNotesCount = _deduplicationStats.UniqueNotesCount
+            };
+        }
+    }
+
+    /// <summary>
+    /// 获取所有去重后的笔记详情
+    /// </summary>
+    public List<NoteDetail> GetAllUniqueNoteDetails()
+    {
+        lock (_lock)
+        {
+            return _uniqueNoteDetails.Values.ToList();
+        }
     }
 
     /// <summary>
@@ -467,6 +644,13 @@ public class FeedResponseProcessor : IApiResponseProcessor
             {
                 var noteDetails = FeedApiConverter.ConvertToNoteDetails(apiResponse);
 
+                // 写入临时交互状态缓存（基于权威API，而非DOM）
+                foreach (var nd in noteDetails)
+                {
+                    try { InteractionStateCache.SetFromNoteDetail(nd); }
+                    catch { /* 忽略缓存写入异常，不影响主流程 */ }
+                }
+
                 return new MonitoredApiResponse
                 {
                     ResponseTime = DateTime.UtcNow,
@@ -522,6 +706,21 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
             }
 
             var noteDetails = new List<NoteDetail>();
+            string? pageToken = null;
+            string? searchId = null;
+
+            // 捕获分页令牌与搜索ID
+            if (rootElement.TryGetProperty("data", out var dataRoot))
+            {
+                if (dataRoot.TryGetProperty("page_token", out var pte))
+                {
+                    pageToken = pte.GetString();
+                }
+                if (dataRoot.TryGetProperty("search_id", out var sie))
+                {
+                    searchId = sie.GetString();
+                }
+            }
 
             // 解析搜索结果中的笔记数据
             if (dataElement.TryGetProperty("items", out var itemsElement) &&
@@ -534,6 +733,8 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
                         var noteDetail = ParseSearchNoteItem(item);
                         if (noteDetail != null)
                         {
+                            if (!string.IsNullOrEmpty(pageToken)) noteDetail.PageToken = pageToken;
+                            if (!string.IsNullOrEmpty(searchId)) noteDetail.SearchId = searchId;
                             noteDetails.Add(noteDetail);
                         }
                     }
@@ -576,6 +777,7 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
         {
             // 顶层字段
             var id = item.TryGetProperty("id", out var idElement) ? idElement.GetString() : string.Empty;
+            var modelType = item.TryGetProperty("model_type", out var modelTypeEl) ? (modelTypeEl.GetString() ?? string.Empty) : string.Empty;
 
             // 大多数字段位于 note_card 下
             item.TryGetProperty("note_card", out var noteCard);
@@ -604,7 +806,8 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
                 Title = title ?? string.Empty,
                 ExtractedAt = DateTime.UtcNow,
                 Quality = DataQuality.Partial,
-                MissingFields = []
+                MissingFields = [],
+                ModelType = modelType
             };
 
             // 作者信息：note_card.user
@@ -626,15 +829,57 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
                     ? userIdElement.GetString() ?? string.Empty : string.Empty;
                 noteDetail.AuthorAvatar = userElement.TryGetProperty("avatar", out var avatarElement)
                     ? avatarElement.GetString() ?? string.Empty : string.Empty;
+
+                if (userElement.TryGetProperty("xsec_token", out var userTokenEl))
+                {
+                    noteDetail.AuthorXsecToken = userTokenEl.GetString();
+                }
+
+                // 可用信息填充UserInfo
+                noteDetail.UserInfo = new RecommendedUserInfo
+                {
+                    UserId = noteDetail.AuthorId,
+                    Nickname = noteDetail.Author,
+                    Avatar = noteDetail.AuthorAvatar,
+                    // IsVerified 暂无字段，保持默认false
+                    Description = string.Empty
+                };
             }
 
             // 封面图片：note_card.cover.url_default 优先
             if (noteCard.ValueKind != JsonValueKind.Undefined &&
                 noteCard.TryGetProperty("cover", out var coverElement))
             {
+                string? urlDefaultStr = null;
+                string? urlPreStr = null;
+                int width = 0, height = 0;
+                string fileId = string.Empty;
+
                 if (coverElement.TryGetProperty("url_default", out var urlDefault))
                 {
-                    noteDetail.CoverImage = urlDefault.GetString() ?? string.Empty;
+                    urlDefaultStr = urlDefault.GetString();
+                }
+                if (coverElement.TryGetProperty("url_pre", out var urlPre))
+                {
+                    urlPreStr = urlPre.GetString();
+                }
+                if (coverElement.TryGetProperty("width", out var wEl) && wEl.ValueKind == JsonValueKind.Number)
+                {
+                    width = wEl.GetInt32();
+                }
+                if (coverElement.TryGetProperty("height", out var hEl) && hEl.ValueKind == JsonValueKind.Number)
+                {
+                    height = hEl.GetInt32();
+                }
+                if (coverElement.TryGetProperty("file_id", out var fidEl))
+                {
+                    fileId = fidEl.GetString() ?? string.Empty;
+                }
+
+                // 选取封面图
+                if (!string.IsNullOrEmpty(urlDefaultStr))
+                {
+                    noteDetail.CoverImage = urlDefaultStr;
                 }
                 else if (coverElement.TryGetProperty("url", out var coverUrl))
                 {
@@ -644,10 +889,52 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
                 {
                     noteDetail.CoverImage = coverElement.GetString() ?? string.Empty;
                 }
+
+                // 解析场景列表
+                var scenes = new List<ImageSceneInfo>();
+                if (coverElement.TryGetProperty("info_list", out var infoListEl) && infoListEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var sc in infoListEl.EnumerateArray())
+                    {
+                        try
+                        {
+                            var sceneType = sc.TryGetProperty("image_scene", out var scType) ? (scType.GetString() ?? string.Empty) : string.Empty;
+                            var sceneUrl = sc.TryGetProperty("url", out var scUrl) ? (scUrl.GetString() ?? string.Empty) : string.Empty;
+                            if (!string.IsNullOrEmpty(sceneUrl))
+                            {
+                                scenes.Add(new ImageSceneInfo
+                                {
+                                    SceneType = sceneType,
+                                    Url = sceneUrl
+                                });
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                noteDetail.CoverInfo = new RecommendedCoverInfo
+                {
+                    DefaultUrl = urlDefaultStr ?? string.Empty,
+                    PreviewUrl = urlPreStr ?? string.Empty,
+                    Width = width,
+                    Height = height,
+                    FileId = fileId,
+                    Scenes = scenes
+                };
             }
 
-            // 笔记类型：存在 note_card.video 则判定为视频，并提取视频关键字段
-            if (noteCard.ValueKind != JsonValueKind.Undefined && noteCard.TryGetProperty("video", out var videoEl))
+            // 笔记类型：type=video 或存在 note_card.video 则判定为视频，并提取视频关键字段
+            if (noteCard.ValueKind != JsonValueKind.Undefined && noteCard.TryGetProperty("type", out var typeEl))
+            {
+                noteDetail.RawNoteType = typeEl.GetString();
+            }
+
+            if (string.Equals(noteDetail.RawNoteType, "video", StringComparison.OrdinalIgnoreCase))
+            {
+                noteDetail.Type = NoteType.Video;
+            }
+            else if (noteCard.ValueKind != JsonValueKind.Undefined && noteCard.TryGetProperty("video", out var videoEl))
             {
                 noteDetail.Type = NoteType.Video;
                 try
@@ -666,7 +953,7 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
                     /* 忽略视频字段解析异常 */
                 }
             }
-            else
+            else if (noteDetail.Type == NoteType.Unknown)
             {
                 noteDetail.Type = NoteType.Image;
             }
@@ -729,6 +1016,37 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
                 if (string.IsNullOrEmpty(noteDetail.Content))
                 {
                     noteDetail.Content = noteDetail.Description;
+                }
+            }
+
+            // 角标信息：用于提取发布时间（如 08-30、昨天、今天）
+            if (noteCard.ValueKind != JsonValueKind.Undefined && noteCard.TryGetProperty("corner_tag_info", out var cornerEl) && cornerEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var tag in cornerEl.EnumerateArray())
+                {
+                    try
+                    {
+                        var t = new CornerTag
+                        {
+                            Type = tag.TryGetProperty("type", out var tEl) ? (tEl.GetString() ?? string.Empty) : string.Empty,
+                            Text = tag.TryGetProperty("text", out var xEl) ? (xEl.GetString() ?? string.Empty) : string.Empty
+                        };
+                        if (!string.IsNullOrEmpty(t.Type) || !string.IsNullOrEmpty(t.Text))
+                        {
+                            noteDetail.CornerTags.Add(t);
+                        }
+                    }
+                    catch { }
+                }
+
+                // 解析发布时间（优先基于 publish_time 类型）
+                var publishTag = noteDetail.CornerTags.FirstOrDefault(ct => string.Equals(ct.Type, "publish_time", StringComparison.OrdinalIgnoreCase));
+                if (publishTag != null && string.IsNullOrEmpty(publishTag.Text) == false)
+                {
+                    if (TryParsePublishTime(publishTag.Text, out var pub))
+                    {
+                        noteDetail.PublishTime = pub;
+                    }
                 }
             }
 
@@ -797,6 +1115,37 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
             _logger.LogWarning(ex, "解析搜索笔记项异常");
             return null;
         }
+    }
+
+    /// <summary>
+    /// 解析 corner_tag 文本为发布时间
+    /// 支持：MM-dd、今天、昨天、前天
+    /// </summary>
+    private static bool TryParsePublishTime(string text, out DateTime publishTime)
+    {
+        publishTime = DateTime.MinValue;
+        if (string.IsNullOrWhiteSpace(text)) return false;
+
+        var now = DateTime.Now;
+        text = text.Trim();
+
+        // MM-dd 形式（无年份，默认当前年；若晚于今天则回退一年）
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, "^\\d{2}-\\d{2}$"))
+        {
+            if (DateTime.TryParse($"{now.Year}-{text}", out var dt))
+            {
+                if (dt > now) dt = dt.AddYears(-1);
+                publishTime = dt;
+                return true;
+            }
+        }
+
+        // 今天/昨天/前天
+        if (text is "今天") { publishTime = now.Date; return true; }
+        if (text is "昨天") { publishTime = now.Date.AddDays(-1); return true; }
+        if (text is "前天") { publishTime = now.Date.AddDays(-2); return true; }
+
+        return false;
     }
 
     private static int ParseCountElement(JsonElement el)
@@ -877,5 +1226,624 @@ public class SearchNotesResponseProcessor : IApiResponseProcessor
         };
 
         note.MissingFields = missingFields;
+    }
+}
+
+/// <summary>
+/// 评论API响应处理器（/api/sns/web/v2/comment/page）
+/// </summary>
+public class CommentsResponseProcessor : IApiResponseProcessor
+{
+    private readonly ILogger _logger;
+
+    public CommentsResponseProcessor(ILogger logger)
+    {
+        _logger = logger;
+    }
+
+    public async Task<MonitoredApiResponse?> ProcessResponseAsync(string requestUrl, string responseBody)
+    {
+        try
+        {
+            using var jsonDoc = JsonDocument.Parse(responseBody);
+            var root = jsonDoc.RootElement;
+
+            // 验证成功标志
+            if (!root.TryGetProperty("success", out var succ) || !succ.GetBoolean())
+            {
+                _logger.LogDebug("评论API响应success=false");
+                return null;
+            }
+
+            if (!root.TryGetProperty("data", out var dataEl))
+            {
+                _logger.LogDebug("评论API缺少data字段");
+                return null;
+            }
+
+            // 提取分页标记
+            string? cursor = dataEl.TryGetProperty("cursor", out var cEl) ? (cEl.GetString() ?? string.Empty) : string.Empty;
+            bool hasMore = dataEl.TryGetProperty("has_more", out var hmEl) && hmEl.ValueKind == JsonValueKind.True;
+
+            // 从URL中取note_id
+            var noteId = ExtractQueryParam(requestUrl, "note_id") ?? string.Empty;
+
+            var comments = new List<CommentInfo>();
+            if (dataEl.TryGetProperty("comments", out var commentsEl) && commentsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var ce in commentsEl.EnumerateArray())
+                {
+                    var ci = ParseComment(ce, noteId);
+                    if (ci != null) comments.Add(ci);
+                }
+            }
+
+            return new MonitoredApiResponse
+            {
+                ResponseTime = DateTime.UtcNow,
+                RequestUrl = requestUrl,
+                ResponseBody = responseBody,
+                ProcessedDataCount = comments.Count,
+                ProcessedData = new Dictionary<string, object>
+                {
+                    ["NoteId"] = noteId,
+                    ["Comments"] = comments,
+                    ["Cursor"] = cursor ?? string.Empty,
+                    ["HasMore"] = hasMore
+                },
+                EndpointType = ApiEndpointType.Comments
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "处理评论API响应失败");
+            return null;
+        }
+        finally
+        {
+            await Task.CompletedTask;
+        }
+    }
+
+    private static CommentInfo? ParseComment(JsonElement ce, string noteId)
+    {
+        try
+        {
+            var comment = new CommentInfo
+            {
+                Id = ce.TryGetProperty("id", out var idEl) ? (idEl.GetString() ?? string.Empty) : string.Empty,
+                Content = ce.TryGetProperty("content", out var cntEl) ? (cntEl.GetString() ?? string.Empty) : string.Empty,
+                IpLocation = ce.TryGetProperty("ip_location", out var ipEl) ? (ipEl.GetString() ?? string.Empty) : string.Empty,
+                Liked = ce.TryGetProperty("liked", out var likedEl) && likedEl.ValueKind == JsonValueKind.True,
+                NoteId = noteId
+            };
+
+            // 用户信息
+            if (ce.TryGetProperty("user_info", out var uEl) && uEl.ValueKind == JsonValueKind.Object)
+            {
+                comment.Author = uEl.TryGetProperty("nickname", out var nnEl) ? (nnEl.GetString() ?? string.Empty) : string.Empty;
+                comment.AuthorId = uEl.TryGetProperty("user_id", out var uidEl) ? (uidEl.GetString() ?? string.Empty) : string.Empty;
+                comment.AuthorAvatar = uEl.TryGetProperty("image", out var imgEl) ? (imgEl.GetString() ?? string.Empty) : string.Empty;
+                if (uEl.TryGetProperty("xsec_token", out var tkEl))
+                {
+                    comment.AuthorXsecToken = tkEl.GetString();
+                }
+            }
+
+            // 点赞数（字符串或数字）
+            if (ce.TryGetProperty("like_count", out var likeEl))
+            {
+                comment.LikeCount = ParseCountElement(likeEl);
+            }
+
+            // 时间（毫秒时间戳）
+            if (ce.TryGetProperty("create_time", out var tsEl) && tsEl.ValueKind == JsonValueKind.Number)
+            {
+                try
+                {
+                    var ts = tsEl.GetInt64();
+                    comment.PublishTime = DateTimeOffset.FromUnixTimeMilliseconds(ts).LocalDateTime;
+                }
+                catch { }
+            }
+
+            // 图片
+            if (ce.TryGetProperty("pictures", out var picsEl) && picsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var pe in picsEl.EnumerateArray())
+                {
+                    try
+                    {
+                        if (pe.TryGetProperty("info_list", out var infoEl) && infoEl.ValueKind == JsonValueKind.Array)
+                        {
+                            string? best = null;
+                            foreach (var sc in infoEl.EnumerateArray())
+                            {
+                                if (sc.TryGetProperty("image_scene", out var sEl) && sEl.GetString() == "WB_DFT" && sc.TryGetProperty("url", out var uUrl))
+                                {
+                                    best = uUrl.GetString();
+                                    break;
+                                }
+                            }
+                            if (best == null)
+                            {
+                                foreach (var sc in infoEl.EnumerateArray())
+                                {
+                                    if (sc.TryGetProperty("url", out var u2))
+                                    {
+                                        best = u2.GetString(); if (!string.IsNullOrEmpty(best)) break;
+                                    }
+                                }
+                            }
+                            if (!string.IsNullOrEmpty(best)) comment.PictureUrls.Add(best);
+                        }
+                        else if (pe.TryGetProperty("url_default", out var dEl))
+                        {
+                            var u = dEl.GetString(); if (!string.IsNullOrEmpty(u)) comment.PictureUrls.Add(u);
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            // 子评论
+            if (ce.TryGetProperty("sub_comments", out var subsEl) && subsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var se in subsEl.EnumerateArray())
+                {
+                    var sub = ParseComment(se, noteId);
+                    if (sub != null) comment.Replies.Add(sub);
+                }
+            }
+
+            // 标签
+            if (ce.TryGetProperty("show_tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var t in tagsEl.EnumerateArray())
+                {
+                    if (t.ValueKind == JsonValueKind.String)
+                    {
+                        var v = t.GetString(); if (!string.IsNullOrEmpty(v)) comment.ShowTags.Add(v);
+                    }
+                }
+            }
+
+            return comment;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static int ParseCountElement(JsonElement el)
+    {
+        try
+        {
+            return el.ValueKind switch
+            {
+                JsonValueKind.Number => (int)el.GetInt64(),
+                JsonValueKind.String => ParseChineseCount(el.GetString()),
+                _ => 0
+            };
+        }
+        catch { return 0; }
+    }
+
+    private static int ParseChineseCount(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return 0;
+        raw = raw.Trim();
+        try
+        {
+            if (raw.EndsWith("万", StringComparison.Ordinal))
+                return (int)Math.Round(double.Parse(raw[..^1]) * 10000);
+            if (raw.EndsWith("亿", StringComparison.Ordinal))
+                return (int)Math.Round(double.Parse(raw[..^1]) * 100000000);
+            return int.TryParse(raw, out var i) ? i : 0;
+        }
+        catch { return 0; }
+    }
+
+    private static string? ExtractQueryParam(string url, string name)
+    {
+        try
+        {
+            var qIdx = url.IndexOf('?');
+            if (qIdx < 0 || qIdx == url.Length - 1) return null;
+            var qs = url[(qIdx + 1)..];
+            foreach (var part in qs.Split('&'))
+            {
+                var kv = part.Split('=', 2);
+                if (kv.Length == 2 && string.Equals(kv[0], name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Uri.UnescapeDataString(kv[1]);
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+}
+
+/// <summary>
+/// 点赞响应处理器（/api/sns/web/v1/note/like）。
+/// 语义：当返回 { code:0, success:true } 且 data.new_like=true 时视为点赞成功。
+/// </summary>
+public sealed class LikeActionResponseProcessor : IApiResponseProcessor
+{
+    private readonly ILogger _logger;
+    public LikeActionResponseProcessor(ILogger logger) => _logger = logger;
+
+    public async Task<MonitoredApiResponse?> ProcessResponseAsync(string requestUrl, string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+            var ok = root.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.Number && c.GetInt32() == 0
+                     && root.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True;
+            if (!ok) return null;
+
+            bool newLike = false;
+            int? likeCount = null;
+            if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+            {
+                newLike = data.TryGetProperty("new_like", out var nl) && nl.ValueKind == JsonValueKind.True;
+                if (data.TryGetProperty("like_count", out var lc) && lc.ValueKind == JsonValueKind.Number)
+                {
+                    likeCount = (int)lc.GetInt64();
+                }
+            }
+
+            var noteId = ApiParserUtils.ExtractQueryParamSafe(requestUrl, "note_id") ?? string.Empty;
+            if (!string.IsNullOrEmpty(noteId))
+            {
+                try { InteractionStateCache.ApplyLikeResult(noteId, liked: true, likeCount); }
+                catch { }
+            }
+
+            return new MonitoredApiResponse
+            {
+                ResponseTime = DateTime.UtcNow,
+                RequestUrl = requestUrl,
+                ResponseBody = responseBody,
+                ProcessedDataCount = 1,
+                ProcessedData = new Dictionary<string, object>
+                {
+                    ["Action"] = "like",
+                    ["Success"] = true,
+                    ["NewLike"] = newLike,
+                    ["NoteId"] = noteId,
+                    ["LikeCount"] = likeCount ?? 0
+                },
+                EndpointType = ApiEndpointType.LikeNote
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "处理点赞响应失败");
+            return null;
+        }
+        finally { await Task.CompletedTask; }
+    }
+}
+
+/// <summary>
+/// 取消点赞响应处理器（/api/sns/web/v1/note/dislike）。
+/// 语义：当返回 { code:0, success:true } 即视为取消成功；可读取 data.like_count。
+/// </summary>
+public sealed class DislikeActionResponseProcessor : IApiResponseProcessor
+{
+    private readonly ILogger _logger;
+    public DislikeActionResponseProcessor(ILogger logger) => _logger = logger;
+
+    public async Task<MonitoredApiResponse?> ProcessResponseAsync(string requestUrl, string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+            var ok = root.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.Number && c.GetInt32() == 0
+                     && root.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True;
+            if (!ok) return null;
+
+            int? likeCount = null;
+            if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object &&
+                data.TryGetProperty("like_count", out var lc) && lc.ValueKind == JsonValueKind.Number)
+            {
+                likeCount = (int)lc.GetInt64();
+            }
+
+            var noteId = ApiParserUtils.ExtractQueryParamSafe(requestUrl, "note_id") ?? string.Empty;
+            if (!string.IsNullOrEmpty(noteId))
+            {
+                try { InteractionStateCache.ApplyLikeResult(noteId, liked: false, likeCount); }
+                catch { }
+            }
+
+            return new MonitoredApiResponse
+            {
+                ResponseTime = DateTime.UtcNow,
+                RequestUrl = requestUrl,
+                ResponseBody = responseBody,
+                ProcessedDataCount = 1,
+                ProcessedData = new Dictionary<string, object>
+                {
+                    ["Action"] = "dislike",
+                    ["Success"] = true,
+                    ["LikeCount"] = likeCount ?? 0,
+                    ["NoteId"] = noteId
+                },
+                EndpointType = ApiEndpointType.DislikeNote
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "处理取消点赞响应失败");
+            return null;
+        }
+        finally { await Task.CompletedTask; }
+    }
+}
+
+/// <summary>
+/// 收藏响应处理器（/api/sns/web/v1/note/collect）。
+/// </summary>
+public sealed class CollectActionResponseProcessor : IApiResponseProcessor
+{
+    private readonly ILogger _logger;
+    public CollectActionResponseProcessor(ILogger logger) => _logger = logger;
+
+    public async Task<MonitoredApiResponse?> ProcessResponseAsync(string requestUrl, string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+            var ok = root.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.Number && c.GetInt32() == 0
+                     && root.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True;
+            if (!ok) return null;
+
+            var noteId = ApiParserUtils.ExtractQueryParamSafe(requestUrl, "note_id") ?? string.Empty;
+            if (!string.IsNullOrEmpty(noteId))
+            {
+                try { InteractionStateCache.ApplyCollectResult(noteId, collected: true); } catch { }
+            }
+
+            return new MonitoredApiResponse
+            {
+                ResponseTime = DateTime.UtcNow,
+                RequestUrl = requestUrl,
+                ResponseBody = responseBody,
+                ProcessedDataCount = 1,
+                ProcessedData = new Dictionary<string, object>
+                {
+                    ["Action"] = "collect",
+                    ["Success"] = true,
+                    ["NoteId"] = noteId
+                },
+                EndpointType = ApiEndpointType.CollectNote
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "处理收藏响应失败");
+            return null;
+        }
+        finally { await Task.CompletedTask; }
+    }
+}
+
+/// <summary>
+/// 取消收藏响应处理器（/api/sns/web/v1/note/uncollect）。
+/// </summary>
+public sealed class UncollectActionResponseProcessor : IApiResponseProcessor
+{
+    private readonly ILogger _logger;
+    public UncollectActionResponseProcessor(ILogger logger) => _logger = logger;
+
+    public async Task<MonitoredApiResponse?> ProcessResponseAsync(string requestUrl, string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+            var ok = root.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.Number && c.GetInt32() == 0
+                     && root.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True;
+            if (!ok) return null;
+
+            var noteId = ApiParserUtils.ExtractQueryParamSafe(requestUrl, "note_id") ?? string.Empty;
+            if (!string.IsNullOrEmpty(noteId))
+            {
+                try { InteractionStateCache.ApplyCollectResult(noteId, collected: false); } catch { }
+            }
+
+            return new MonitoredApiResponse
+            {
+                ResponseTime = DateTime.UtcNow,
+                RequestUrl = requestUrl,
+                ResponseBody = responseBody,
+                ProcessedDataCount = 1,
+                ProcessedData = new Dictionary<string, object>
+                {
+                    ["Action"] = "uncollect",
+                    ["Success"] = true,
+                    ["NoteId"] = noteId
+                },
+                EndpointType = ApiEndpointType.UncollectNote
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "处理取消收藏响应失败");
+            return null;
+        }
+        finally { await Task.CompletedTask; }
+    }
+}
+
+/// <summary>
+/// 发表评论响应处理器（/api/sns/web/v1/comment/post）。
+/// </summary>
+public sealed class CommentPostResponseProcessor : IApiResponseProcessor
+{
+    private readonly ILogger _logger;
+    public CommentPostResponseProcessor(ILogger logger) => _logger = logger;
+
+    public async Task<MonitoredApiResponse?> ProcessResponseAsync(string requestUrl, string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+            var ok = root.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.Number && c.GetInt32() == 0
+                     && root.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True;
+            if (!ok) return null;
+
+            string commentId = string.Empty;
+            string noteId = string.Empty;
+            string content = string.Empty;
+
+            if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object
+                && data.TryGetProperty("comment", out var ce) && ce.ValueKind == JsonValueKind.Object)
+            {
+                commentId = ce.TryGetProperty("id", out var idEl) ? (idEl.GetString() ?? string.Empty) : string.Empty;
+                noteId = ce.TryGetProperty("note_id", out var nidEl) ? (nidEl.GetString() ?? string.Empty) : string.Empty;
+                content = ce.TryGetProperty("content", out var ctEl) ? (ctEl.GetString() ?? string.Empty) : string.Empty;
+            }
+
+            if (string.IsNullOrEmpty(noteId)) noteId = ApiParserUtils.ExtractQueryParamSafe(requestUrl, "note_id") ?? string.Empty;
+            if (!string.IsNullOrEmpty(noteId))
+            {
+                try { InteractionStateCache.ApplyCommentDelta(noteId, delta: +1); } catch { }
+            }
+
+            return new MonitoredApiResponse
+            {
+                ResponseTime = DateTime.UtcNow,
+                RequestUrl = requestUrl,
+                ResponseBody = responseBody,
+                ProcessedDataCount = 1,
+                ProcessedData = new Dictionary<string, object>
+                {
+                    ["Action"] = "comment_post",
+                    ["Success"] = true,
+                    ["CommentId"] = commentId,
+                    ["NoteId"] = noteId,
+                    ["Content"] = content
+                },
+                EndpointType = ApiEndpointType.CommentPost
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "处理发表评论响应失败");
+            return null;
+        }
+        finally { await Task.CompletedTask; }
+    }
+}
+
+/// <summary>
+/// 删除评论响应处理器（/api/sns/web/v1/comment/delete）。
+/// </summary>
+public sealed class CommentDeleteResponseProcessor : IApiResponseProcessor
+{
+    private readonly ILogger _logger;
+    public CommentDeleteResponseProcessor(ILogger logger) => _logger = logger;
+
+    public async Task<MonitoredApiResponse?> ProcessResponseAsync(string requestUrl, string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+            var ok = root.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.Number && c.GetInt32() == 0
+                     && root.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True;
+            if (!ok) return null;
+
+            var noteId = ApiParserUtils.ExtractQueryParamSafe(requestUrl, "note_id") ?? string.Empty;
+            if (!string.IsNullOrEmpty(noteId))
+            {
+                try { InteractionStateCache.ApplyCommentDelta(noteId, delta: -1); } catch { }
+            }
+
+            return new MonitoredApiResponse
+            {
+                ResponseTime = DateTime.UtcNow,
+                RequestUrl = requestUrl,
+                ResponseBody = responseBody,
+                ProcessedDataCount = 1,
+                ProcessedData = new Dictionary<string, object>
+                {
+                    ["Action"] = "comment_delete",
+                    ["Success"] = true,
+                    ["NoteId"] = noteId
+                },
+                EndpointType = ApiEndpointType.CommentDelete
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "处理删除评论响应失败");
+            return null;
+        }
+        finally { await Task.CompletedTask; }
+    }
+}
+
+// 轻量 URL 查询参数解析工具（处理 action 端点 note_id 提取）
+internal static class ApiParserUtils
+{
+    public static string? ExtractQueryParamSafe(string url, string name)
+    {
+        try
+        {
+            var qIdx = url.IndexOf('?');
+            if (qIdx < 0 || qIdx == url.Length - 1) return null;
+            var qs = url[(qIdx + 1)..];
+            foreach (var part in qs.Split('&'))
+            {
+                var kv = part.Split('=', 2);
+                if (kv.Length == 2 && string.Equals(kv[0], name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Uri.UnescapeDataString(kv[1]);
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+}
+
+/// <summary>
+/// 数据去重统计信息
+/// </summary>
+public class DeduplicationStats
+{
+    /// <summary>
+    /// 总处理的笔记数量
+    /// </summary>
+    public int TotalProcessed { get; set; }
+
+    /// <summary>
+    /// 发现的重复数量
+    /// </summary>
+    public int DuplicatesFound { get; set; }
+
+    /// <summary>
+    /// 当前唯一笔记数量
+    /// </summary>
+    public int UniqueNotesCount { get; set; }
+
+    /// <summary>
+    /// 去重率（重复数量/总处理数量）
+    /// </summary>
+    public double DeduplicationRate => TotalProcessed > 0 ? (double)DuplicatesFound / TotalProcessed : 0.0;
+
+    public override string ToString()
+    {
+        return $"总处理: {TotalProcessed}, 重复: {DuplicatesFound}, 唯一: {UniqueNotesCount}, 去重率: {DeduplicationRate:P2}";
     }
 }

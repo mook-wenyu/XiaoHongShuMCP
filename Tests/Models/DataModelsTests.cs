@@ -98,7 +98,7 @@ public class DataModelsTests
         var userInfo = new UserInfo
         {
             RedId = "27456090856",
-            Username = "testuser",
+            Nickname = "testuser",
             AvatarUrl = "https://avatar.example.com/test.jpg",
             FollowingCount = 100,
             FollowersCount = 1000,
@@ -119,7 +119,7 @@ public class DataModelsTests
         var userInfo = new UserInfo
         {
             RedId = "27456090856",
-            Username = "testuser"
+            Nickname = "testuser"
             // 缺少其他字段
         };
 
