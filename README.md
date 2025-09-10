@@ -16,9 +16,8 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 - **🤖 智能搜索** - 支持多维度筛选的增强搜索功能，自动统计分析
 - **📊 数据分析** - 自动生成 Excel 报告，包含数据质量和互动统计
 - **👤 拟人化交互** - 模拟真人操作模式，智能防检测机制
-- **🧪 完整测试** - 69+ 个测试用例，100% 通过率，保证代码质量
-- **🔧 模块化架构** - 全新的UniversalApiMonitor和重构的SmartCollectionController
-- **📡 多端点监听** - 支持推荐、笔记详情、搜索、评论等多个API端点监听
+- **🧪 完整测试** - 70+ 个测试用例，100% 通过率，保证代码质量
+- **🔧 智能监听** - 通用API监听器支持多端点实时数据获取
 - **⚡ 现代架构** - 基于稳定的 .NET 8.0，使用依赖注入和异步编程模式
  - **自动导航** - 连接浏览器成功后自动跳转到 `BaseUrl`（默认探索页），不中断主流程
 
@@ -259,137 +258,36 @@ powershell -ExecutionPolicy Bypass -File scripts/e2e_entry_match_demo.ps1 -Scena
 
 ## 📋 主要功能
 
-### 🚀 全新架构特性
-
-#### 通用API监听系统 (UniversalApiMonitor)
-
-全新设计的通用API监听器，支持多端点智能监听：
-
-- **多端点支持（版本无关）**:
-  - Homefeed (推荐) - `/api/sns/web/v{N}/homefeed`
-  - Feed (笔记详情) - `/api/sns/web/v{N}/feed`
-  - SearchNotes (搜索) - `/api/sns/web/v{N}/search/notes`
-  - Comments (评论列表) - `/api/sns/web/v{N}/comment/page`
-- **智能路由**: 根据API端点类型自动路由到对应的响应处理器
-- **响应处理器**: HomefeedResponseProcessor、FeedResponseProcessor、SearchNotesResponseProcessor、CommentsResponseProcessor
-- **数据转换**: 自动将API响应转换为统一的NoteDetail格式
-- **性能监控**: 内置性能监控和错误处理机制
-
-#### 入口页守护 (PageStateGuard)
-
-- 退出详情自愈：检测到详情页依次尝试关闭按钮→遮罩→ESC。
-- 入口就绪保障：不在发现/搜索入口时，点击侧栏“发现”；失败回退直达URL。
-- 统一接入：搜索/推荐/详情/批量流程操作前统一确保入口页就绪，减少 SPA 脏状态影响。
-
-#### 重构智能收集系统 (SmartCollectionController)
-
-集成通用API监听器的智能收集控制器：
-
-- **API集成**: 完全集成UniversalApiMonitor，删除了内嵌的简陋监听系统
-- **纯监听化**: 移除了滚动策略、性能监控器与数据合并等 DOM 相关遗留代码
-- **依赖注入**: 使用现代依赖注入模式，提高代码可测试性
-- **收集策略**: 支持快速、标准、谨慎三种收集策略
-- **实时监控**: 实时监控API响应和数据收集进度
-- **数据合并**: 智能合并API数据与页面数据，避免重复
+### 🔍 核心功能模块
 
 ### 🔍 智能搜索系统
 
-支持多维度筛选的增强搜索功能：
-
-- **排序方式**: 综合、最新、最多点赞、最多评论、最多收藏
-- **内容类型**: 不限、视频、图文  
-- **发布时间**: 不限、一天内、一周内、半年内
-- **搜索范围**: 不限、已看过、未看过、已关注
-- **位置距离**: 不限、同城、附近
-
-自动生成统计报告和 Excel 导出文件。
+支持多维度筛选的搜索功能，包括排序方式、内容类型、发布时间等筛选条件，自动生成统计报告和 Excel 导出文件。
 
 ### 👤 账号管理系统
 
-- 浏览器会话连接和验证
-- **Cookie 检测登录** - 基于 `web_session` cookie 的可靠登录状态检测
-- 用户信息自动提取
-- 支持个人页面完整数据获取
+基于 `web_session` cookie 的登录状态检测，支持浏览器会话连接验证和用户信息提取。
 
 ### 📝 内容管理系统
 
-- **仅草稿模式**: 所有内容操作仅保存为草稿
-- **笔记详情**: 获取完整笔记信息（图片、视频、评论）
-- **评论互动**: 支持发布评论功能
-- **智能识别**: 自动识别图文、视频、长文类型
+仅支持草稿模式的安全内容管理，支持获取笔记详情、发布评论和自动类型识别。
 
 ### 🤖 拟人化交互系统
 
-全新重构的拟人化交互系统，采用模块化设计：
-
-- **智能延时管理** - `DelayManager` 提供多种延时策略
-- **高级元素查找** - `ElementFinder` 支持多级容错选择器
-- **智能文本分割** - `SmartTextSplitter` 模拟真人输入模式
-- **多种输入策略** - `TextInputStrategies` 提供自然文本输入
-- **防检测机制** - 随机延时和行为模式，模拟真实用户操作
-
-### 📊 数据处理和转换系统
-
-#### Feed API数据转换器 (FeedApiConverter)
-
-专门处理Feed API响应数据的转换器：
-
-- **数据转换**: 将原始API数据转换为标准NoteDetail格式
-- **时间处理**: 自动处理Unix时间戳转换
-- **图片处理**: 提取和处理图片URL列表
-- **交互数据**: 处理点赞、评论、收藏等交互信息
-- **用户信息**: 处理作者信息和头像数据
-
-#### API数据模型 (FeedApiModels)
-
-完整的API响应数据模型定义：
-
-- **类型安全**: 强类型的API响应模型
-- **JSON映射**: 自动JSON序列化和反序列化
-- **数据验证**: 内置数据有效性验证
-- **扩展性**: 支持未来API结构变化
+模块化的拟人化交互系统，提供智能延时管理、元素查找、文本输入等防检测机制。
 
 ## 🏗️ 项目架构
 
-```
-XiaoHongShuMCP/
-├── XiaoHongShuMCP/           # 主项目
-│   ├── Services/             # 核心服务层
-│   │   ├── AccountManager.cs               # 账号管理
-│   │   ├── XiaoHongShuService.cs           # 小红书核心服务
-│   │   ├── PlaywrightBrowserManager.cs     # 浏览器管理
-│   │   ├── DomElementManager.cs            # DOM 元素与选择器管理
-│   │   ├── BrowserConnectionHostedService.cs # 后台连接服务
-│   │   ├── UniversalApiMonitor.cs          # 通用API监听器
-│   │   ├── SmartCollectionController.cs    # 智能收集控制器
-│   │   ├── FeedApiConverter.cs             # Feed API数据转换器
-│   │   ├── FeedApiModels.cs                # Feed API数据模型
-│   │   ├── SearchTimeoutsConfig.cs         # 搜索等待与收敛超时配置
-│   │   ├── HumanizedInteraction/           # 拟人化交互模块
-│   │   │   ├── HumanizedInteractionService.cs # 主交互服务
-│   │   │   ├── DelayManager.cs             # 智能延时管理
-│   │   │   ├── ElementFinder.cs            # 高级元素查找
-│   │   │   ├── SmartTextSplitter.cs        # 智能文本分割
-│   │   │   └── TextInputStrategies.cs      # 文本输入策略
-│   │   └── Interfaces.cs                   # 接口定义
-│   ├── Tools/               # MCP 工具集
-│   │   └── XiaoHongShuTools.cs            # MCP 工具定义
-│   └── Program.cs           # 程序入口（内置默认配置 + 覆盖机制）
-├── Tests/                   # 单元测试（约 51 个）
-│   ├── Services/           # 服务测试
-│   ├── Models/             # 模型测试  
-│   └── Tools/              # 工具测试
-└── README.md               # 项目文档
-```
+基于 .NET 8.0 的现代化 MCP 服务器架构，采用依赖注入和异步编程模式，提供稳定可靠的小红书自动化功能。
 
 ### 核心技术栈
 
-- **[.NET 8.0](https://dotnet.microsoft.com/)** - 现代 C# 开发框架
-- **[Model Context Protocol](https://modelcontextprotocol.io/)** - AI 助手工具协议
-- **[Microsoft Playwright](https://playwright.dev/dotnet/)** - 浏览器自动化
-- **[Serilog](https://serilog.net/)** - 结构化日志记录
-- **[NPOI](https://github.com/nissl-lab/npoi)** - Excel 文件操作
-- **[NUnit](https://nunit.org/)** - 单元测试框架
+- **.NET 8.0** - 现代 C# 开发框架
+- **Model Context Protocol** - AI 助手工具协议
+- **Microsoft Playwright** - 浏览器自动化
+- **Serilog** - 结构化日志记录
+- **NPOI** - Excel 文件操作
+- **NUnit** - 单元测试框架
 
 ## 🛠️ 开发指南
 
@@ -415,6 +313,7 @@ dotnet test Tests --collect:"XPlat Code Coverage"
     - `XHS__Serilog__MinimumLevel=Debug`
     - `XHS__BrowserSettings__Headless=true`
     - `XHS__PageLoadWaitConfig__NetworkIdleTimeout=300000`
+    - `XHS__InteractionCache__TtlMinutes=5`   # 临时交互缓存 TTL（分钟，默认 3）
   - 说明：`XHS__Section__Key` 对应配置键 `Section:Key`。
 
 - 命令行参数（覆盖优先级最高）
@@ -422,7 +321,7 @@ dotnet test Tests --collect:"XPlat Code Coverage"
     - `dotnet run --project XiaoHongShuMCP -- Serilog:MinimumLevel=Debug BrowserSettings:Headless=true`
     - `XiaoHongShuMCP.exe Serilog:MinimumLevel=Debug PageLoadWaitConfig:MaxRetries=5`
 
-常用键位于以下节：`Serilog`, `UniversalApiMonitor`, `BrowserSettings`, `McpSettings`, `PageLoadWaitConfig`, `SearchTimeoutsConfig`。
+常用键位于以下节：`Serilog`, `UniversalApiMonitor`, `BrowserSettings`, `McpSettings`, `PageLoadWaitConfig`, `SearchTimeoutsConfig`, `InteractionCache`。
 
 #### 按命名空间覆盖日志等级
 - 任意命名空间/类名可单独调级：`Logging:Overrides:<Namespace>=<Level>`
@@ -647,7 +546,7 @@ dotnet test Tests --logger trx --results-directory TestResults
 
 ### 测试覆盖
 
-- **总测试数**: 51 个测试用例
+- **总测试数**: 70+ 个测试用例
 - **通过率**: 100%
 - **测试覆盖**: 服务层、数据模型、MCP 工具集
 - **测试框架**: NUnit + Moq + Playwright
@@ -820,7 +719,6 @@ await callTool("PostComment", {
 ```typescript
 await callTool("LikeNote", {
   keyword: "健身餐",
-  forceAction: false // 如已点赞则跳过；设为 true 将强制尝试
 });
 ```
 
@@ -828,7 +726,6 @@ await callTool("LikeNote", {
 ```typescript
 await callTool("FavoriteNote", {
   keyword: "健身餐",
-  forceAction: false // 如已收藏则跳过；设为 true 将强制尝试
 });
 ```
 
@@ -933,155 +830,22 @@ if (result.Success) {
 - 提交信息使用英文，格式清晰
 - 代码必须通过所有现有测试
 
-## 🐛 故障排除
+## 🐛 常见问题
 
-### 常见问题及解决方案
+### 浏览器连接
+- 确保浏览器启动参数包含 `--remote-debugging-port=9222`
+- 检查端口9222未被占用
+- 在浏览器中完成小红书登录
 
-#### 浏览器连接问题
+### MCP 配置
+- 验证 .NET 8.0 SDK 安装：`dotnet --version`
+- 检查 `claude_desktop_config.json` 配置正确
+- 重启 Claude Desktop 应用
 
-**Q1: 无法连接到浏览器 (端口 9222)**
-```
-A: 解决步骤：
-1. 确认浏览器启动参数正确：--remote-debugging-port=9222
-2. 检查端口是否被占用：netstat -an | findstr 9222
-3. 确保防火墙允许端口 9222
-4. 尝试重新启动浏览器
-5. Windows 用户检查快捷方式目标路径是否正确
-```
-
-**Q2: 连接成功但登录检测失败**
-```
-A: 解决步骤：
-1. 手动在浏览器中访问 https://www.xiaohongshu.com
-2. 完成登录流程（包括手机验证码等）
-3. 确认能正常浏览小红书内容
-4. 在 Claude 中重新调用 ConnectToBrowser 工具
-5. 如仍失败，清除浏览器 Cookie 后重新登录
-```
-
-#### MCP 配置问题
-
-**Q3: MCP 服务器无法启动**
-```
-A: 诊断步骤：
-1. 检查 .NET 8.0 SDK 是否正确安装：dotnet --version
-2. 验证项目路径是否正确
-3. 运行 dotnet restore 恢复依赖
-4. 检查 claude_desktop_config.json 语法是否正确
-5. 查看 Claude Desktop 错误日志
-```
-
-**Q4: MCP 工具调用失败**
-```
-A: 解决方案：
-1. 重启 Claude Desktop 应用
-2. 检查配置文件中的路径分隔符（Windows 使用 \\\\）
-3. 确认环境变量配置正确
-4. 手动测试命令：dotnet run --project <项目路径>
-5. 查看服务器启动日志确认无错误
-```
-
-#### 功能使用问题
-
-**Q5: 搜索结果为空**
-```
-A: 可能原因：
-1. 关键词可能被限制或敏感
-2. 网络连接不稳定
-3. 小红书接口响应超时
-4. 登录状态已过期，需重新登录
-```
-
-**Q6: 笔记详情获取失败**
-```
-A: 检查要点：
-1. 笔记 ID 是否正确
-2. 笔记是否已被删除或设为私密
-3. 是否存在地区访问限制
-4. 浏览器是否被检测到异常操作
-```
-
-### 高级故障排除
-
-#### 开发环境调试
-
-1. **启用详细日志**：
-```json
-{
-  "Logging": {
-    "LogLevel": {
-      "Default": "Debug",
-      "XiaoHongShuMCP": "Trace"
-    }
-  }
-}
-```
-
-2. **使用开发模式运行**：
-```bash
-dotnet run --project XiaoHongShuMCP --environment Development
-```
-
-3. **查看实时日志**：
-```bash
-# Windows PowerShell
-Get-Content -Path "logs\xiaohongshu-mcp-*.txt" -Wait -Tail 10
-
-# Git Bash / WSL
-tail -f logs/xiaohongshu-mcp-*.txt
-```
-
-#### 性能优化建议
-
-1. **浏览器优化**：
-   - 关闭不必要的扩展程序
-   - 清理浏览器缓存和 Cookie
-   - 使用隐私模式避免干扰
-
-2. **系统优化**：
-   - 确保有足够内存（建议 4GB+）
-   - 关闭杀毒软件实时保护（临时）
-   - 使用有线网络连接提高稳定性
-
-#### 错误代码对照表
-
-| 错误代码 | 说明 | 解决方法 |
-|---------|------|---------|
-| `CONNECTION_TIMEOUT` | 连接超时 | 检查网络连接，增加超时时间 |
-| `LOGIN_REQUIRED` | 需要登录 | 在浏览器中完成登录 |
-| `RATE_LIMIT_EXCEEDED` | 请求频率过高 | 减少请求频率，等待后重试 |
-| `INVALID_SELECTOR` | 选择器失效 | 可能页面结构变化，需更新选择器 |
-| `ELEMENT_NOT_FOUND` | 元素未找到 | 页面加载未完成或结构变化 |
-
-### 日志分析
-
-#### 日志文件位置
-- **开发环境**: `logs/xiaohongshu-mcp-{date}.txt`
-- **生产环境**: 根据部署配置确定
-
-#### 常用日志分析命令
-
-```bash
-# 查看最新日志
-tail -n 50 logs/xiaohongshu-mcp-*.txt
-
-# 搜索错误信息
-grep -i "error\|exception" logs/xiaohongshu-mcp-*.txt
-
-# 搜索特定功能日志
-grep -i "search\|connect" logs/xiaohongshu-mcp-*.txt
-
-# 按时间范围查看日志
-grep "2025-09-06" logs/xiaohongshu-mcp-*.txt
-```
-
-#### 日志级别说明
-- **Trace**: 最详细的调试信息
-- **Debug**: 调试信息
-- **Information**: 一般信息
-- **Warning**: 警告信息
-- **Error**: 错误信息
-- **Critical**: 严重错误
+### 使用问题
+- 搜索结果为空：检查关键词或网络连接
+- 详情获取失败：确认笔记存在且可访问
+- 查看日志文件：`logs/xiaohongshu-mcp-*.txt`
 
 ## 📄 许可证
 
