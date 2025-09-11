@@ -11,7 +11,7 @@
   - `XhsSettings.cs`: 单一配置聚合类（仅注册这一项）
   - Browser, selectors, search, humanized interaction services
 - `XiaoHongShuMCP/Tools/`: MCP tool definitions (`XiaoHongShuTools.cs`).
-- `Tests/`: NUnit tests (~70+ tests) covering `Services/`, `Models/`, `Tools/`.
+- `Tests/`: NUnit tests (~67+ tests) covering `Services/`, `Models/`, `Tools/`.
 - 配置：采用代码内默认配置（根节 `XHS`）；仅注册一个配置类 `XhsSettings`；使用环境变量（双下划线映射冒号）或命令行参数覆盖。日志输出到 `XiaoHongShuMCP/logs/`（Serilog）。
   - 支持“命名空间级覆盖”：`XHS:Logging:Overrides:<Namespace>=<Level>`；示例 env `XHS__Logging__Overrides__XiaoHongShuMCP.Services.UniversalApiMonitor=Debug`。
 

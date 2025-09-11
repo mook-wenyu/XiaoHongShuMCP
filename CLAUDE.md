@@ -325,7 +325,7 @@ DI 绑定：`services.Configure<XhsSettings>(configuration.GetSection("XHS"))`�
 ## 🧪 测试体系
 
 ### 测试覆盖
-- **总测试数**: 70+ 个测试用例
+- **总测试数**: 67+ 个测试用例
 - **通过率**: 100%
 - **覆盖模块**: 服务层、数据模型、MCP 工具
 
