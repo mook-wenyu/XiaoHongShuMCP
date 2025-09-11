@@ -31,9 +31,8 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 XiaoHongShuMCP/
 ├── XiaoHongShuMCP.sln              # Visual Studio 解决方案
 ├── XiaoHongShuMCP/                 # 主项目
-│   ├── Program.cs                  # 程序入口，MCP 服务器配置
+│   ├── Program.cs                  # 程序入口（内置默认配置 + 覆盖机制）
 │   ├── XiaoHongShuMCP.csproj      # 项目文件和依赖管理
-│   ├── Program.cs                 # 程序入口（内置默认配置 + 覆盖机制）
 │   ├── Services/                   # 服务层实现
 │   │   ├── Interfaces.cs           # 接口定义和数据模型
 │   │   ├── AccountManager.cs       # 账号管理服务
@@ -154,9 +153,9 @@ XiaoHongShuMCP/
 - 在“最后一次重试”之前，服务会先强制跳转到主页（发现页），再执行对应操作或直接等待端点命中，以刷新 SPA 上下文并减少脏状态影响。
 - 搜索/批量在最后一轮会跳过二次导航（避免重复），直接在主页执行输入与提交；推荐在最后一轮直接等待 Homefeed 命中。
 
-覆盖方式：
+覆盖方式（根节 XHS）：
 - 环境变量：`XHS__EndpointRetry__AttemptTimeoutMs`、`XHS__EndpointRetry__MaxRetries`
-- 命令行：`--EndpointRetry:AttemptTimeoutMs=... --EndpointRetry:MaxRetries=...`
+- 命令行：`XHS:EndpointRetry:AttemptTimeoutMs=... XHS:EndpointRetry:MaxRetries=...`
 
 与 `McpSettings:WaitTimeoutMs` 的关系：
 - `McpSettings:WaitTimeoutMs` 是整体兜底等待；`EndpointRetry` 控制每轮端点等待与重试次数，两者互补。
@@ -251,21 +250,23 @@ dotnet publish -c Release -r osx-x64 --self-contained
 
 ## ⚙️ 配置管理
 
-项目使用“代码内默认 + 外部覆盖”的方式，不再读取 `appsettings.json`。
+项目使用“代码内默认 + 外部覆盖”的方式，不再读取 `appsettings.json`；
+并且仅注册一个配置类：`XhsSettings`（根节 `XHS`）。已移除 `AddEnvironmentVariables("XHS__")` 的前缀过滤，统一在根节 `XHS` 下读取与覆盖。
 
 覆盖方式（优先级：命令行 > 环境变量 > 代码默认）：
-- 环境变量：使用前缀 `XHS__`，双下划线 `__` 映射为冒号 `:`。
+- 环境变量：根节 `XHS`（双下划线 `__` 映射为冒号 `:`）。
   - 示例：`XHS__Serilog__MinimumLevel=Debug`、`XHS__BrowserSettings__Headless=true`
-- 命令行参数：`Section:Key=Value`
-  - 示例：`Serilog:MinimumLevel=Debug PageLoadWaitConfig:MaxRetries=5`
+- 命令行参数：`XHS:Section:Key=Value`
+  - 示例：`XHS:Serilog:MinimumLevel=Debug XHS:PageLoadWaitConfig:MaxRetries=5`
 
-默认键见 `Program.cs` 的 `CreateDefaultSettings()`：`Serilog`, `UniversalApiMonitor`, `BrowserSettings`, `McpSettings`, `PageLoadWaitConfig`, `SearchTimeoutsConfig`。
+默认键见 `Program.cs` 的 `CreateDefaultSettings()`：`XHS:Serilog`, `XHS:UniversalApiMonitor`, `XHS:BrowserSettings`, `XHS:McpSettings`, `XHS:PageLoadWaitConfig`, `XHS:SearchTimeoutsConfig`, `XHS:EndpointRetry`, `XHS:DetailMatchConfig`, `XHS:InteractionCache`。
+DI 绑定：`services.Configure<XhsSettings>(configuration.GetSection("XHS"))`。
 
 ### 统一等待超时配置（MCP）
 
-- 键名：`McpSettings:WaitTimeoutMs`
+- 键名：`XHS:McpSettings:WaitTimeoutMs`
 - 默认：`600000`（10 分钟）
-- 覆盖：环境变量 `XHS__McpSettings__WaitTimeoutMs` 或命令行 `McpSettings:WaitTimeoutMs`
+- 覆盖：环境变量 `XHS__McpSettings__WaitTimeoutMs` 或命令行 `XHS:McpSettings:WaitTimeoutMs`
 - 说明：作为所有长耗时操作的统一等待时长，不限制上限。
 
 ### 详情页匹配参数（权重/模糊/拼音）
@@ -277,9 +278,9 @@ dotnet publish -c Release -r osx-x64 --self-contained
 
 
 ### 按命名空间覆盖日志等级
-- 键格式：`Logging:Overrides:<Namespace>=<Level>`（如 `Debug`/`Information`/`Warning`/`Error`）
+- 键格式：`XHS:Logging:Overrides:<Namespace>=<Level>`（如 `Debug`/`Information`/`Warning`/`Error`）
 - 环境变量：`XHS__Logging__Overrides__XiaoHongShuMCP.Services.UniversalApiMonitor=Debug`
-- 命令行：`Logging:Overrides:XiaoHongShuMCP.Services.PlaywrightBrowserManager=Information`
+- 命令行：`XHS:Logging:Overrides:XiaoHongShuMCP.Services.PlaywrightBrowserManager=Information`
 
 ### MCP 客户端配置 (Claude Desktop)
 
@@ -324,7 +325,7 @@ dotnet publish -c Release -r osx-x64 --self-contained
 ## 🧪 测试体系
 
 ### 测试覆盖
-- **总测试数**: 69+ 个测试用例
+- **总测试数**: 70+ 个测试用例
 - **通过率**: 100%
 - **覆盖模块**: 服务层、数据模型、MCP 工具
 
@@ -432,6 +433,6 @@ await callTool("GetNoteDetail", {
 ---
 
 **项目状态**: ✅ 生产就绪  
-**最后更新**: 2025年9月8日  
+**最后更新**: 2025年9月11日  
 **版本**: 1.0.0  
 **维护者**: XiaoHongShuMCP Team

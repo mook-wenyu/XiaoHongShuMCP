@@ -4,7 +4,7 @@
 
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![MCP](https://img.shields.io/badge/MCP-0.3.0--preview.4-FF6B6B)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/Tests-69%2B%20✅-4CAF50)](./Tests/)
+[![Tests](https://img.shields.io/badge/Tests-70%2B%20✅-4CAF50)](./Tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务器，通过智能自动化技术为用户提供安全、高效的小红书运营工具。
@@ -155,26 +155,26 @@ dotnet test Tests
 
 #### 统一等待超时配置（MCP）
 
-项目将所有长耗时等待统一为单一配置键：
+项目将所有长耗时等待统一为单一配置键（根节 `XHS`；仅注册一个配置类 `XhsSettings`）：
 
-- 键名：`McpSettings:WaitTimeoutMs`
+- 键名：`XHS:McpSettings:WaitTimeoutMs`
 - 默认：`600000`（10 分钟）
 - 覆盖方式：
   - 环境变量：`XHS__McpSettings__WaitTimeoutMs=600000`
-  - 命令行：`McpSettings:WaitTimeoutMs=600000`
+  - 命令行：`XHS:McpSettings:WaitTimeoutMs=600000`
 
-说明：默认值为 10 分钟；如需更长/更短，请直接设置毫秒值；不再限制上限。
+说明：默认值为 10 分钟；如需更长/更短，请直接设置毫秒值；不再限制上限。仅注册一个配置类 `XhsSettings`，所有键都在根节 `XHS` 下。
 
 #### 端点监听与重试策略（重要）
 
 对需要“监听 API 端点”的操作，已引入统一的“单次等待 + 最大重试”机制，并在最后一次重试前强制回到主页以刷新上下文。
 
-- 配置键：
-  - `EndpointRetry:AttemptTimeoutMs`（默认 `120000` 毫秒）
-  - `EndpointRetry:MaxRetries`（默认 `3` 次；不含首次尝试）
+- 配置键（根节 `XHS`）：
+  - `XHS:EndpointRetry:AttemptTimeoutMs`（默认 `120000` 毫秒）
+  - `XHS:EndpointRetry:MaxRetries`（默认 `3` 次；不含首次尝试）
 - 覆盖方式：
   - 环境变量：`XHS__EndpointRetry__AttemptTimeoutMs=90000`、`XHS__EndpointRetry__MaxRetries=2`
-  - 命令行：`--EndpointRetry:AttemptTimeoutMs=90000 --EndpointRetry:MaxRetries=2`
+  - 命令行：`XHS:EndpointRetry:AttemptTimeoutMs=90000 XHS:EndpointRetry:MaxRetries=2`
 - 适用范围：
   - 搜索：`GetSearchNotes`（最后一轮先跳主页→直接搜索，避免重复导航）
   - 推荐：`GetRecommendedNotes`（最后一轮强制回主页后直接等待 Homefeed 命中）
@@ -186,7 +186,7 @@ dotnet test Tests
 
 #### 验证配置
 
-配置完成后，重启 Claude Desktop 并检查：
+配置完成后（Program.cs 仅注册一个配置类：`services.Configure<XhsSettings>("XHS")`），重启 Claude Desktop 并检查：
 1. 打开 Claude Desktop
 2. 查看是否显示 MCP 服务器连接状态
 3. 如有问题，查看 Claude Desktop 的错误日志
@@ -305,9 +305,9 @@ dotnet test Tests --collect:"XPlat Code Coverage"
 
 ### 配置与覆盖
 
-项目不再使用 `appsettings.json`。默认配置在 `Program.cs` 内部定义（`CreateDefaultSettings()`）。如需调整，推荐通过以下两种方式覆盖：
+项目不再使用 `appsettings.json`。默认配置在 `Program.cs` 内部定义（`CreateDefaultSettings()`）。如需调整，推荐通过以下两种方式覆盖（已移除 `AddEnvironmentVariables("XHS__")` 前缀过滤，统一在根节 `XHS` 下读取）：
 
-- 环境变量（推荐，前缀 `XHS__`，双下划线映射冒号）
+- 环境变量（推荐，根节 `XHS`；双下划线映射冒号）
   - Windows/跨平台示例：
     - `XHS__Serilog__MinimumLevel=Debug`
     - `XHS__BrowserSettings__Headless=true`
@@ -320,7 +320,7 @@ dotnet test Tests --collect:"XPlat Code Coverage"
     - `dotnet run --project XiaoHongShuMCP -- Serilog:MinimumLevel=Debug BrowserSettings:Headless=true`
     - `XiaoHongShuMCP.exe Serilog:MinimumLevel=Debug PageLoadWaitConfig:MaxRetries=5`
 
-常用键位于以下节：`Serilog`, `UniversalApiMonitor`, `BrowserSettings`, `McpSettings`, `PageLoadWaitConfig`, `SearchTimeoutsConfig`, `InteractionCache`。
+常用键位于以下节：`Serilog`, `UniversalApiMonitor`, `BrowserSettings`, `McpSettings`, `PageLoadWaitConfig`, `SearchTimeoutsConfig`, `InteractionCache`, `EndpointRetry`, `DetailMatchConfig`。
 
 #### 按命名空间覆盖日志等级
 - 任意命名空间/类名可单独调级：`Logging:Overrides:<Namespace>=<Level>`
