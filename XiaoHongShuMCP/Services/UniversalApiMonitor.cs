@@ -12,7 +12,7 @@ namespace XiaoHongShuMCP.Services;
 ///         同时保留“原始响应”和“结构化处理结果”，供上层统一的数据通道使用。
 /// - 端点：支持推荐（Homefeed）、详情（Feed）、搜索（SearchNotes）等核心 API；可按需扩展处理器。
 /// - 线程安全：内部通过 <see cref="_lock"/> 保护响应容器，事件回调与查询操作可并发；
-///             等待方法按 MCP 统一超时（<see cref="McpSettings.WaitTimeoutMs"/>）。
+///             等待方法按 MCP 统一超时（<see cref="XhsSettings.McpSettingsSection.WaitTimeoutMs"/>）。
 /// - 生命周期：调用 <see cref="SetupMonitor"/> 绑定 <see cref="IBrowserContext.Response"/> 事件，
 ///             <see cref="StopMonitoringAsync"/> 负责解绑；<see cref="Dispose"/> 中做兜底清理。
 /// - 日志：对敏感字段（如 xsec_token）进行日志脱敏（仅日志，不影响内存中数据）。
@@ -25,7 +25,7 @@ namespace XiaoHongShuMCP.Services;
 public class UniversalApiMonitor : IUniversalApiMonitor
 {
     private readonly ILogger<UniversalApiMonitor> _logger;
-    private readonly McpSettings _mcpSettings;
+    private readonly XhsSettings.McpSettingsSection _mcpSettings;
     private readonly Dictionary<ApiEndpointType, List<MonitoredApiResponse>> _monitoredResponses;
     private readonly Dictionary<ApiEndpointType, IApiResponseProcessor> _processors;
     private readonly object _lock = new();
@@ -39,10 +39,11 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     private readonly Dictionary<string, NoteDetail> _uniqueNoteDetails;
     private DeduplicationStats _deduplicationStats;
 
-    public UniversalApiMonitor(ILogger<UniversalApiMonitor> logger, Microsoft.Extensions.Options.IOptions<McpSettings> mcp)
+    public UniversalApiMonitor(ILogger<UniversalApiMonitor> logger, Microsoft.Extensions.Options.IOptions<XhsSettings> xhsOptions)
     {
         _logger = logger;
-        _mcpSettings = mcp.Value ?? new McpSettings();
+        var xhs = xhsOptions.Value ?? new XhsSettings();
+        _mcpSettings = xhs.McpSettings ?? new XhsSettings.McpSettingsSection();
         _monitoredResponses = new Dictionary<ApiEndpointType, List<MonitoredApiResponse>>();
         _processors = new Dictionary<ApiEndpointType, IApiResponseProcessor>();
         _activeEndpoints = [];
@@ -248,7 +249,7 @@ public class UniversalApiMonitor : IUniversalApiMonitor
 
     /// <summary>
     /// 等待指定端点的 API 响应。
-    /// - 统一等待时长：使用 <see cref="McpSettings.WaitTimeoutMs"/>（默认 10 分钟），不做上限封顶；
+    /// - 统一等待时长：使用 <see cref="XhsSettings.McpSettingsSection.WaitTimeoutMs"/>（默认 10 分钟），不做上限封顶；
     /// - 判定条件：监听容器中累计响应条数达到 <paramref name="expectedCount"/> 即返回 true；
     /// - 轮询间隔：100ms，兼顾实时性与开销；
     /// - 超时：返回 false，并记录当前已捕获数量。

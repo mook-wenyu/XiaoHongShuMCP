@@ -35,7 +35,7 @@ public class HumanizedInteractionService : IHumanizedInteractionService
         IElementFinder elementFinder,
         IEnumerable<ITextInputStrategy> inputStrategies,
         IDomElementManager domElementManager,
-        Microsoft.Extensions.Options.IOptions<InteractionCacheConfig>? cacheOptions = null,
+        Microsoft.Extensions.Options.IOptions<XhsSettings> xhsOptions,
         ILogger<HumanizedInteractionService>? logger = null)
     {
         _browserManager = browserManager;
@@ -44,14 +44,14 @@ public class HumanizedInteractionService : IHumanizedInteractionService
         _inputStrategies = inputStrategies.ToList();
         _domElementManager = domElementManager;
         _logger = logger;
-        var ttlMin = cacheOptions?.Value?.TtlMinutes;
+        var ttlMin = xhsOptions?.Value?.InteractionCache?.TtlMinutes;
         if (ttlMin is null or <= 0) ttlMin = 3;
         // 上限做个保守限制，避免误配置：最大 1 天
         if (ttlMin > 1440) ttlMin = 1440;
         _cacheTtl = TimeSpan.FromMinutes(ttlMin.Value);
     }
 
-    // 兼容构造已移除：请注入 IOptions<InteractionCacheConfig>（可使用默认配置）
+    // 兼容构造已移除：请注入 IOptions<XhsSettings>（统一读取 InteractionCache 配置）
 
     /// <summary>
     /// 人性化点击（通过选择器别名）。

@@ -9,7 +9,7 @@ namespace XiaoHongShuMCP.Services;
 /// - 目标：在不同页面与网络条件下，可靠地判定“页面可用”，避免对 <see cref="IPage.WaitForLoadStateAsync"/> 的固定超时硬编码。
 /// - 核心能力：多级等待（DOMContentLoaded → Load → NetworkIdle）、线性重试退避、可选降级与详尽日志。
 /// - 适用场景：页面导航后需要等待合适的就绪点；触发 API 后希望等到更稳定的网络空闲；对“只需可交互”有更快诉求时使用快速模式。
-/// 配置项（配置键均位于节 PageLoadWaitConfig）：
+/// 配置项（配置键均位于节 XHS:PageLoadWaitConfig）：
 /// - DOMContentLoadedTimeout：DOMContentLoaded 阶段超时（毫秒）
 /// - LoadTimeout：Load 阶段超时（毫秒）
 /// - NetworkIdleTimeout：NetworkIdle 阶段超时（毫秒）
@@ -22,7 +22,7 @@ namespace XiaoHongShuMCP.Services;
 /// </summary>
 public class PageLoadWaitService : IPageLoadWaitService
 {
-    private readonly PageLoadWaitConfig _config;
+    private readonly XhsSettings.PageLoadWaitSection _config;
     private readonly ILogger<PageLoadWaitService> _logger;
 
     /// <summary>
@@ -30,9 +30,9 @@ public class PageLoadWaitService : IPageLoadWaitService
     /// </summary>
     /// <param name="config">页面加载等待配置</param>
     /// <param name="logger">日志记录器</param>
-    public PageLoadWaitService(IOptions<PageLoadWaitConfig> config, ILogger<PageLoadWaitService> logger)
+    public PageLoadWaitService(IOptions<XhsSettings> config, ILogger<PageLoadWaitService> logger)
     {
-        _config = config.Value;
+        _config = config.Value.PageLoadWaitConfig ?? new XhsSettings.PageLoadWaitSection();
         _logger = logger;
     }
 

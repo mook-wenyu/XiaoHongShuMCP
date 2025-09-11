@@ -544,29 +544,7 @@ public enum HumanWaitType
     /// <summary>虚拟列表更新：等待虚拟列表 DOM 更新</summary>
     VirtualListUpdate
 }
-/// <summary>
-/// 详情页关键词匹配配置（权重/阈值/拼音）。
-/// 可通过配置节 DetailMatchConfig 或环境变量 XHS__DetailMatchConfig__* 覆盖。
-/// </summary>
-public class DetailMatchConfig
-{
-    public double WeightedThreshold { get; set; } = 0.5; // 命中阈值（加权分/总权重）
-    public int TitleWeight { get; set; } = 4;
-    public int AuthorWeight { get; set; } = 3;
-    public int ContentWeight { get; set; } = 2;
-    public int HashtagWeight { get; set; } = 2;
-    public int ImageAltWeight { get; set; } = 1;
-
-    // 近似匹配相关（透传到 KeywordMatcher）
-    public bool UseFuzzy { get; set; } = true;
-    public int MaxDistanceCap { get; set; } = 3;
-    public double TokenCoverageThreshold { get; set; } = 0.7;
-    public bool IgnoreSpaces { get; set; } = true;
-
-    // 拼音匹配（无外部依赖，使用 GB2312 首字母启发式）
-    public bool UsePinyin { get; set; } = true;
-    public bool PinyinInitialsOnly { get; set; } = true; // 仅首字母匹配
-}
+// 配置类迁移说明：DetailMatchConfig 已并入统一配置 XhsSettings.DetailMatchConfig（破坏性变更）。
 /// <summary>
 /// 笔记类型枚举
 /// 用于数据识别和处理，支持平台的主要内容类型
@@ -2887,51 +2865,7 @@ public enum PageLoadStrategy
 /// 页面加载等待配置类
 /// 提供所有等待策略的超时时间和重试配置
 /// </summary>
-public class PageLoadWaitConfig
-{
-    /// <summary>
-    /// DOMContentLoaded 超时时间（毫秒）
-    /// </summary>
-    public int DOMContentLoadedTimeout { get; set; } = 15000;
-
-    /// <summary>
-    /// Load 超时时间（毫秒）
-    /// </summary>
-    public int LoadTimeout { get; set; } = 30000;
-
-    /// <summary>
-    /// NetworkIdle 超时时间（毫秒）
-    /// </summary>
-    public int NetworkIdleTimeout { get; set; } = 60000;
-
-    /// <summary>
-    /// 最大重试次数
-    /// </summary>
-    public int MaxRetries { get; set; } = 3;
-
-    /// <summary>
-    /// 重试间隔时间（毫秒）
-    /// </summary>
-    public int RetryDelayMs { get; set; } = 2000;
-
-    /// <summary>
-    /// 是否启用智能降级机制
-    /// 当高级策略失败时，自动降级到较低级别的策略
-    /// </summary>
-    public bool EnableDegradation { get; set; } = true;
-
-    /// <summary>
-    /// 快速模式超时时间（毫秒）
-    /// 用于WaitForPageLoadFastAsync方法
-    /// </summary>
-    public int FastModeTimeout { get; set; } = 10000;
-
-    /// <summary>
-    /// 自定义验证超时时间（毫秒）
-    /// 用于WaitForPageLoadWithValidationAsync方法
-    /// </summary>
-    public int CustomValidationTimeout { get; set; } = 5000;
-}
+// 配置类迁移说明：PageLoadWaitConfig 已并入统一配置 XhsSettings.PageLoadWaitConfig（破坏性变更）。
 /// <summary>
 /// 页面加载等待结果
 /// 包含等待策略执行的详细信息和结果

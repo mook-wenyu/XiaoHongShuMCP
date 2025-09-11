@@ -13,7 +13,7 @@ namespace XiaoHongShuMCP.Services;
 ///         不再抓取 DOM，避免前端重构导致的不稳定。
 /// - 协作：<see cref="IUniversalApiMonitor"/>（API 监听）、<see cref="IPageLoadWaitService"/>（导航等待）、
 ///         <see cref="IHumanizedInteractionService"/>（必要的人机交互节奏）、<see cref="IBrowserManager"/>（页面管理）。
-/// - 超时：统一使用 <see cref="McpSettings.WaitTimeoutMs"/> 作为兜底等待，亦可通过参数显式传入。
+/// - 超时：统一使用 <see cref="XhsSettings.McpSettingsSection.WaitTimeoutMs"/> 作为兜底等待，亦可通过参数显式传入。
 /// - 线程安全：内部仅对收集状态容器做锁保护，适合单任务串行采集；并发任务请按实例或外部同步拆分。
 /// 使用建议：在调用前确保账号已登录且浏览器上下文可用；采集完成后可按需 Clear/Reset 状态。
 /// </summary>
@@ -24,8 +24,8 @@ public class SmartCollectionController : ISmartCollectionController
     private readonly IPageLoadWaitService _pageLoadWaitService;
     private readonly IBrowserManager _browserManager;
     private readonly IUniversalApiMonitor _universalApiMonitor;
-    private readonly McpSettings _mcpSettings;
-    private readonly EndpointRetryConfig _endpointRetry;
+    private readonly XhsSettings.McpSettingsSection _mcpSettings;
+    private readonly XhsSettings.EndpointRetrySection _endpointRetry;
 
     // 智能收集状态管理
     private readonly List<NoteInfo> _collectedNotes;
@@ -41,16 +41,16 @@ public class SmartCollectionController : ISmartCollectionController
         IPageLoadWaitService pageLoadWaitService,
         IBrowserManager browserManager,
         IUniversalApiMonitor universalApiMonitor,
-        IOptions<McpSettings> mcpSettings,
-        IOptions<EndpointRetryConfig> endpointRetry)
+        IOptions<XhsSettings> xhsOptions)
     {
         _logger = logger;
         _humanizedInteraction = humanizedInteraction;
         _pageLoadWaitService = pageLoadWaitService;
         _browserManager = browserManager;
         _universalApiMonitor = universalApiMonitor;
-        _mcpSettings = mcpSettings.Value ?? new McpSettings();
-        _endpointRetry = endpointRetry.Value ?? new EndpointRetryConfig();
+        var xhs = xhsOptions.Value ?? new XhsSettings();
+        _mcpSettings = xhs.McpSettings ?? new XhsSettings.McpSettingsSection();
+        _endpointRetry = xhs.EndpointRetry ?? new XhsSettings.EndpointRetrySection();
 
         _collectedNotes = [];
         _seenNoteIds = [];
@@ -61,7 +61,7 @@ public class SmartCollectionController : ISmartCollectionController
     /// - 入口：持有 <paramref name="context"/> 与 <paramref name="page"/>；
     /// - 步骤：设置 Homefeed 监听 → 导航到发现页 → 等待至少一次响应 → 汇总并裁剪到目标数量；
     /// - 结果：返回包含 NoteInfo 集合、原始响应数等信息的 <see cref="SmartCollectionResult"/>。
-    /// - 超时：默认取 <see cref="McpSettings.WaitTimeoutMs"/>（10 分钟），也可通过 <paramref name="timeout"/> 指定；
+    /// - 超时：默认取 <see cref="XhsSettings.McpSettingsSection.WaitTimeoutMs"/>（10 分钟），也可通过 <paramref name="timeout"/> 指定；
     /// - 失败面向：监听器设置失败、导航失败、响应超时等，将返回失败结果并包含错误信息。
     /// </summary>
     public async Task<SmartCollectionResult> ExecuteSmartCollectionAsync(

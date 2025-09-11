@@ -17,8 +17,11 @@ public class UniversalApiMonitorDeduplicationTests
         var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
         _logger = loggerFactory.CreateLogger<UniversalApiMonitor>();
         
-        var mcpOptions = Options.Create(new McpSettings { WaitTimeoutMs = 600000 });
-        _monitor = new UniversalApiMonitor(_logger, mcpOptions);
+        var xhsOptions = Options.Create(new XhsSettings
+        {
+            McpSettings = new XhsSettings.McpSettingsSection { WaitTimeoutMs = 600000 }
+        });
+        _monitor = new UniversalApiMonitor(_logger, xhsOptions);
     }
 
     [TearDown]

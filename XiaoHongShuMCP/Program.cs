@@ -17,13 +17,14 @@ var defaultSettings = CreateDefaultSettings();
 
 // 先创建基础配置以获取 Serilog 设置
 var configuration = new ConfigurationBuilder()
-    .AddInMemoryCollection(defaultSettings)   // 代码内默认
-    .AddEnvironmentVariables(prefix: "XHS__") // 环境变量覆盖（XHS__Section__Key）
+    .AddInMemoryCollection(defaultSettings)   // 代码内默认（已统一到根节 XHS）
+    .AddEnvironmentVariables()                // 移除前缀过滤：统一在节 XHS 下读取
     .AddCommandLine(args)                     // 命令行覆盖（Section:Key=value）
     .Build();
 
 // 确保日志目录存在
-var logDirectory = configuration["Serilog:LogDirectory"] ?? "/logs";
+// 从统一根节 XHS 读取日志配置
+var logDirectory = configuration["XHS:Serilog:LogDirectory"] ?? "/logs";
 // 使用项目根目录作为基准路径，而不是当前工作目录
 var projectRoot = Path.GetDirectoryName(Path.GetDirectoryName(AppContext.BaseDirectory)) ?? AppContext.BaseDirectory;
 var fullLogDirectory = Path.IsPathRooted(logDirectory)
@@ -31,12 +32,12 @@ var fullLogDirectory = Path.IsPathRooted(logDirectory)
     : Path.Combine(projectRoot, logDirectory);
 Directory.CreateDirectory(fullLogDirectory);
 
-var logFileTemplate = configuration["Serilog:FileNameTemplate"] ?? "xiaohongshu-mcp-.txt";
+var logFileTemplate = configuration["XHS:Serilog:FileNameTemplate"] ?? "xiaohongshu-mcp-.txt";
 var logPath = Path.Combine(fullLogDirectory, logFileTemplate);
 
 // 配置 Serilog 日志（过滤敏感信息）
 // 读取最小日志级别（默认 Information），通过代码（Serilog:MinimumLevel）配置
-var minimumLevelString = configuration["Serilog:MinimumLevel"] ?? "Information";
+var minimumLevelString = configuration["XHS:Serilog:MinimumLevel"] ?? "Information";
 if (!Enum.TryParse<LogEventLevel>(minimumLevelString, true, out var minimumLevel))
 {
     minimumLevel = LogEventLevel.Information;
@@ -44,7 +45,7 @@ if (!Enum.TryParse<LogEventLevel>(minimumLevelString, true, out var minimumLevel
 
 // 是否仅对 UniversalApiMonitor 开启详细调试日志
 var detailedMonitorLogs = false;
-var detailedStr = configuration["UniversalApiMonitor:EnableDetailedLogging"];
+var detailedStr = configuration["XHS:UniversalApiMonitor:EnableDetailedLogging"];
 if (!string.IsNullOrWhiteSpace(detailedStr))
 {
     bool.TryParse(detailedStr, out detailedMonitorLogs);
@@ -64,8 +65,8 @@ if (detailedMonitorLogs)
         .MinimumLevel.Override(typeof(UniversalApiMonitor).FullName!, LogEventLevel.Debug);
 }
 
-// 从配置读取“按命名空间覆盖”映射：Logging:Overrides:<Namespace>=<Level>
-var overridesSection = configuration.GetSection("Logging:Overrides");
+// 从配置读取“按命名空间覆盖”映射：XHS:Logging:Overrides:<Namespace>=<Level>
+var overridesSection = configuration.GetSection("XHS:Logging:Overrides");
 if (overridesSection.Exists())
 {
     foreach (var child in overridesSection.GetChildren())
@@ -107,7 +108,7 @@ try
     // 覆盖 Host 配置为代码内存配置 + 环境变量/命令行覆盖（代码优先，可被外部覆盖）
     builder.Configuration
         .AddInMemoryCollection(defaultSettings)
-        .AddEnvironmentVariables(prefix: "XHS__")
+        .AddEnvironmentVariables() // 不再使用前缀过滤；统一从根节 XHS 读取
         .AddCommandLine(args);
     // 支持统一 Configs:* 键的兼容映射
     // 已移除兼容映射：请直接使用新节名（如 BrowserSettings:*, InteractionCache:*）
@@ -117,28 +118,9 @@ try
     builder.Services.AddSerilog();
 
 
-    // 配置 PageLoadWaitService 配置（来源于内存配置）
-    builder.Services.Configure<PageLoadWaitConfig>(
-        builder.Configuration.GetSection("PageLoadWaitConfig"));
-
-    // 配置搜索相关超时（来源于内存配置）
-    builder.Services.Configure<SearchTimeoutsConfig>(
-        builder.Configuration.GetSection("SearchTimeoutsConfig"));
-
-    // 配置端点等待重试（来源于内存配置）
-    builder.Services.Configure<EndpointRetryConfig>(
-        builder.Configuration.GetSection("EndpointRetry"));
-    // 配置临时交互缓存 TTL（来源于内存配置）
-    builder.Services.Configure<InteractionCacheConfig>(
-        builder.Configuration.GetSection("InteractionCache"));
-
-    // 配置详情匹配（权重/阈值/拼音）
-    builder.Services.Configure<DetailMatchConfig>(
-        builder.Configuration.GetSection("DetailMatchConfig"));
-
-    // MCP 统一等待超时配置
-    builder.Services.Configure<McpSettings>(
-        builder.Configuration.GetSection("McpSettings"));
+    // 仅注册一个配置类：XhsSettings（破坏性变更）
+    builder.Services.Configure<XhsSettings>(
+        builder.Configuration.GetSection("XHS"));
 
     // 配置服务依赖注入
     builder.Services
@@ -202,67 +184,72 @@ static bool ContainsSensitive(LogEvent le)
 /// <summary>
 /// 使用代码定义的默认配置键值
 /// </summary>
+/// <summary>
+/// 统一根节：XHS
+/// - 所有默认键值均置于 XHS 下，实现“一致的命名空间”。
+/// - 环境变量需使用双下划线映射冒号（示例：XHS__Serilog__MinimumLevel）。
+/// </summary>
 static Dictionary<string, string?> CreateDefaultSettings()
 {
     return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
     {
-        // Serilog
-        ["Serilog:LogDirectory"] = "logs",
-        ["Serilog:FileNameTemplate"] = "xiaohongshu-mcp-.txt",
-        ["Serilog:MinimumLevel"] = "Information",
+        // Serilog（统一到 XHS 根节）
+        ["XHS:Serilog:LogDirectory"] = "logs",
+        ["XHS:Serilog:FileNameTemplate"] = "xiaohongshu-mcp-.txt",
+        ["XHS:Serilog:MinimumLevel"] = "Information",
 
         // UniversalApiMonitor
-        ["UniversalApiMonitor:EnableDetailedLogging"] = "true",
+        ["XHS:UniversalApiMonitor:EnableDetailedLogging"] = "true",
 
-        // 基础参数
-        ["BaseUrl"] = "https://www.xiaohongshu.com/explore",
-        ["DefaultTimeout"] = "120000",
-        ["MaxRetries"] = "3",
+        // 基础参数（如需全局使用，统一置于 XHS 根）
+        ["XHS:BaseUrl"] = "https://www.xiaohongshu.com/explore",
+        ["XHS:DefaultTimeout"] = "120000",
+        ["XHS:MaxRetries"] = "3",
 
-        // 浏览器
-        ["BrowserSettings:Headless"] = "false",
-        ["BrowserSettings:RemoteDebuggingPort"] = "9222",
-        ["BrowserSettings:ConnectionTimeoutSeconds"] = "30",
+        // 浏览器设置
+        ["XHS:BrowserSettings:Headless"] = "false",
+        ["XHS:BrowserSettings:RemoteDebuggingPort"] = "9222",
+        ["XHS:BrowserSettings:ConnectionTimeoutSeconds"] = "30",
 
-        // MCP
-        ["McpSettings:EnableProgressReporting"] = "true",
-        ["McpSettings:MaxBatchSize"] = "10",
-        ["McpSettings:DelayBetweenOperations"] = "1000",
-        ["McpSettings:WaitTimeoutMs"] = "600000",
+        // MCP 统一设置
+        ["XHS:McpSettings:EnableProgressReporting"] = "true",
+        ["XHS:McpSettings:MaxBatchSize"] = "10",
+        ["XHS:McpSettings:DelayBetweenOperations"] = "1000",
+        ["XHS:McpSettings:WaitTimeoutMs"] = "600000",
 
         // 页面加载等待配置
-        ["PageLoadWaitConfig:DOMContentLoadedTimeout"] = "15000",
-        ["PageLoadWaitConfig:LoadTimeout"] = "30000",
-        ["PageLoadWaitConfig:NetworkIdleTimeout"] = "600000",
-        ["PageLoadWaitConfig:MaxRetries"] = "3",
-        ["PageLoadWaitConfig:RetryDelayMs"] = "2000",
-        ["PageLoadWaitConfig:EnableDegradation"] = "true",
-        ["PageLoadWaitConfig:FastModeTimeout"] = "10000",
+        ["XHS:PageLoadWaitConfig:DOMContentLoadedTimeout"] = "15000",
+        ["XHS:PageLoadWaitConfig:LoadTimeout"] = "30000",
+        ["XHS:PageLoadWaitConfig:NetworkIdleTimeout"] = "600000",
+        ["XHS:PageLoadWaitConfig:MaxRetries"] = "3",
+        ["XHS:PageLoadWaitConfig:RetryDelayMs"] = "2000",
+        ["XHS:PageLoadWaitConfig:EnableDegradation"] = "true",
+        ["XHS:PageLoadWaitConfig:FastModeTimeout"] = "10000",
 
-        // 搜索超时
-        ["SearchTimeoutsConfig:UiWaitMs"] = "12000",
-        ["SearchTimeoutsConfig:ApiCollectionMaxWaitMs"] = "60000",
+        // 搜索相关超时
+        ["XHS:SearchTimeoutsConfig:UiWaitMs"] = "12000",
+        ["XHS:SearchTimeoutsConfig:ApiCollectionMaxWaitMs"] = "60000",
 
         // 端点等待重试（默认：2分钟 + 最多3次重试）
-        ["EndpointRetry:AttemptTimeoutMs"] = "120000",
-        ["EndpointRetry:MaxRetries"] = "3",
+        ["XHS:EndpointRetry:AttemptTimeoutMs"] = "120000",
+        ["XHS:EndpointRetry:MaxRetries"] = "3",
 
         // 详情匹配（权重/阈值/拼音）
-        ["DetailMatchConfig:WeightedThreshold"] = "0.5",
-        ["DetailMatchConfig:TitleWeight"] = "4",
-        ["DetailMatchConfig:AuthorWeight"] = "3",
-        ["DetailMatchConfig:ContentWeight"] = "2",
-        ["DetailMatchConfig:HashtagWeight"] = "2",
-        ["DetailMatchConfig:ImageAltWeight"] = "1",
-        ["DetailMatchConfig:UseFuzzy"] = "true",
-        ["DetailMatchConfig:MaxDistanceCap"] = "3",
-        ["DetailMatchConfig:TokenCoverageThreshold"] = "0.7",
-        ["DetailMatchConfig:IgnoreSpaces"] = "true",
-        ["DetailMatchConfig:UsePinyin"] = "true",
-        ["DetailMatchConfig:PinyinInitialsOnly"] = "true"
+        ["XHS:DetailMatchConfig:WeightedThreshold"] = "0.5",
+        ["XHS:DetailMatchConfig:TitleWeight"] = "4",
+        ["XHS:DetailMatchConfig:AuthorWeight"] = "3",
+        ["XHS:DetailMatchConfig:ContentWeight"] = "2",
+        ["XHS:DetailMatchConfig:HashtagWeight"] = "2",
+        ["XHS:DetailMatchConfig:ImageAltWeight"] = "1",
+        ["XHS:DetailMatchConfig:UseFuzzy"] = "true",
+        ["XHS:DetailMatchConfig:MaxDistanceCap"] = "3",
+        ["XHS:DetailMatchConfig:TokenCoverageThreshold"] = "0.7",
+        ["XHS:DetailMatchConfig:IgnoreSpaces"] = "true",
+        ["XHS:DetailMatchConfig:UsePinyin"] = "true",
+        ["XHS:DetailMatchConfig:PinyinInitialsOnly"] = "true"
         ,
         // 交互缓存（单位：分钟）
-        ["InteractionCache:TtlMinutes"] = "3"
+        ["XHS:InteractionCache:TtlMinutes"] = "3"
     };
 }
 
@@ -305,15 +292,10 @@ static async Task<bool> TryHandleCallTool(string[] args, IConfiguration configur
         builder.Services.AddSerilog();
         builder.Configuration
             .AddInMemoryCollection(CreateDefaultSettings())
-            .AddEnvironmentVariables(prefix: "XHS__")
+            .AddEnvironmentVariables()
             .AddCommandLine(args);
-        // 兼容映射已移除
-        builder.Services.Configure<PageLoadWaitConfig>(builder.Configuration.GetSection("PageLoadWaitConfig"));
-        builder.Services.Configure<SearchTimeoutsConfig>(builder.Configuration.GetSection("SearchTimeoutsConfig"));
-        builder.Services.Configure<EndpointRetryConfig>(builder.Configuration.GetSection("EndpointRetry"));
-        builder.Services.Configure<InteractionCacheConfig>(builder.Configuration.GetSection("InteractionCache"));
-        builder.Services.Configure<McpSettings>(builder.Configuration.GetSection("McpSettings"));
-        builder.Services.Configure<DetailMatchConfig>(builder.Configuration.GetSection("DetailMatchConfig"));
+        // 仅注册一个配置类：XhsSettings
+        builder.Services.Configure<XhsSettings>(builder.Configuration.GetSection("XHS"));
 
         builder.Services
             .AddSingleton<IBrowserManager, PlaywrightBrowserManager>()

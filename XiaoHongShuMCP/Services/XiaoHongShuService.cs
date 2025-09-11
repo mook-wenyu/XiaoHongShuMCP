@@ -23,10 +23,10 @@ public partial class XiaoHongShuService : IXiaoHongShuService
     private readonly IPageStateGuard _pageStateGuard;
     private readonly ISmartCollectionController _smartCollectionController;
     private readonly IUniversalApiMonitor _universalApiMonitor;
-    private readonly SearchTimeoutsConfig _timeouts;
-    private readonly DetailMatchConfig _detailMatch;
-    private readonly McpSettings _mcpSettings;
-    private readonly EndpointRetryConfig _endpointRetry;
+    private readonly XhsSettings.SearchTimeoutsSection _timeouts;
+    private readonly XhsSettings.DetailMatchSection _detailMatch;
+    private readonly XhsSettings.McpSettingsSection _mcpSettings;
+    private readonly XhsSettings.EndpointRetrySection _endpointRetry;
 
     /// <summary>
     /// URL构建常量和默认参数
@@ -46,10 +46,7 @@ public partial class XiaoHongShuService : IXiaoHongShuService
         IPageStateGuard pageStateGuard,
         ISmartCollectionController smartCollectionController,
         IUniversalApiMonitor universalApiMonitor,
-        IOptions<SearchTimeoutsConfig> timeouts,
-        IOptions<DetailMatchConfig> detailMatch,
-        IOptions<McpSettings> mcpSettings,
-        IOptions<EndpointRetryConfig> endpointRetry)
+        IOptions<XhsSettings> xhsOptions)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
@@ -61,10 +58,11 @@ public partial class XiaoHongShuService : IXiaoHongShuService
         _pageStateGuard = pageStateGuard;
         _smartCollectionController = smartCollectionController;
         _universalApiMonitor = universalApiMonitor;
-        _timeouts = timeouts.Value ?? new SearchTimeoutsConfig();
-        _detailMatch = detailMatch.Value ?? new DetailMatchConfig();
-        _mcpSettings = mcpSettings.Value ?? new McpSettings();
-        _endpointRetry = endpointRetry.Value ?? new EndpointRetryConfig();
+        var xhs = xhsOptions.Value ?? new XhsSettings();
+        _timeouts = xhs.SearchTimeoutsConfig ?? new XhsSettings.SearchTimeoutsSection();
+        _detailMatch = xhs.DetailMatchConfig ?? new XhsSettings.DetailMatchSection();
+        _mcpSettings = xhs.McpSettings ?? new XhsSettings.McpSettingsSection();
+        _endpointRetry = xhs.EndpointRetry ?? new XhsSettings.EndpointRetrySection();
     }
 
     /// <summary>
@@ -2760,7 +2758,7 @@ public partial class XiaoHongShuService : IXiaoHongShuService
             return OperationResult<InteractionBundleResult>.Fail($"交互异常: {ex.Message}", ErrorType.Unknown, "INTERACT_NOTE_EXCEPTION");
         }
     }
-    /// </summary>
+
     private void LogInteractionAudit(string action, string keyword, bool domVerified, bool apiConfirmed, TimeSpan duration, string? extra)
     {
         _logger.LogInformation("[Audit] 动作={Action} | 关键词={Keyword} | DOM校验={Dom} | API确认={Api} | 耗时={Elapsed}ms | 备注={Extra}",
@@ -2899,7 +2897,7 @@ public partial class XiaoHongShuService : IXiaoHongShuService
     #region 搜索功能 - SearchNotes
     /// <summary>
     /// 搜索笔记（API监听+拟人化操作）。
-    /// 行为约定（破坏性变更）：若当前处于“笔记详情”页面，将先尝试关闭详情，确保处于可搜索的列表/搜索页上下文。
+    /// 若当前处于“笔记详情”页面，将先尝试关闭详情，确保处于可搜索的列表/搜索页上下文。
     /// </summary>
     public async Task<OperationResult<SearchResult>> SearchNotesAsync(
         string keyword,
@@ -3754,7 +3752,7 @@ public partial class XiaoHongShuService : IXiaoHongShuService
     /// <returns>推荐结果</returns>
     public async Task<OperationResult<RecommendListResult>> GetRecommendedNotesAsync(int limit = 20, TimeSpan? timeout = null)
     {
-        // 统一 MCP 等待超时（默认 10 分钟）；若未指定则取 McpSettings.WaitTimeoutMs
+        // 统一 MCP 等待超时（默认 10 分钟）；若未指定则取 XhsSettings.McpSettingsSection.WaitTimeoutMs
         var cfgMs = _mcpSettings.WaitTimeoutMs;
         timeout ??= TimeSpan.FromMilliseconds(cfgMs > 0 ? cfgMs : 600_000);
         var startTime = DateTime.UtcNow;

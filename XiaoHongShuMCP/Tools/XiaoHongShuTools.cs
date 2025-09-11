@@ -64,9 +64,9 @@ public static class XiaoHongShuTools
         try
         {
             var xiaohongShuService = serviceProvider.GetRequiredService<IXiaoHongShuService>();
-            var mcp = serviceProvider.GetService<IOptions<McpSettings>>();
+            var xhs = serviceProvider.GetService<IOptions<XhsSettings>>();
             // 统一策略：CLI 明确给定则优先使用；否则回退 McpSettings；再否则回退 10 分钟
-            var cfgMs = mcp?.Value?.WaitTimeoutMs ?? 600_000;
+            var cfgMs = xhs?.Value?.McpSettings?.WaitTimeoutMs ?? 600_000;
             var cliMs = (int)TimeSpan.FromMinutes(timeoutMinutes).TotalMilliseconds;
             var effectiveMs = cliMs > 0 ? cliMs : (cfgMs > 0 ? cfgMs : 600_000);
             var timeout = TimeSpan.FromMilliseconds(effectiveMs);
