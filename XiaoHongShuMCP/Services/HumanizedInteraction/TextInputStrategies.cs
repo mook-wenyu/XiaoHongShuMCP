@@ -1,5 +1,7 @@
 using Microsoft.Playwright;
+using HushOps.Core.Automation.Abstractions;
 
+// 说明：命名空间迁移至 HushOps.Services。
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
@@ -10,18 +12,18 @@ namespace XiaoHongShuMCP.Services;
 /// </summary>
 public abstract class BaseTextInputStrategy : ITextInputStrategy
 {
-    protected readonly IDelayManager delayManager;
+    protected readonly HushOps.Core.Humanization.IDelayManager delayManager;
     
-    protected BaseTextInputStrategy(IDelayManager delayManager)
+    protected BaseTextInputStrategy(HushOps.Core.Humanization.IDelayManager delayManager)
     {
         this.delayManager = delayManager;
     }
     
     /// <inheritdoc />
-    public abstract Task<bool> IsApplicableAsync(IElementHandle element);
+    public abstract Task<bool> IsApplicableAsync(IAutoElement element);
     
     /// <inheritdoc />
-    public abstract Task InputTextAsync(IPage page, IElementHandle element, string text);
+    public abstract Task InputTextAsync(IAutoPage page, IAutoElement element, string text);
     
     /// <summary>
     /// 检查文本是否包含结束标点符号
@@ -38,9 +40,9 @@ public abstract class BaseTextInputStrategy : ITextInputStrategy
     protected async Task WaitSemanticUnitReviewAsync(string unit)
     {
         if (unit.Length > 4 || ContainsEndPunctuation(unit))
-            await delayManager.WaitAsync(HumanWaitType.ReviewPause);
+            await delayManager.WaitAsync(HushOps.Core.Humanization.HumanWaitType.ReviewPause);
         else
-            await delayManager.WaitAsync(HumanWaitType.TypingSemanticUnit);
+            await delayManager.WaitAsync(HushOps.Core.Humanization.HumanWaitType.TypingSemanticUnit);
     }
 }
 
@@ -50,16 +52,14 @@ public abstract class BaseTextInputStrategy : ITextInputStrategy
 /// </summary>
 public class RegularInputStrategy : BaseTextInputStrategy
 {
-    public RegularInputStrategy(IDelayManager delayManager) : base(delayManager)
-    {
-    }
+    public RegularInputStrategy(HushOps.Core.Humanization.IDelayManager delayManager) : base(delayManager) { }
     
     /// <inheritdoc />
-    public override async Task<bool> IsApplicableAsync(IElementHandle element)
+    public override async Task<bool> IsApplicableAsync(IAutoElement element)
     {
         try
         {
-            var tagName = await element.EvaluateAsync<string>("el => el.tagName.toLowerCase()");
+            var tagName = await element.GetTagNameAsync();
             var contentEditable = await element.GetAttributeAsync("contenteditable");
             
             // 适用于标准输入元素，且不是contenteditable
@@ -74,7 +74,7 @@ public class RegularInputStrategy : BaseTextInputStrategy
     }
     
     /// <inheritdoc />
-    public override async Task InputTextAsync(IPage page, IElementHandle element, string text)
+    public override async Task InputTextAsync(IAutoPage page, IAutoElement element, string text)
     {
         try
         {
@@ -82,7 +82,7 @@ public class RegularInputStrategy : BaseTextInputStrategy
             await element.ClickAsync();
             
             // 2. 初始思考停顿
-            await delayManager.WaitAsync(HumanWaitType.ThinkingPause);
+            await delayManager.WaitAsync(HushOps.Core.Humanization.HumanWaitType.ThinkingPause);
             
             // 3. 智能分割文本为语义单位
             var semanticUnits = SmartTextSplitter.SplitBySemanticUnits(text);
@@ -95,15 +95,12 @@ public class RegularInputStrategy : BaseTextInputStrategy
                 // 思考停顿（每个语义单位前）
                 if (i > 0)
                 {
-                    await delayManager.WaitAsync(HumanWaitType.ThinkingPause);
+                    await delayManager.WaitAsync(HushOps.Core.Humanization.HumanWaitType.ThinkingPause);
                 }
                 
                 // 快速连续输入整个语义单位
-                foreach (var character in unit)
-                {
-                    await page.Keyboard.TypeAsync(character.ToString());
-                    await delayManager.WaitAsync(HumanWaitType.TypingCharacter);
-                }
+                await page.Keyboard.TypeAsync(unit);
+                await delayManager.WaitAsync(HushOps.Core.Humanization.HumanWaitType.TypingCharacter);
                 
                 // 检查停顿
                 await WaitSemanticUnitReviewAsync(unit);
@@ -122,17 +119,15 @@ public class RegularInputStrategy : BaseTextInputStrategy
 /// </summary>
 public class ContentEditableInputStrategy : BaseTextInputStrategy
 {
-    public ContentEditableInputStrategy(IDelayManager delayManager) : base(delayManager)
-    {
-    }
+    public ContentEditableInputStrategy(HushOps.Core.Humanization.IDelayManager delayManager) : base(delayManager) { }
     
     /// <inheritdoc />
-    public override async Task<bool> IsApplicableAsync(IElementHandle element)
+    public override async Task<bool> IsApplicableAsync(IAutoElement element)
     {
         try
         {
             var contentEditable = await element.GetAttributeAsync("contenteditable");
-            var tagName = await element.EvaluateAsync<string>("el => el.tagName.toLowerCase()");
+            var tagName = await element.GetTagNameAsync();
             
             // 适用于contenteditable元素或特定的div元素
             return contentEditable == "true" || 
@@ -146,24 +141,19 @@ public class ContentEditableInputStrategy : BaseTextInputStrategy
     }
     
     /// <inheritdoc />
-    public override async Task InputTextAsync(IPage page, IElementHandle element, string text)
+    public override async Task InputTextAsync(IAutoPage page, IAutoElement element, string text)
     {
         try
         {
             // 1. 点击元素获得焦点
             await element.ClickAsync();
-            await delayManager.WaitAsync(HumanWaitType.ThinkingPause);
-            
-            // 2. 确保元素处于可编辑状态
-            await page.EvaluateAsync(@"(element) => {
-                element.focus();
-                // 如果是空的，清除placeholder内容
-                if (element.querySelector('.is-empty.is-editor-empty')) {
-                    element.innerHTML = '';
-                }
-            }", element);
-            
-            await delayManager.WaitAsync(HumanWaitType.ContentLoading); // 等待编辑器响应焦点事件
+            await delayManager.WaitAsync(HushOps.Core.Humanization.HumanWaitType.ThinkingPause);
+
+            // 2. 使用键盘序列确保可编辑并清空（更拟人、禁注入）：Ctrl/Meta+A + Backspace
+            // 注：Playwright 将自动触发 input 相关事件，无需显式 dispatchEvent
+            await page.Keyboard.PressAsync(OperatingSystem.IsMacOS() ? "Meta+A" : "Control+A");
+            await page.Keyboard.PressAsync("Backspace");
+            await delayManager.WaitAsync(HushOps.Core.Humanization.HumanWaitType.ContentLoading); // 等待编辑器响应焦点/清空
             
             // 3. 使用语义单位进行智能输入
             var semanticUnits = SmartTextSplitter.SplitBySemanticUnits(text);
@@ -175,26 +165,18 @@ public class ContentEditableInputStrategy : BaseTextInputStrategy
                 // 思考停顿
                 if (i > 0)
                 {
-                    await delayManager.WaitAsync(HumanWaitType.ThinkingPause);
+                    await delayManager.WaitAsync(HushOps.Core.Humanization.HumanWaitType.ThinkingPause);
                 }
                 
                 // 使用键盘输入替代过时的 ElementHandle.TypeAsync
-                await element.FocusAsync();
-                foreach (var ch in unit)
-                {
-                    await page.Keyboard.TypeAsync(ch.ToString());
-                    await delayManager.WaitAsync(HumanWaitType.TypingCharacter);
-                }
+                await page.Keyboard.TypeAsync(unit);
+                await delayManager.WaitAsync(HushOps.Core.Humanization.HumanWaitType.TypingCharacter);
                 
                 // 检查停顿
                 await WaitSemanticUnitReviewAsync(unit);
             }
             
-            // 4. 触发输入事件，确保Vue/TipTap检测到内容变化
-            await page.EvaluateAsync(@"(element) => {
-                element.dispatchEvent(new Event('input', {bubbles: true}));
-                element.dispatchEvent(new Event('change', {bubbles: true}));
-            }", element);
+            // 4. 无需 JS 注入事件：逐键输入已自然触发 input/keydown/keyup
         }
         catch (Exception ex)
         {
@@ -205,18 +187,15 @@ public class ContentEditableInputStrategy : BaseTextInputStrategy
     /// <summary>
     /// 检查是否为富文本编辑器
     /// </summary>
-    private async Task<bool> IsRichTextEditor(IElementHandle element)
+    private async Task<bool> IsRichTextEditor(IAutoElement element)
     {
         try
         {
-            var hasEditorClasses = await element.EvaluateAsync<bool>(@"element => {
-                const classList = Array.from(element.classList);
-                return classList.some(cls => 
-                    cls.includes('editor') || 
-                    cls.includes('tiptap') || 
-                    cls.includes('prosemirror')
-                );
-            }");
+            // 使用 class 属性判断常见富文本标记，避免 JS Evaluate
+            var cls = (await element.GetAttributeAsync("class")) ?? string.Empty;
+            var hasEditorClasses = cls.Contains("editor", StringComparison.OrdinalIgnoreCase)
+                                   || cls.Contains("tiptap", StringComparison.OrdinalIgnoreCase)
+                                   || cls.Contains("prosemirror", StringComparison.OrdinalIgnoreCase);
             
             return hasEditorClasses;
         }

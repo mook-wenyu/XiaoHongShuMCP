@@ -33,6 +33,9 @@ public class XhsConfigurationBindingTests
         Environment.SetEnvironmentVariable("XHS__SearchTimeoutsConfig__UiWaitMs", null);
         Environment.SetEnvironmentVariable("XHS__Serilog__MinimumLevel", null);
         Environment.SetEnvironmentVariable("Serilog__MinimumLevel", null);
+        Environment.SetEnvironmentVariable("XHS__AntiDetection__PatchNavigatorWebdriver", null);
+        Environment.SetEnvironmentVariable("XHS__InteractionPolicy__EnableHtmlSampleAudit", null);
+        Environment.SetEnvironmentVariable("XHS__InteractionPolicy__EvalAllowedPaths", null);
     }
 
     /// <summary>
@@ -91,5 +94,27 @@ public class XhsConfigurationBindingTests
 
         // Assert
         Assert.That(level, Is.EqualTo("Information"), "旧键 Serilog__MinimumLevel 不应影响 XHS:Serilog:MinimumLevel");
+    }
+
+    /// <summary>
+    /// 验证：新增白名单键位应正确映射到 XhsSettings，对应布尔与列表字段可用。
+    /// </summary>
+    [Test]
+    public void LoadFromEnvironment_Should_Map_New_Whitelist_Keys()
+    {
+        // Arrange
+        Environment.SetEnvironmentVariable("XHS__AntiDetection__PatchNavigatorWebdriver", "true");
+        Environment.SetEnvironmentVariable("XHS__InteractionPolicy__EnableHtmlSampleAudit", "true");
+        Environment.SetEnvironmentVariable("XHS__InteractionPolicy__EvalAllowedPaths", "element.html.sample, element.tagName , page.eval.read");
+
+        // Act
+        var settings = HushOps.Core.Config.XhsConfiguration.LoadFromEnvironment();
+
+        // Assert
+        Assert.That(settings.AntiDetection.PatchNavigatorWebdriver, Is.True, "反检测配置应允许通过白名单启用 navigator.webdriver 补丁");
+        Assert.That(settings.InteractionPolicy.EnableHtmlSampleAudit, Is.True, "交互策略应启用 HTML 抽样审计");
+        Assert.That(settings.InteractionPolicy.EvalAllowedPaths,
+            Is.EqualTo(new[] { "element.html.sample", "element.tagName", "page.eval.read" }),
+            "逗号分隔白名单应解析为去除空白的列表");
     }
 }

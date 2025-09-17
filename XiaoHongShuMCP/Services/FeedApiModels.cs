@@ -1,5 +1,7 @@
 using System.Text.Json.Serialization;
 
+// 说明：本文件参与“Services 命名空间→HushOps.Services”的破坏性迁移。
+// 目的：统一品牌与分层边界，删除历史 XiaoHongShuMCP.* 暴露。
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
@@ -137,34 +139,83 @@ public class FeedApiUser : BaseUserInfo
 public class FeedApiInteractInfo : BaseInteractInfo
 {
     [JsonPropertyName("liked")]
-    public new bool Liked { get; set; }
-    
+    public override bool Liked
+    {
+        get => base.Liked;
+        set => base.Liked = value;
+    }
+
     [JsonPropertyName("liked_count")]
     public string LikedCountRaw { get; set; } = string.Empty; // 注意：API返回字符串格式
-    
+
     [JsonPropertyName("collected")]
-    public new bool Collected { get; set; }
-    
+    public override bool Collected
+    {
+        get => base.Collected;
+        set => base.Collected = value;
+    }
+
     [JsonPropertyName("collected_count")]
     public string CollectedCountRaw { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("comment_count")]
     public string CommentCountRaw { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("share_count")]
     public string ShareCountRaw { get; set; } = string.Empty;
-    
+
     [JsonPropertyName("followed")]
     public bool Followed { get; set; }
-    
+
     [JsonPropertyName("relation")]
     public string Relation { get; set; } = string.Empty;
 
     // 重写基类属性以提供从字符串到整数的转换
-    public new int LikedCount => int.TryParse(LikedCountRaw, out var count) ? count : 0;
-    public new int CollectedCount => int.TryParse(CollectedCountRaw, out var count) ? count : 0;
-    public new int CommentCount => int.TryParse(CommentCountRaw, out var count) ? count : 0;
-    public int ShareCount => int.TryParse(ShareCountRaw, out var count) ? count : 0;
+    public override int LikeCount
+    {
+        get => ParseCount(LikedCountRaw, base.LikeCount);
+        set
+        {
+            base.LikeCount = value;
+            LikedCountRaw = value.ToString();
+        }
+    }
+
+    public override int FavoriteCount
+    {
+        get => ParseCount(CollectedCountRaw, base.FavoriteCount);
+        set
+        {
+            base.FavoriteCount = value;
+            CollectedCountRaw = value.ToString();
+        }
+    }
+
+    public override int CommentCount
+    {
+        get => ParseCount(CommentCountRaw, base.CommentCount);
+        set
+        {
+            base.CommentCount = value;
+            CommentCountRaw = value.ToString();
+        }
+    }
+
+    public override int ShareCount
+    {
+        get => ParseCount(ShareCountRaw, base.ShareCount);
+        set
+        {
+            base.ShareCount = value;
+            ShareCountRaw = value.ToString();
+        }
+    }
+
+    private static int ParseCount(string raw, int fallback)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return fallback;
+        return int.TryParse(raw, out var parsed) ? parsed : fallback;
+    }
 }
 
 /// <summary>
@@ -442,4 +493,66 @@ public class MonitoredFeedResponse
     /// 注意：在被动监听模式下此字段通常为空
     /// </summary>
     public string SourceNoteId { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 推荐流响应数据。
+/// </summary>
+public class HomefeedResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("data")]
+    public HomefeedData Data { get; set; } = new();
+}
+
+/// <summary>
+/// 推荐流数据体。
+/// </summary>
+public class HomefeedData
+{
+    [JsonPropertyName("items")]
+    public List<HomefeedItem> Items { get; set; } = [];
+}
+
+/// <summary>
+/// 推荐流单项。
+/// </summary>
+public class HomefeedItem
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("note")]
+    public FeedApiNoteCard? Note { get; set; }
+
+    [JsonPropertyName("note_card")]
+    public FeedApiNoteCard? NoteCard { get; set; }
+}
+
+/// <summary>
+/// 推荐流转换工具。
+/// </summary>
+public static class HomefeedConverter
+{
+    /// <summary>
+    /// 将推荐流条目转换为标准笔记信息。
+    /// </summary>
+    public static NoteDetail? ConvertToNoteInfo(HomefeedItem item)
+    {
+        if (item is null)
+        {
+            return null;
+        }
+
+        var card = item.NoteCard ?? item.Note;
+        if (card is null)
+        {
+            return null;
+        }
+
+        var sourceId = !string.IsNullOrEmpty(card.NoteId) ? card.NoteId : item.Id;
+        return FeedApiConverter.ConvertToNoteDetail(card, string.IsNullOrEmpty(sourceId) ? card.NoteId : sourceId);
+    }
 }

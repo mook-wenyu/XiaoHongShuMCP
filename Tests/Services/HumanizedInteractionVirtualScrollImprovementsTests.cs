@@ -13,9 +13,33 @@ namespace XiaoHongShuMCP.Tests.Services;
 [TestFixture]
 public class HumanizedInteractionVirtualScrollImprovementsTests
 {
+    private sealed class DummyAutoPage : HushOps.Core.Automation.Abstractions.IAutoPage
+    {
+        public string PageId { get; } = Guid.NewGuid().ToString("N");
+        public HushOps.Core.Automation.Abstractions.INavigator Navigator => throw new NotImplementedException();
+        public HushOps.Core.Automation.Abstractions.IInput Input => throw new NotImplementedException();
+        public HushOps.Core.Automation.Abstractions.IKeyboard Keyboard => new DummyKeyboard();
+        public HushOps.Core.Automation.Abstractions.IClipboard Clipboard => throw new NotImplementedException();
+        public HushOps.Core.Automation.Abstractions.IFilePicker FilePicker => throw new NotImplementedException();
+        public Task<string> ContentAsync(CancellationToken ct = default) => Task.FromResult(string.Empty);
+        public Task<T> EvaluateAsync<T>(string script, CancellationToken ct = default) => Task.FromResult(default(T)!);
+        public Task<HushOps.Core.Automation.Abstractions.IAutoElement?> QueryAsync(string selector, int timeoutMs = 3000, CancellationToken ct = default) => Task.FromResult<HushOps.Core.Automation.Abstractions.IAutoElement?>(null);
+        public Task<IReadOnlyList<HushOps.Core.Automation.Abstractions.IAutoElement>> QueryAllAsync(string selector, int timeoutMs = 3000, CancellationToken ct = default) => Task.FromResult((IReadOnlyList<HushOps.Core.Automation.Abstractions.IAutoElement>)new List<HushOps.Core.Automation.Abstractions.IAutoElement>());
+        public Task MouseClickAsync(double x, double y, CancellationToken ct = default) => Task.CompletedTask;
+        public Task MouseMoveAsync(double x, double y, CancellationToken ct = default) => Task.CompletedTask;
+        public Task MouseWheelAsync(double deltaX, double deltaY, CancellationToken ct = default) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public Task<string> GetUrlAsync(CancellationToken ct = default) => Task.FromResult(string.Empty);
+
+        private sealed class DummyKeyboard : HushOps.Core.Automation.Abstractions.IKeyboard
+        {
+            public Task TypeAsync(string text, int? delayMs = null, CancellationToken ct = default) => Task.CompletedTask;
+            public Task PressAsync(string key, int? delayMs = null, CancellationToken ct = default) => Task.CompletedTask;
+        }
+    }
     private HumanizedInteractionService _service = null!;
     private Mock<ILogger<HumanizedInteractionService>> _mockLogger = null!;
-    private Mock<IDelayManager> _mockDelayManager = null!;
+    private Mock<HushOps.Core.Humanization.IDelayManager> _mockDelayManager = null!;
     private Mock<IElementFinder> _mockElementFinder = null!;
     private Mock<IDomElementManager> _mockDomElementManager = null!;
     private Mock<IBrowserManager> _mockBrowserManager = null!;
@@ -25,19 +49,21 @@ public class HumanizedInteractionVirtualScrollImprovementsTests
     public void Setup()
     {
         _mockLogger = new Mock<ILogger<HumanizedInteractionService>>();
-        _mockDelayManager = new Mock<IDelayManager>();
+        _mockDelayManager = new Mock<HushOps.Core.Humanization.IDelayManager>();
         _mockElementFinder = new Mock<IElementFinder>();
         _mockDomElementManager = new Mock<IDomElementManager>();
         _mockBrowserManager = new Mock<IBrowserManager>();
         _mockInputStrategy = new Mock<ITextInputStrategy>();
-        
+
+        var clickPolicy = new Mock<IHumanizedClickPolicy>().Object;
         _service = new HumanizedInteractionService(
             _mockBrowserManager.Object,
             _mockDelayManager.Object,
             _mockElementFinder.Object,
             new[] { _mockInputStrategy.Object },
             _mockDomElementManager.Object,
-            null,
+            Microsoft.Extensions.Options.Options.Create(new XhsSettings()),
+            clickPolicy,
             _mockLogger.Object
         );
     }
@@ -54,10 +80,11 @@ public class HumanizedInteractionVirtualScrollImprovementsTests
     public async Task HumanWaitAsync_ShouldCallDelayManager()
     {
         // Arrange
-        var waitType = HumanWaitType.BetweenActions;
+        var waitType = HushOps.Core.Humanization.HumanWaitType.BetweenActions;
 
-        // Act & Assert - 测试不抛出异常即为成功
-        Assert.DoesNotThrowAsync(async () => await _service.HumanWaitAsync(waitType));
+        // Act
+        await _service.HumanWaitAsync(waitType);
+        // Assert: 未抛异常即通过
     }
 
     [Test]
@@ -66,33 +93,42 @@ public class HumanizedInteractionVirtualScrollImprovementsTests
         // Arrange
         var attemptNumber = 3;
 
-        // Act & Assert - 测试不抛出异常即为成功
-        Assert.DoesNotThrowAsync(async () => await _service.HumanRetryDelayAsync(attemptNumber));
+        // Act
+        await _service.HumanRetryDelayAsync(attemptNumber);
+        // Assert: 未抛异常即通过
     }
 
     [Test]
     public void VirtualScrollSimplification_ShouldBeImplemented()
     {
-        // 这个测试验证虚拟滚动简化功能已经实现
-        // 通过检查相关私有方法存在来验证功能完整性
+        // 该测试验证：已彻底删除 IPage 直连滚动，统一为 IAutoPage 版本；
+        // 同时存在抽象页的内部滚动执行方法（ExecuteScrollWithAutoAsync）。
         var serviceType = typeof(HumanizedInteractionService);
         
-        // 验证基础滚动执行方法存在（简化版本）
-        var executeScrollMethod = serviceType.GetMethod("ExecuteBasicScrollAsync", 
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.That(executeScrollMethod, Is.Not.Null, "ExecuteBasicScrollAsync method should exist");
-        
-        // 验证内容等待方法存在（简化版本）
-        var waitForContentMethod = serviceType.GetMethod("WaitForContentLoadAsync", 
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.That(waitForContentMethod, Is.Not.Null, "WaitForContentLoadAsync method should exist");
-        
-        // 验证页面刷新方法存在
-        var refreshPageMethod = serviceType.GetMethod("RefreshPageForNewContentAsync", 
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.That(refreshPageMethod, Is.Not.Null, "RefreshPageForNewContentAsync method should exist");
-        
-        // 验证复杂检测方法已被删除（简化目标）
+        // 1) 验证 IPage 直连滚动重载已删除
+        var scrollIPage0 = serviceType.GetMethod("HumanScrollAsync", new []{ typeof(IPage), typeof(System.Threading.CancellationToken) });
+        var scrollIPage3 = serviceType.GetMethod("HumanScrollAsync", new []{ typeof(IPage), typeof(int), typeof(bool), typeof(System.Threading.CancellationToken) });
+        Assert.That(scrollIPage0, Is.Null, "HumanScrollAsync(IPage, ...) overload should be removed");
+        Assert.That(scrollIPage3, Is.Null, "HumanScrollAsync(IPage, int, bool, ...) overload should be removed");
+
+        // 2) 验证 IAutoPage 版本存在
+        var autoPageType = typeof(HushOps.Core.Automation.Abstractions.IAutoPage);
+        var scrollIAutoPage = serviceType.GetMethod("HumanScrollAsync", new []{ autoPageType, typeof(int), typeof(bool), typeof(System.Threading.CancellationToken) });
+        Assert.That(scrollIAutoPage, Is.Not.Null, "HumanScrollAsync(IAutoPage, int, bool, ...) should exist");
+
+        // 3) 验证滚动实现已不依赖内部注入脚本方法（ExecuteScrollWithAutoAsync 已移除）
+        var execAuto = serviceType.GetMethod("ExecuteScrollWithAutoAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.That(execAuto, Is.Null, "ExecuteScrollWithAutoAsync should be removed (use Mouse.Wheel)");
+
+        // 4) 验证旧的 IPage 辅助探针方法已被删除
+        var refreshPageMethod = serviceType.GetMethod("RefreshPageForNewContentAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var executeBasic = serviceType.GetMethod("ExecuteBasicScrollAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var waitForContentMethod = serviceType.GetMethod("WaitForContentLoadAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.That(refreshPageMethod, Is.Null, "RefreshPageForNewContentAsync should be removed");
+        Assert.That(executeBasic, Is.Null, "ExecuteBasicScrollAsync should be removed");
+        Assert.That(waitForContentMethod, Is.Null, "WaitForContentLoadAsync should be removed");
+
+        // 5) 验证历史复杂检测方法仍不存在（持续简化目标）
         var getScrollTopMethod = serviceType.GetMethod("GetPageScrollTopAsync", 
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.That(getScrollTopMethod, Is.Null, "GetPageScrollTopAsync method should be removed");
@@ -114,13 +150,13 @@ public class HumanizedInteractionVirtualScrollImprovementsTests
     public async Task FindElementAsync_ShouldDelegateToElementFinder()
     {
         // Arrange
-        var mockPage = new Mock<IPage>();
+        var mockAutoPage = new DummyAutoPage();
         var selectorAlias = "testSelector";
         var retries = 3;
         var timeout = 3000;
 
         // Act
-        var result = await _service.FindElementAsync(mockPage.Object, selectorAlias, retries, timeout);
+        var result = await _service.FindElementAsync(mockAutoPage, selectorAlias, retries, timeout);
 
         // Assert - 验证委托给ElementFinder（不验证返回值，避免表达式树问题）
         Assert.That(result, Is.Null); // ElementFinder返回null是正常的
@@ -130,22 +166,16 @@ public class HumanizedInteractionVirtualScrollImprovementsTests
     public async Task FindElementAsync_WithPageState_ShouldUseDomElementManager()
     {
         // Arrange
-        var mockPage = new Mock<IPage>();
+        var mockAutoPage = new DummyAutoPage();
         var selectorAlias = "testSelector";
         var pageState = PageState.Explore;
         
         // 设置 mock 返回一个非空的选择器列表
         _mockDomElementManager.Setup(x => x.GetSelectors(selectorAlias, pageState))
             .Returns(new List<string> { ".test-selector" });
-            
-        // 设置 page.QuerySelectorAsync 返回 null（显式指定可选参数，避免表达式树与可选参数的冲突）
-        mockPage.Setup(x => x.QuerySelectorAsync(
-                It.IsAny<string>(),
-                It.IsAny<PageQuerySelectorOptions?>()))
-            .ReturnsAsync((IElementHandle?)null);
 
         // Act
-        var result = await _service.FindElementAsync(mockPage.Object, selectorAlias, pageState);
+        var result = await _service.FindElementAsync(mockAutoPage, selectorAlias, pageState);
 
         // Assert - 验证使用了DomElementManager（不依赖表达式树验证）
         Assert.That(result, Is.Null); // 预期返回null是正常的

@@ -1,0 +1,24 @@
+[
+  {
+    "type": "timeseries",
+    "title": "JS 评估使用率（按 path）",
+    "targets": [
+      {
+        "expr": "sum by (path) (rate(ui_injection_total{type=\"eval\"}[5m]))",
+        "legendFormat": "{{path}}",
+        "refId": "A"
+      }
+    ]
+  },
+  {
+    "type": "stat",
+    "title": "JS 评估总量（1h）",
+    "targets": [
+      {
+        "expr": "sum(increase(ui_injection_total{type=\"eval\"}[1h]))",
+        "refId": "B"
+      }
+    ]
+  }
+]
+

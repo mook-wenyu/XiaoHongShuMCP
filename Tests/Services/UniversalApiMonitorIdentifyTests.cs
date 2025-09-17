@@ -41,4 +41,3 @@ public class UniversalApiMonitorIdentifyTests
         Assert.That(t, Is.Null);
     }
 }
-

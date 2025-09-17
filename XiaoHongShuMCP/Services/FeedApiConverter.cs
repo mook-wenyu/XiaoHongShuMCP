@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 
+// 说明：命名空间迁移至 HushOps.Services。
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>

@@ -1,0 +1,3 @@
+﻿id,description,category,likelihood,impact,mitigation,owner,status
+R-Identity-001,身份策略未配置导致工具调用全部失败,Operational,Medium,High,对照运行手册配置 Agent 并在 CI 校验 XHS:Identity 段,平台负责人,Open
+R-Identity-002,代理登录态过期触发身份校验失败,Operational,Medium,Medium,在运行手册增加登录巡检并监控 identity.guard_denied 指标,平台负责人,Open

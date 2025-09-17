@@ -1,4 +1,4 @@
-# CLAUDE.md - XiaoHongShuMCP 项目指南
+﻿# CLAUDE.md - XiaoHongShuMCP 项目指南
 
 这是一个基于 .NET 8.0 和 Model Context Protocol (MCP) 的小红书智能自动化服务器实现。
 
@@ -28,9 +28,9 @@ XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务�
 
 ### 项目结构
 ```
-XiaoHongShuMCP/
-├── XiaoHongShuMCP.sln              # Visual Studio 解决方案
-├── XiaoHongShuMCP/                 # 主项目
+HushOps/
+├── HushOps.sln              # Visual Studio 解决方案
+├── HushOps/                 # 主项目
 │   ├── Program.cs                  # 程序入口（内置默认配置 + 覆盖机制）
 │   ├── XiaoHongShuMCP.csproj      # 项目文件和依赖管理
 │   ├── Services/                   # 服务层实现
@@ -67,7 +67,6 @@ XiaoHongShuMCP/
 - **数据统一**: 将不同API格式统一转换为NoteDetail模型
 - **实时监控**: 支持实时监控API响应和数据提取
 
-### 2. 智能收集控制器 (SmartCollectionController)
 - **API集成**: 完全集成UniversalApiMonitor，删除了内嵌简陋监听系统
 - **依赖注入**: 使用现代DI模式，提高代码可测试性和维护性
 - **收集策略**: 支持快速、标准、谨慎三种模式，适应不同场景
@@ -143,7 +142,6 @@ XiaoHongShuMCP/
 - 推荐：`GetRecommendedNotes`
 - 详情：`GetNoteDetail`
 - 批量：`BatchGetNoteDetails`
-- 收集：`SmartCollectionController.ExecuteSmartCollectionAsync`
 
 配置项（`EndpointRetry`）：
 - `AttemptTimeoutMs`：单次等待端点命中的超时（默认 120000 毫秒）
@@ -407,13 +405,13 @@ dotnet test Tests --logger trx --results-directory TestResults
 
 ### 连接浏览器
 ```typescript
-// MCP 客户端调用
-await callTool("ConnectToBrowser", {});
+// MCP 客户端调用（伪代码，按实际 SDK 调整）
+await mcp.call("ConnectToBrowser", {});
 ```
 
 ### 智能搜索
 ```typescript
-await callTool("GetSearchNotes", {
+await mcp.call("GetSearchNotes", {
   keyword: "美食推荐",
   maxResults: 20,
   sortBy: "most_liked",
@@ -424,7 +422,7 @@ await callTool("GetSearchNotes", {
 
 ### 获取笔记详情
 ```typescript
-await callTool("GetNoteDetail", {
+await mcp.call("GetNoteDetail", {
   keyword: "健身餐",
   includeComments: true
 });

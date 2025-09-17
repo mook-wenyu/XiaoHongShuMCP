@@ -1,5 +1,5 @@
-using Microsoft.Extensions.Logging;
-using Microsoft.Playwright;
+﻿using Microsoft.Extensions.Logging;
+using HushOps.Core.Automation.Abstractions;
 
 namespace XiaoHongShuMCP.Services;
 
@@ -31,16 +31,10 @@ public class PageStateGuard : IPageStateGuard
     }
 
     /// <inheritdoc />
-    public async Task<bool> EnsureExitNoteDetailIfPresentAsync(IPage page)
+    public async Task<bool> EnsureExitNoteDetailIfPresentAsync(IAutoPage page)
     {
         try
         {
-            var state = await _domElementManager.DetectPageStateAsync(page);
-            if (state != PageState.Auto && state != PageState.Unknown)
-            {
-                // 使用 XiaoHongShuService 的 PageType 检测逻辑近似：若 URL/DOM 能判断为详情，则尝试退出
-            }
-
             var type = await DetectPageTypeAsync();
             if (type != PageType.NoteDetail) return true;
 
@@ -55,11 +49,10 @@ public class PageStateGuard : IPageStateGuard
             {
                 try
                 {
-                    var el = await page.QuerySelectorAsync(sel);
+                    var el = await page.QueryAsync(sel, 2000);
                     if (el == null) continue;
                     var visible = await el.IsVisibleAsync();
-                    var enabled = await el.IsEnabledAsync();
-                    if (!visible || !enabled) continue;
+                    if (!visible) continue;
 
                     await _humanizedInteraction.HumanClickAsync(el);
                     await _pageLoadWaitService.WaitForPageLoadAsync(page);
@@ -86,7 +79,7 @@ public class PageStateGuard : IPageStateGuard
     /// <summary>
     /// 确保在发现/搜索入口页：若不满足则尝试点击侧边栏“发现”链接，失败再回退为直接URL导航。
     /// </summary>
-    public async Task<bool> EnsureOnDiscoverOrSearchAsync(IPage page)
+    public async Task<bool> EnsureOnDiscoverOrSearchAsync(IAutoPage page)
     {
         try
         {
@@ -110,7 +103,7 @@ public class PageStateGuard : IPageStateGuard
             {
                 try
                 {
-                    var link = await page.QuerySelectorAsync(sel);
+                    var link = await page.QueryAsync(sel, 2000);
                     if (link == null) continue;
                     var visible = await link.IsVisibleAsync();
                     if (!visible) continue;
@@ -131,7 +124,7 @@ public class PageStateGuard : IPageStateGuard
             try
             {
                 var url = "https://www.xiaohongshu.com/explore?channel_id=homefeed_recommend";
-                await page.GotoAsync(url);
+                await page.Navigator.GoToAsync(url, new HushOps.Core.Automation.Abstractions.PageGotoOptions { WaitUntil = HushOps.Core.Automation.Abstractions.WaitUntilState.DomContentLoaded, TimeoutMs = 120_000 });
                 var wait = await _pageLoadWaitService.WaitForPageLoadAsync(page);
                 _logger.LogDebug("直接URL导航发现页：{Ok}", wait.Success);
                 type = await DetectPageTypeAsync();
@@ -157,8 +150,9 @@ public class PageStateGuard : IPageStateGuard
     {
         try
         {
-            var page = await _browserManager.GetPageAsync();
-            var path = page.Url;
+            var page = await _browserManager.GetAutoPageAsync();
+            // 优先使用驱动原生 URL（避免 Evaluate），若不可用再退回只读 Evaluate 并计量
+            string path = await page.GetUrlAsync();
 
             if (path.Contains("/explore/", StringComparison.OrdinalIgnoreCase))
                 return PageType.NoteDetail;
@@ -170,20 +164,16 @@ public class PageStateGuard : IPageStateGuard
                 return PageType.Home;
 
             // DOM 回退：尝试查找详情容器
-            try
+            var masks = _domElementManager.GetSelectors("NoteDetailModal");
+            foreach (var maskSel in masks)
             {
-                var masks = _domElementManager.GetSelectors("NoteDetailModal");
-                foreach (var maskSel in masks)
+                try
                 {
-                    var mask = await page.QuerySelectorAsync(maskSel);
-                    if (mask != null)
-                    {
-                        var visible = await mask.IsVisibleAsync();
-                        if (visible) return PageType.NoteDetail;
-                    }
+                    var mask = await page.QueryAsync(maskSel, 1000);
+                    if (mask != null && await mask.IsVisibleAsync()) return PageType.NoteDetail;
                 }
+                catch { }
             }
-            catch { }
 
             return PageType.Unknown;
         }
@@ -193,3 +183,5 @@ public class PageStateGuard : IPageStateGuard
         }
     }
 }
+
+

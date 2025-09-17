@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "updatedAt": "2025-09-17T00:00:00Z",
+  "templates": [
+    {
+      "id": "search_button_default",
+      "file": "templates/search_button_default.png",
+      "hashSha256": "b6bc88eec20ff1a47d7cab1cf105a651139e56ebb32989c0a62055e6ba3bfd0d",
+      "width": 1,
+      "height": 1,
+      "format": "png",
+      "source": "baseline.synthetic"
+    }
+  ],
+  "models": [],
+  "profiles": [
+    {
+      "id": "search_button",
+      "file": "profiles/search_button.json",
+      "strategy": "Template"
+    }
+  ]
+}

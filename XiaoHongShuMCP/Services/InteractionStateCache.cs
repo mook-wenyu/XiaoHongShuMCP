@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 
+// 说明：命名空间迁移至 HushOps.Services。
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>

@@ -8,8 +8,8 @@ namespace XiaoHongShuMCP.Tests.Services;
 [TestFixture]
 public class UniversalApiMonitorDeduplicationTests
 {
-    private UniversalApiMonitor _monitor;
-    private ILogger<UniversalApiMonitor> _logger;
+    private UniversalApiMonitor _monitor = null!;
+    private ILogger<UniversalApiMonitor> _logger = null!;
 
     [SetUp]
     public void Setup()

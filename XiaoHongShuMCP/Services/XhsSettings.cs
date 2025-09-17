@@ -1,3 +1,5 @@
+﻿using System;
+using System.Collections.Generic;
 namespace XiaoHongShuMCP.Services;
 
 /// <summary>
@@ -31,9 +33,14 @@ public class XhsSettings
 
     /// <summary>交互缓存设置</summary>
     public InteractionCacheSection InteractionCache { get; set; } = new();
+    /// <summary>审计设置（.audit 写盘控制）</summary>
+    public AuditSection Audit { get; set; } = new();
 
     /// <summary>详情匹配权重/阈值/拼音</summary>
     public DetailMatchSection DetailMatchConfig { get; set; } = new();
+
+    /// <summary>并发/速率/熔断综合治理配置（新）</summary>
+    public ConcurrencySection Concurrency { get; set; } = new();
 
     /// <summary>日志节</summary>
     public class SerilogSection
@@ -51,18 +58,48 @@ public class XhsSettings
     {
         /// <summary>是否启用详细日志</summary>
         public bool EnableDetailedLogging { get; set; } = true;
+        /// <summary>每处理 N 条响应输出一次网络指标日志（0 表示不输出，默认 200）。</summary>
+        public int MetricsLogEveryResponses { get; set; } = 200;
     }
 
     /// <summary>浏览器连接与超时设置</summary>
     public class BrowserSettingsSection
     {
-        /// <summary>是否以无头模式运行</summary>
+        /// <summary>是否以无头模式运行（Playwright 管理）。</summary>
         public bool Headless { get; set; } = false;
-        /// <summary>远程调试端口</summary>
-        public int RemoteDebuggingPort { get; set; } = 9222;
-        /// <summary>连接超时时间（秒）</summary>
-        public int ConnectionTimeoutSeconds { get; set; } = 30;
+        /// <summary>浏览器可执行文件路径（可选）。为空则使用 Playwright 自带 Chromium 或通过 Channel 指定。</summary>
+        public string? ExecutablePath { get; set; }
+        /// <summary>浏览器用户数据目录（推荐设置，默认项目根 profiles/xhs-automation）。</summary>
+        public string? UserDataDir { get; set; }
+        /// <summary>首选浏览器 Channel（如 chrome/msedge/chromium）。为空使用 Playwright 默认。</summary>
+        public string? Channel { get; set; }
+
+        /// <summary>连接与健康检查策略。</summary>
+        public ConnectionSection Connection { get; set; } = new();
+
+        public class ConnectionSection
+        {
+            /// <summary>服务启动后首次尝试连接前的延迟（秒）。</summary>
+            public int InitialDelaySeconds { get; set; } = 5;
+
+            /// <summary>初始失败重试间隔（秒），随后指数退避直至上限。</summary>
+            public int RetryIntervalSeconds { get; set; } = 20;
+
+            /// <summary>重试间隔上限（秒），避免退避过长。</summary>
+            public int RetryIntervalMaxSeconds { get; set; } = 180;
+
+            /// <summary>健康检查间隔（秒），用于定期校验登录态并视情况重连。</summary>
+            public int HealthCheckIntervalSeconds { get; set; } = 300;
+
+            /// <summary>Cookie 续期阈值（分钟），距过期不足该阈值时触发续期；0 表示禁用。</summary>
+            public int CookieRenewalThresholdMinutes { get; set; } = 15;
+
+            /// <summary>上下文轮换周期（分钟），超过后在空闲时重建浏览器上下文；0 表示禁用。</summary>
+            public int ContextRecycleMinutes { get; set; } = 180;
+        }
     }
+
+
 
     /// <summary>
     /// MCP 运行时配置（统一等待超时、批处理等）。
@@ -79,6 +116,28 @@ public class XhsSettings
         public int MaxBatchSize { get; set; } = 10;
         /// <summary>操作之间的延时（毫秒）</summary>
         public int DelayBetweenOperations { get; set; } = 1000;
+
+        /// <summary>
+        /// 工具白名单：若列表不为空，仅暴露列出的工具（可用工具名或方法名）。
+        /// </summary>
+        public List<string> EnabledToolNames { get; set; } = [];
+
+        /// <summary>
+        /// 工具黑名单：列出的工具将从经纪列表中移除。
+        /// </summary>
+        public List<string> DisabledToolNames { get; set; } = [];
+
+        /// <summary>
+        /// 工具标题覆盖表（键为工具名或方法名，值为展示标题）。
+        /// </summary>
+        public Dictionary<string, string>? ToolTitleOverrides { get; set; }
+            = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// 工具描述覆盖表（键为工具名或方法名，值为中文说明）。
+        /// </summary>
+        public Dictionary<string, string>? ToolDescriptionOverrides { get; set; }
+            = new(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -124,6 +183,17 @@ public class XhsSettings
     }
 
     /// <summary>
+    /// 审计设置
+    /// </summary>
+    public class AuditSection
+    {
+        /// <summary>是否启用审计写盘（默认 true）</summary>
+        public bool Enabled { get; set; } = true;
+        /// <summary>写盘目录，默认 .audit （相对项目根）</summary>
+        public string Directory { get; set; } = ".audit";
+    }
+
+    /// <summary>
     /// 详情匹配配置（从原 DetailMatchConfig 收敛而来）。
     /// </summary>
     public class DetailMatchSection
@@ -141,4 +211,140 @@ public class XhsSettings
         public bool UsePinyin { get; set; } = true;
         public bool PinyinInitialsOnly { get; set; } = true;
     }
+
+    /// <summary>
+    /// 并发/速率/熔断综合治理配置
+    /// - PerAccountReadConcurrency：每账户只读操作并发预算（默认2）
+    /// - PerAccountWriteConcurrency：每账户写操作并发预算（默认1）
+    /// - Rate：令牌桶速率配置（按端点类别）
+    /// - Breaker：熔断配置
+    /// </summary>
+    public class ConcurrencySection
+    {
+        public int PerAccountReadConcurrency { get; set; } = 2;
+        public int PerAccountWriteConcurrency { get; set; } = 1;
+
+        public RateSection Rate { get; set; } = new();
+        public BreakerSection Breaker { get; set; } = new();
+        public PoolSection Pool { get; set; } = new();
+
+        public class RateSection
+        {
+            // 写操作端点默认更低速率（更保守）
+            public double LikeCapacity { get; set; } = 1;              // 允许一次突发
+            public double LikeRefillPerSecond { get; set; } = 1.0 / 20; // 平均1次/20s
+
+            public double CollectCapacity { get; set; } = 1;
+            public double CollectRefillPerSecond { get; set; } = 1.0 / 30; // 1次/30s
+
+            public double CommentCapacity { get; set; } = 1;
+            public double CommentRefillPerSecond { get; set; } = 1.0 / 300; // 1次/5min
+
+            // 只读端点可更宽松
+            public double SearchCapacity { get; set; } = 2;
+            public double SearchRefillPerSecond { get; set; } = 0.5; // 2次/秒容量，平均1次/2s
+
+            public double FeedCapacity { get; set; } = 2;
+            public double FeedRefillPerSecond { get; set; } = 0.5;
+        }
+
+        public class BreakerSection
+        {
+            /// <summary>滑动窗口内失败阈值（达到即熔断）。</summary>
+            public int FailureThreshold { get; set; } = 3;
+            /// <summary>滑动窗口时长（秒）。</summary>
+            public int WindowSeconds { get; set; } = 120;
+            /// <summary>熔断打开持续时长（秒）。</summary>
+            public int OpenSeconds { get; set; } = 600; // 10 分钟
+        }
+
+        /// <summary>
+        /// 页面池化配置
+        /// </summary>
+        public class PoolSection
+        {
+            /// <summary>池内页面最大数量（并发租约上限）。</summary>
+            public int MaxPages { get; set; } = 3;
+        }
+    }
+
+    /// <summary>
+    /// 反检测配置（占位版，后续迁移到 Ops:AntiDetection）。
+    /// </summary>
+    public class AntiDetectionSection
+    {
+        /// <summary>是否启用反检测脚本注入。</summary>
+        public bool Enabled { get; set; } = true;
+        /// <summary>是否隐藏 navigator.webdriver。</summary>
+        public bool PatchNavigatorWebdriver { get; set; } = true;
+        /// <summary>是否启用 WebGL 指纹占位补丁（隐藏厂商/渲染器）。</summary>
+        public bool PatchWebGL { get; set; } = true;
+        /// <summary>是否启用 Canvas 占位补丁（保留接口一致性）。</summary>
+        public bool PatchCanvas { get; set; } = false;
+        /// <summary>是否写入审计快照。</summary>
+        public bool AuditEnabled { get; set; } = true;
+        /// <summary>审计输出目录。</summary>
+        public string AuditDirectory { get; set; } = ".audit";
+    }
+
+    /// <summary>反检测配置根节。</summary>
+    public AntiDetectionSection AntiDetection { get; set; } = new();
+
+    /// <summary>
+    /// 交互策略（禁注入门控等）— 破坏性新增，不向后兼容：默认严格禁用注入兜底。
+    /// 配置键：XHS:InteractionPolicy:*
+    /// </summary>
+    public InteractionPolicySection InteractionPolicy { get; set; } = new();
+
+    /// <summary>
+    /// 人格化与自调优参数（节律倍率、半衰期等）。
+    /// 配置键：XHS:Persona:*
+    /// </summary>
+    public PersonaSection Persona { get; set; } = new();
+
+    public class InteractionPolicySection
+    {
+        /// <summary>
+        /// 是否允许在极端兜底情况下使用 JS 注入（如 dispatchEvent）。默认 false。
+        /// </summary>
+        public bool EnableJsInjectionFallback { get; set; } = false;
+
+        /// <summary>
+        /// 是否允许滚动使用 JS 注入（window.scrollBy）。默认 false。
+        /// </summary>
+        public bool EnableJsScrollInjection { get; set; } = false;
+
+        /// <summary>
+        /// 是否允许“只读 Evaluate”（读取 location/outerHTML/属性等），默认 true。
+        /// 说明：为实现“只读 Evaluate 清零”的过渡策略，保留该开关并对每次使用进行计量；
+        /// 后续阶段可将默认改为 false 并逐步删除残余路径。
+        /// </summary>
+        public bool EnableJsReadEval { get; set; } = true;
+    }
+
+    /// <summary>
+    /// 人格化与自调优参数。
+    /// </summary>
+    public class PersonaSection
+    {
+        /// <summary>当出现 HTTP 429 时的基础倍率（随后指数衰减回 1.0）。</summary>
+        public double Http429BaseMultiplier { get; set; } = 2.5;
+        /// <summary>当出现 HTTP 403 时的基础倍率（随后指数衰减回 1.0）。</summary>
+        public double Http403BaseMultiplier { get; set; } = 2.0;
+        /// <summary>倍率最大值上限（避免过度放大）。</summary>
+        public double MaxDelayMultiplier { get; set; } = 3.0;
+        /// <summary>倍率衰减半衰期（秒）。</summary>
+        public int DegradeHalfLifeSeconds { get; set; } = 60;
+    }
 }
+
+
+
+
+
+
+
+
+
+
+

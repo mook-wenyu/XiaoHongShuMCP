@@ -1,24 +1,35 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <EnableLinuxDistrosSupport>true</EnableLinuxDistrosSupport>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="coverlet.msbuild" Version="6.0.2">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="NUnit" Version="4.4.0" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="Microsoft.Playwright" Version="1.55.0" />
-    <!-- 使用共享框架中的 Microsoft.Extensions.*，无需显式 NuGet 包 -->
+    <PackageReference Include="NetArchTest.Rules" Version="1.3.2" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.8" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 破坏性合流：仅引用聚合后的 Core 与主程序；Adapters/Observability/Persistence 源码由 Core.csproj 统一编译纳入，测试不再单独引用分散项目，避免包版本冲突与重复编译。 -->
+    <!-- 修正主项目引用目录：从 HushOps/ 还原为 XiaoHongShuMCP/，以匹配当前物理结构 -->
     <ProjectReference Include="..\XiaoHongShuMCP\XiaoHongShuMCP.csproj" />
+    <ProjectReference Include="..\HushOps.Core\HushOps.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
 
@@ -44,7 +44,7 @@ public class PageLoadWaitService : IPageLoadWaitService
     /// <param name="page">浏览器页面实例</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>等待策略执行结果</returns>
-    public async Task<PageLoadWaitResult> WaitForPageLoadAsync(IPage page, CancellationToken cancellationToken = default)
+    public async Task<PageLoadWaitResult> WaitForPageLoadAsync(HushOps.Core.Automation.Abstractions.IAutoPage page, CancellationToken cancellationToken = default)
     {
         var startTime = DateTime.UtcNow;
         var retryCount = 0;
@@ -125,7 +125,7 @@ public class PageLoadWaitService : IPageLoadWaitService
     /// <param name="timeout">自定义超时时间（可选）</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>等待策略执行结果</returns>
-    public async Task<PageLoadWaitResult> WaitForPageLoadAsync(IPage page, PageLoadStrategy strategy, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    public async Task<PageLoadWaitResult> WaitForPageLoadAsync(HushOps.Core.Automation.Abstractions.IAutoPage page, PageLoadStrategy strategy, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
         return await ExecuteSingleStrategyAsync(page, strategy, timeout, cancellationToken);
     }
@@ -137,7 +137,7 @@ public class PageLoadWaitService : IPageLoadWaitService
     /// <param name="page">浏览器页面实例</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>等待策略执行结果</returns>
-    public async Task<PageLoadWaitResult> WaitForPageLoadFastAsync(IPage page, CancellationToken cancellationToken = default)
+    public async Task<PageLoadWaitResult> WaitForPageLoadFastAsync(HushOps.Core.Automation.Abstractions.IAutoPage page, CancellationToken cancellationToken = default)
     {
         var timeout = TimeSpan.FromMilliseconds(_config.FastModeTimeout);
         
@@ -157,7 +157,7 @@ public class PageLoadWaitService : IPageLoadWaitService
     /// <param name="customTimeout">自定义超时时间</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>等待策略执行结果</returns>
-    private async Task<PageLoadWaitResult> ExecuteSingleStrategyAsync(IPage page, PageLoadStrategy strategy, TimeSpan? customTimeout, CancellationToken cancellationToken)
+    private async Task<PageLoadWaitResult> ExecuteSingleStrategyAsync(HushOps.Core.Automation.Abstractions.IAutoPage page, PageLoadStrategy strategy, TimeSpan? customTimeout, CancellationToken cancellationToken)
     {
         var startTime = DateTime.UtcNow;
         var retryCount = 0;
@@ -191,10 +191,10 @@ public class PageLoadWaitService : IPageLoadWaitService
                 using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
                 // 使用 Playwright 原生等待并传入毫秒级超时；若命中超时将抛出 TimeoutException。
-                await page.WaitForLoadStateAsync(loadState, new PageWaitForLoadStateOptions
-                {
-                    Timeout = (float)timeout.TotalMilliseconds
-                });
+                // 桥接：将抽象等待映射到底层 Playwright Page 的等待
+                var pw = HushOps.Core.Runtime.Playwright.PlaywrightAutoFactory.TryUnwrap(page);
+                if (pw == null) throw new InvalidOperationException("IAutoPage 未绑定 Playwright 实现");
+                await pw.WaitForLoadStateAsync(loadState, new PageWaitForLoadStateOptions { Timeout = (float)timeout.TotalMilliseconds });
 
                 var attemptDuration = DateTime.UtcNow - attemptStartTime;
                 var totalDuration = DateTime.UtcNow - startTime;
@@ -283,19 +283,24 @@ public class PageLoadWaitService : IPageLoadWaitService
     /// </summary>
     /// <param name="page">浏览器页面实例</param>
     /// <returns>页面是否正在加载</returns>
-    public async Task<bool> IsPageLoadingAsync(IPage page)
+    public async Task<bool> IsPageLoadingAsync(HushOps.Core.Automation.Abstractions.IAutoPage page)
     {
+        // 改为“短等待近似判断”，避免业务层 JS 评估
         try
         {
-            var isLoading = await page.EvaluateAsync<bool>(@"
-                () => {
-                    return document.readyState === 'loading' ||
-                           window.performance.getEntriesByType('navigation')[0]?.loadEventEnd === 0;
-                }
-            ");
-            
-            _logger.LogDebug("页面加载状态检查: {IsLoading}", isLoading ? "正在加载" : "已完成");
-            return isLoading;
+            var pw = HushOps.Core.Runtime.Playwright.PlaywrightAutoFactory.TryUnwrap(page);
+            if (pw == null) return false;
+            try
+            {
+                await pw.WaitForLoadStateAsync(LoadState.DOMContentLoaded, new PageWaitForLoadStateOptions { Timeout = 200 });
+                _logger.LogDebug("页面加载状态检查: 已完成");
+                return false;
+            }
+            catch (TimeoutException)
+            {
+                _logger.LogDebug("页面加载状态检查: 正在加载");
+                return true;
+            }
         }
         catch (Exception ex)
         {
@@ -310,14 +315,13 @@ public class PageLoadWaitService : IPageLoadWaitService
     /// <param name="page">浏览器页面实例</param>
     /// <param name="timeout">超时时间</param>
     /// <returns>是否等待成功</returns>
-    public async Task<bool> WaitForLoadCompleteAsync(IPage page, TimeSpan timeout)
+    public async Task<bool> WaitForLoadCompleteAsync(HushOps.Core.Automation.Abstractions.IAutoPage page, TimeSpan timeout)
     {
         try
         {
-            await page.WaitForLoadStateAsync(LoadState.Load, new PageWaitForLoadStateOptions
-            {
-                Timeout = (float)timeout.TotalMilliseconds
-            });
+            var pw = HushOps.Core.Runtime.Playwright.PlaywrightAutoFactory.TryUnwrap(page);
+            if (pw == null) return false;
+            await pw.WaitForLoadStateAsync(LoadState.Load, new PageWaitForLoadStateOptions { Timeout = (float)timeout.TotalMilliseconds });
             
             _logger.LogDebug("页面加载完成等待成功，超时时间: {Timeout}ms", timeout.TotalMilliseconds);
             return true;

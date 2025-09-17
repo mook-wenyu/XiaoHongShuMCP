@@ -4,22 +4,26 @@
 
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![MCP](https://img.shields.io/badge/MCP-0.3.0--preview.4-FF6B6B)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/Tests-67%2B%20✅-4CAF50)](./Tests/)
+[![Tests](https://img.shields.io/badge/Tests-90%2B%20✅-4CAF50)](./Tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的 MCP 服务器，通过智能自动化技术为用户提供安全、高效的小红书运营工具。
+XiaoHongShuMCP 是一个专为小红书(XiaoHongShu)平台设计的“本地 MCP 服务器（stdio-only）”，通过智能自动化技术为用户提供安全、高效的小红书运营工具。项目不包含任何 HTTP/SSE/Streamable HTTP 传输、Collector/Prometheus 出口或 Puppeteer/CDP 插件能力。
 
-## ✨ 核心特性
+## ✨ 核心特性（本地-only / stdio-only）
 
 - **🔐 安全优先** - 所有内容操作仅保存为草稿，确保用户完全控制发布时机
 - **🚀 启动即用** - MCP服务器启动时自动连接浏览器并验证登录状态，无需手动操作
 - **🤖 智能搜索** - 支持多维度筛选的增强搜索功能，自动统计分析
 - **📊 数据分析** - 自动生成 Excel 报告，包含数据质量和互动统计
 - **👤 拟人化交互** - 模拟真人操作模式，智能防检测机制
-- **🧪 完整测试** - 70+ 个测试用例，100% 通过率，保证代码质量
+- **🧪 完整测试** - 90+ 个测试用例，100% 通过率，保证代码质量
 - **🔧 智能监听** - 通用API监听器支持多端点实时数据获取
 - **⚡ 现代架构** - 基于稳定的 .NET 8.0，使用依赖注入和异步编程模式
+- **🧠 工具经纪** - 内置 Tool Broker 动态编排工具，仅暴露拟人化核心能力，支持按 `XHS__McpSettings__EnabledToolNames`/`DisabledToolNames` 白黑名单控制。
+  
+> 说明：本项目仅作为“本地 MCP 服务器（stdio 传输）”供 LLM 客户端使用；不包含任何 HTTP/SSE/Streamable HTTP 网络传输、Collector/Prometheus 出口或 Puppeteer/CDP 插件。
  - **自动导航** - 连接浏览器成功后自动跳转到 `BaseUrl`（默认探索页），不中断主流程
+  - **多上下文池化** - 每账户独立持久化上下文（UserDataDir），池化页面租约，配合并发/速率/熔断治理。
 
 ## 🚀 快速开始
 
@@ -135,7 +139,7 @@ dotnet test Tests
       "args": [
         "run",
         "--project",
-        "/Users/yourname/Projects/XiaoHongShuMCP/XiaoHongShuMCP"
+        "/Users/yourname/Projects/HushOps/XiaoHongShuMCP"
       ],
       "env": {
         "DOTNET_ENVIRONMENT": "Development"
@@ -180,9 +184,44 @@ dotnet test Tests
   - 推荐：`GetRecommendedNotes`（最后一轮强制回主页后直接等待 Homefeed 命中）
   - 详情：`GetNoteDetail`（最后一轮先跳主页→重新定位笔记并点击）
   - 批量：`BatchGetNoteDetails`（最后一轮先跳主页→触发 SearchNotes）
-  - 收集：`SmartCollectionController`（最后一轮强制主页导航后再等待 Homefeed）
 
 说明：上述行为提升了端点未命中时的“自愈”能力，减少 SPA 场景下的死等待与脏状态影响。
+
+#### Playwright 受管浏览器
+
+本项目仅使用 Playwright 直接启动并管理浏览器（持久化上下文），不依赖连接已运行浏览器。
+
+配置键（根节 `XHS`）：
+
+- `XHS:BrowserSettings:Headless`（默认 `false`）
+- `XHS:BrowserSettings:UserDataDir`（默认 `UserDataDir`，位于程序根目录）
+- `XHS:BrowserSettings:Channel`（可选，如 `chrome` / `msedge` / `chromium`）
+- `XHS:BrowserSettings:ExecutablePath`（可选，显式指定浏览器可执行文件）
+
+覆盖方式（示例）：
+
+```bash
+# 环境变量（跨平台）
+XHS__BrowserSettings__Headless=true \
+XHS__BrowserSettings__UserDataDir=profiles/xhs-automation \
+XHS__BrowserSettings__Channel=chrome
+
+# 命令行覆盖
+dotnet run --project XiaoHongShuMCP -- \
+  XHS:BrowserSettings:Headless=true \
+  XHS:BrowserSettings:UserDataDir=profiles/xhs-automation \
+  XHS:BrowserSettings:Channel=chrome
+```
+
+如首次使用 Playwright 内置浏览器，请先执行浏览器安装脚本（任选其一）：
+
+```bash
+# PowerShell（Windows）
+pwsh .\bin\Debug\net8.0\playwright.ps1 install
+
+# Bash（macOS/Linux）
+bash ./bin/Debug/net8.0/playwright.sh install
+```
 
 #### 验证配置
 
@@ -236,23 +275,9 @@ XHS__DetailMatchConfig__MaxDistanceCap=2
 XHS__DetailMatchConfig__UsePinyin=true
 ```
 
-### 6. 端到端演示脚本（E2E）
+### 6. 端到端演示
 
-我们提供了两个演示脚本，覆盖三种起点场景（错误详情页 / 个人页 / 首页），并演示阈值、模糊、拼音等参数对匹配与入口页守护的影响：
-
-- Bash: `scripts/e2e_entry_match_demo.sh`
-- PowerShell: `scripts/e2e_entry_match_demo.ps1`
-
-使用示例：
-
-```
-chmod +x scripts/e2e_entry_match_demo.sh
-scripts/e2e_entry_match_demo.sh wrong-detail '["iPhone 15","苹果"]'
-
-powershell -ExecutionPolicy Bypass -File scripts/e2e_entry_match_demo.ps1 -Scenario profile -KeywordsJson '["美食","杭州"]'
-```
-
-脚本会分三轮执行（严格/模糊/拼音），每轮分别调用 InteractNote（like/favorite 组合）与 PostComment，并打印当前参数与结果。
+建议直接在 MCP 客户端中脚本化“连接 → 搜索 → 详情 → 互动”的流程，不再提供本地 CLI 直调脚本。示例可参考下文各工具的调用片段（伪代码）。
 
 
 ## 📋 主要功能
@@ -322,6 +347,13 @@ dotnet test Tests --collect:"XPlat Code Coverage"
 
 常用键位于以下节：`Serilog`, `UniversalApiMonitor`, `BrowserSettings`, `McpSettings`, `PageLoadWaitConfig`, `SearchTimeoutsConfig`, `InteractionCache`, `EndpointRetry`, `DetailMatchConfig`。
 
+- 工具经纪相关键：
+  - `XHS__McpSettings__EnabledToolNames__0=LikeNote` （仅暴露指定工具，可混用工具名或方法名）
+  - `XHS__McpSettings__DisabledToolNames__0=TemporarySaveAndLeave` （强制下线敏感工具）
+  - `XHS__McpSettings__ToolTitleOverrides__connect_to_browser=浏览器会话保活`（自定义展示标题）
+  - `XHS__McpSettings__ToolDescriptionOverrides__like_note=拟人化点赞，自动遵循节律策略`（重写描述）
+  - 未配置时默认开放所有拟人化核心工具，保持最低安全基线。
+
 #### 按命名空间覆盖日志等级
 - 任意命名空间/类名可单独调级：`Logging:Overrides:<Namespace>=<Level>`
 - 环境变量示例：
@@ -385,7 +417,7 @@ WORKDIR /app
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY ["XiaoHongShuMCP/XiaoHongShuMCP.csproj", "XiaoHongShuMCP/"]
+COPY ["XiaoHongShuMCP/XiaoHongShuMCP.csproj", "HushOps/"]
 RUN dotnet restore "XiaoHongShuMCP/XiaoHongShuMCP.csproj"
 COPY . .
 WORKDIR "/src/XiaoHongShuMCP"
@@ -569,57 +601,50 @@ dotnet test Tests --logger trx --results-directory TestResults
 
 ## 📚 使用示例
 
-### CLI 自测试（callTool 封装）
+### 遥测与选择器维护（内部化）
 
-无需 MCP 客户端也可本地自测：
-
+- 破坏性变更：弱选择器重排与快照导出不再暴露为 MCP 工具，仅通过 CLI/CI 内部使用。
+- 导出弱选择器计划（默认 docs/selector-plans/plan-YYYYMMDD.json）：
 ```bash
-# 例：搜索
-dotnet run --project XiaoHongShuMCP -- callTool GetSearchNotes --json '{
-  "keyword": "健身餐",
-  "maxResults": 5,
-  "includeAnalytics": false,
-  "autoExport": false
-}'
-
-# 例：批量（纯监听）
-dotnet run --project XiaoHongShuMCP -- callTool BatchGetNoteDetails --json '{
-  "keyword": "健身餐",
-  "maxCount": 5,
-  "includeComments": false,
-  "autoExport": false
-}'
-
-# 例：保存草稿（创作平台）
-dotnet run --project XiaoHongShuMCP -- callTool SaveContentDraft --json '{
-  "title": "我的美食分享",
-  "content": "今天尝试了一道新菜...",
-  "noteType": "Image",
-  "imagePaths": ["C:/pics/a.jpg"]
-}'
+dotnet run --project XiaoHongShuMCP -- selector-plan export --threshold 0.5 --minAttempts 10 --out docs/selector-plans
 ```
 
-说明：`callTool` 模式会直接在本地构建依赖注入容器并调用对应工具的方法，输出 JSON 结果，便于脚本化自测。
+- 生成 ADR（docs/adr-0013-*.md）：
+```bash
+dotnet run --project XiaoHongShuMCP -- selector-adr --plan docs/selector-plans/plan-YYYYMMDD.json --threshold 0.5 --minAttempts 10
+```
 
-### 文档一致性核对（docs-verify）
+- 生成或应用最小源码补丁（reorder/prune）：
+```bash
+# 生成补丁（不直接改源码）
+dotnet run --project XiaoHongShuMCP -- selector-plan patch --plan docs/selector-plans/plan-YYYYMMDD.json --mode reorder
 
-快速比对 README 中的 `callTool("ConnectToBrowser")` 用例与代码中的工具清单：
+# 谨慎：直接对源码应用（建议仅在专用分支）
+dotnet run --project XiaoHongShuMCP -- selector-plan apply-source --plan docs/selector-plans/plan-YYYYMMDD.json --mode prune
+```
+
+配置项（默认）：
+- `XHS:Telemetry:Enabled=true`
+- `XHS:Telemetry:Directory=.telemetry`
+
+说明：程序优雅退出后会尝试写入一次遥测快照；选择器治理的重排应用由 `SelectorPlanHostedService` 在启动期按 `XHS:Selectors:PlanPath` 自动应用，不对外暴露。
+
+### 工具清单与文档核对
+
+无需启动 MCP 客户端亦可在本地查看当前可用工具签名（名称/参数）：
 
 ```bash
-dotnet run --project XiaoHongShuMCP -- docs-verify
-dotnet run --project XiaoHongShuMCP -- tools-list   # 打印工具签名（名称/参数）
-
-# 也可用脚本
-scripts/callTool.sh GetSearchNotes --json '{"keyword":"测试"}'
+dotnet run --project XiaoHongShuMCP -- tools-list
+dotnet run --project XiaoHongShuMCP -- docs-verify  # 可选：核对 README 中示例与代码清单
 ```
 
 ### 基础连接
 
-首先连接浏览器并验证登录状态：
+首先通过 MCP 客户端连接浏览器并验证登录状态：
 
 ```typescript
-// 在 Claude Desktop 中调用
-await callTool("ConnectToBrowser", {});
+// 示例（在 MCP 客户端脚本中调用；伪代码，按实际 SDK 调整）
+await mcp.call("ConnectToBrowser", {});
 ```
 
 **预期输出**：
@@ -636,7 +661,7 @@ await callTool("ConnectToBrowser", {});
 获取小红书推荐流笔记：
 
 ```typescript
-await callTool("GetRecommendedNotes", {
+await mcp.call("GetRecommendedNotes", {
   limit: 20,
   timeoutMinutes: 5
 });
@@ -646,7 +671,7 @@ await callTool("GetRecommendedNotes", {
 
 **基础关键词搜索**：
 ```typescript
-await callTool("GetSearchNotes", {
+await mcp.call("GetSearchNotes", {
   keyword: "美食推荐",
   maxResults: 20,
   sortBy: "comprehensive",
@@ -659,7 +684,7 @@ await callTool("GetSearchNotes", {
 
 **高级筛选搜索**（同 `GetSearchNotes`，通过参数控制）：
 ```typescript
-await callTool("GetSearchNotes", {
+await mcp.call("GetSearchNotes", {
   keyword: "减脂餐",
   maxResults: 50,
   sortBy: "most_liked",
@@ -682,7 +707,7 @@ await callTool("GetSearchNotes", {
 
 **单个笔记详情（基于单一关键词）**：
 ```typescript
-await callTool("GetNoteDetail", {
+await mcp.call("GetNoteDetail", {
   keyword: "健身餐",
   includeComments: false
 });
@@ -691,7 +716,7 @@ await callTool("GetNoteDetail", {
 **批量笔记详情（纯监听，无 DOM 依赖）**：
 ```typescript
 // 按关键词组触发 SearchNotes API，仅通过网络监听收集数据
-const result = await callTool("BatchGetNoteDetails", {
+const result = await mcp.call("BatchGetNoteDetails", {
   keyword: "健身餐",
   maxCount: 10,
   includeComments: false,   // 纯监听下建议关闭评论抓取
@@ -708,7 +733,7 @@ if (result.SuccessfulNotes.length > 0) {
 
 **发布评论**：
 ```typescript
-await callTool("PostComment", {
+await mcp.call("PostComment", {
   keyword: "健身餐",
   content: "很棒的分享！学到了很多实用技巧 👍"
 });
@@ -717,16 +742,16 @@ await callTool("PostComment", {
 **点赞/收藏笔记（可组合）**：
 ```typescript
 // 点赞
-await callTool("InteractNote", { keyword: "健身餐", like: true, favorite: false });
+await mcp.call("InteractNote", { keyword: "健身餐", like: true, favorite: false });
 // 收藏
-await callTool("InteractNote", { keyword: "健身餐", like: false, favorite: true });
+await mcp.call("InteractNote", { keyword: "健身餐", like: false, favorite: true });
 // 同时点赞+收藏
-await callTool("InteractNote", { keyword: "健身餐", like: true, favorite: true });
+await mcp.call("InteractNote", { keyword: "健身餐", like: true, favorite: true });
 ```
 
 **保存为草稿（创作平台）**：
 ```typescript
-await callTool("SaveContentDraft", {
+await mcp.call("SaveContentDraft", {
   title: "我的美食分享",
   content: "今天尝试了一道新菜...",
   noteType: "Image", // 或 "Video"
@@ -747,11 +772,11 @@ await callTool("SaveContentDraft", {
 
 ```typescript
 // 1. 连接浏览器
-const connection = await callTool("ConnectToBrowser", {});
+const connection = await mcp.call("ConnectToBrowser", {});
 
 if (connection.IsConnected && connection.IsLoggedIn) {
   // 2. 搜索相关笔记
-  const searchResult = await callTool("GetSearchNotes", {
+  const searchResult = await mcp.call("GetSearchNotes", {
     keyword: "健身餐",
     maxResults: 100,
     sortBy: "most_liked",
@@ -764,7 +789,7 @@ if (connection.IsConnected && connection.IsLoggedIn) {
 
   // 3. 获取详细信息（如有需要）
   if (searchResult.Success && searchResult.SearchResult.Notes.length > 0) {
-    const detailsResult = await callTool("BatchGetNoteDetails", {
+    const detailsResult = await mcp.call("BatchGetNoteDetails", {
       keyword: "健身餐",
       maxCount: 10,
       includeComments: false
@@ -791,7 +816,7 @@ if (connection.IsConnected && connection.IsLoggedIn) {
 所有工具调用都遵循统一的错误处理模式：
 
 ```typescript
-const result = await callTool("GetSearchNotes", {
+const result = await mcp.call("GetSearchNotes", {
   keyword: "测试关键词",
   maxResults: 20
 });
@@ -855,8 +880,8 @@ if (result.Success) {
 
 ## 📞 支持
 
-- 🐛 [报告问题](https://github.com/mook-wenyu/XiaoHongShuMCP/issues)
-- 💡 [功能请求](https://github.com/mook-wenyu/XiaoHongShuMCP/discussions)
+- 🐛 [报告问题](https://github.com/mook-wenyu/HushOps/issues)
+- 💡 [功能请求](https://github.com/mook-wenyu/HushOps/discussions)
 - 👤 维护者：文聿
 - 📧 联系我们：<mailto:1317578863@qq.com>
 

@@ -1,8 +1,11 @@
 using System.Text.Json;
+using System.Diagnostics;
+using HushOps.Core.Observability;
 using System.Text.RegularExpressions;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
+using HushOps.Core.Automation.Abstractions;
 
 namespace XiaoHongShuMCP.Services;
 
@@ -26,10 +29,15 @@ public class UniversalApiMonitor : IUniversalApiMonitor
 {
     private readonly ILogger<UniversalApiMonitor> _logger;
     private readonly XhsSettings.McpSettingsSection _mcpSettings;
+    private readonly XhsSettings.UniversalApiMonitorSection _uamSettings;
+    private readonly ICircuitBreaker? _breaker;
+    private readonly IAccountManager? _accountManager;
     private readonly Dictionary<ApiEndpointType, List<MonitoredApiResponse>> _monitoredResponses;
     private readonly Dictionary<ApiEndpointType, IApiResponseProcessor> _processors;
     private readonly object _lock = new();
-    private IBrowserContext? _context;
+    private readonly INetworkMonitor _network;
+    private readonly HushOps.Core.Networking.IResponseAggregator? _aggregator;
+    private readonly HushOps.Core.Networking.IEndpointClassifier? _classifier;
     private bool _isMonitoring;
     private HashSet<ApiEndpointType> _activeEndpoints;
     private long _responseEventSeq;
@@ -39,14 +47,51 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     private readonly Dictionary<string, NoteDetail> _uniqueNoteDetails;
     private DeduplicationStats _deduplicationStats;
 
-    public UniversalApiMonitor(ILogger<UniversalApiMonitor> logger, Microsoft.Extensions.Options.IOptions<XhsSettings> xhsOptions)
+    // 网络指标统计（简易可观测）
+    private long _totalResponses;
+    private long _success2xx;
+    private long _http429;
+    private long _http403;
+    private long _captchaHints;
+    private readonly Dictionary<ApiEndpointType, long> _endpointHits = new();
+
+    // 指标抽象（由 Host 注入 IMetrics；未注入则为空实现）
+    private readonly IMetrics? _metrics;
+    private readonly ICounter? _mTotalResponses;
+    private readonly ICounter? _mSuccess2xx;
+    private readonly ICounter? _mHttp429;
+    private readonly ICounter? _mHttp403;
+    private readonly ICounter? _mCaptchaHints;
+    private readonly ICounter? _mEndpointHit;
+    private readonly IHistogram? _mProcessDurationMs;
+    private readonly IHistogram? _mRttMs;
+    private readonly HushOps.Core.Humanization.IPacingAdvisor? _pacing;
+
+    public UniversalApiMonitor(
+        ILogger<UniversalApiMonitor> logger,
+        Microsoft.Extensions.Options.IOptions<XhsSettings> xhsOptions,
+        ICircuitBreaker? breaker = null,
+        IAccountManager? accountManager = null,
+        INetworkMonitor? network = null,
+        HushOps.Core.Networking.IResponseAggregator? aggregator = null,
+        HushOps.Core.Networking.IEndpointClassifier? classifier = null,
+        IMetrics? metrics = null,
+        HushOps.Core.Humanization.IPacingAdvisor? pacingAdvisor = null)
     {
         _logger = logger;
         var xhs = xhsOptions.Value ?? new XhsSettings();
         _mcpSettings = xhs.McpSettings ?? new XhsSettings.McpSettingsSection();
+        _uamSettings = xhs.UniversalApiMonitor ?? new XhsSettings.UniversalApiMonitorSection();
+        _breaker = breaker;
+        _accountManager = accountManager;
         _monitoredResponses = new Dictionary<ApiEndpointType, List<MonitoredApiResponse>>();
         _processors = new Dictionary<ApiEndpointType, IApiResponseProcessor>();
         _activeEndpoints = [];
+        _network = network ?? new NullNetworkMonitor();
+        _aggregator = aggregator;
+        _classifier = classifier;
+        _metrics = metrics;
+        _pacing = pacingAdvisor ?? new HushOps.Core.Humanization.PacingAdvisor(Microsoft.Extensions.Options.Options.Create(new HushOps.Core.Humanization.PersonaOptions()));
 
         // 初始化数据去重相关字段
         _processedNoteIds = new HashSet<string>();
@@ -61,6 +106,19 @@ public class UniversalApiMonitor : IUniversalApiMonitor
 
         // 注册默认的响应处理器
         RegisterDefaultProcessors();
+
+        // 初始化指标（是否导出由 Host 控制；此处仅创建抽象计量）
+        if (_metrics != null)
+        {
+            _mTotalResponses = _metrics.CreateCounter("uam_total_responses", "UniversalApiMonitor: 总响应数");
+            _mSuccess2xx = _metrics.CreateCounter("uam_success_2xx", "UniversalApiMonitor: 2xx 成功响应数");
+            _mHttp429 = _metrics.CreateCounter("uam_http_429", "UniversalApiMonitor: 429 响应数");
+            _mHttp403 = _metrics.CreateCounter("uam_http_403", "UniversalApiMonitor: 403 响应数");
+            _mCaptchaHints = _metrics.CreateCounter("uam_captcha_hints", "UniversalApiMonitor: CAPTCHA/验证提示命中次数");
+            _mEndpointHit = _metrics.CreateCounter("uam_endpoint_hits", "UniversalApiMonitor: 端点命中次数");
+            _mProcessDurationMs = _metrics.CreateHistogram("uam_process_duration_ms", "UniversalApiMonitor: 响应处理耗时（毫秒）");
+            _mRttMs = _metrics.CreateHistogram("uam_rtt_ms", "UniversalApiMonitor: 估算往返时延（毫秒）");
+        }
     }
 
     /// <summary>
@@ -92,19 +150,19 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     /// <param name="page">浏览器页面实例</param>
     /// <param name="endpointsToMonitor">要监听的端点类型</param>
     /// <returns>设置是否成功</returns>
-    public bool SetupMonitor(IPage page,
+public bool SetupMonitor(IAutoPage page,
         HashSet<ApiEndpointType> endpointsToMonitor)
     {
         try
         {
-            _context = page.Context;
             _activeEndpoints = endpointsToMonitor;
 
             _logger.LogInformation("正在设置通用API监听器，监听端点: {Endpoints}",
                 string.Join(", ", endpointsToMonitor));
 
-            // 设置被动响应监听器
-            _context.Response += OnResponseReceived;
+            // 绑定抽象网络监听
+            _network.BindAsync(page).GetAwaiter().GetResult();
+            _network.Event += OnNetworkEvent;
 
             _isMonitoring = true;
 
@@ -119,15 +177,73 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     }
 
     /// <summary>
-    /// 响应事件处理：识别端点 → 只处理 200 成功 → 调用端点处理器 → 写入容器。
+    /// 响应事件处理：风控判定 → 识别端点 → 只处理 200 成功 → 调用端点处理器 → 写入容器。
     /// 注意：此回调在 Playwright 事件线程触发，内部仅做必要处理并写入内存，避免耗时阻塞。
     /// </summary>
-    private async void OnResponseReceived(object? sender, IResponse response)
+    private async void OnNetworkEvent(HushOps.Core.Automation.Abstractions.INetworkEvent ev)
     {
         try
         {
+            var sw = _mProcessDurationMs != null ? Stopwatch.StartNew() : null;
+            Interlocked.Increment(ref _responseEventSeq);
+            if (ev.Kind != HushOps.Core.Automation.Abstractions.NetworkEventKind.HttpResponse)
+            {
+                // 非 HTTP 事件：仅进入聚合以便可观测（如 WebSocket 帧）。
+                try { _aggregator?.OnEvent(ev, _classifier!); } catch { }
+                return;
+            }
+
+            // 风控/节流：HTTP 429/403 直接触发熔断（按账号维度）
+            var statusCode = ev.Status ?? 0;
+            // RTT 观测（若可用），并反馈给节律（用于倍率曲线）
+            if (ev.RttMs.HasValue && ev.RttMs.Value >= 0)
+            {
+                try
+                {
+                    var epName = IdentifyApiEndpoint(ev.Url ?? string.Empty)?.ToString() ?? "unknown";
+                    _mRttMs?.Record(ev.RttMs.Value, LabelSet.From(("endpoint", epName)));
+                    _pacing?.ObserveRtt(TimeSpan.FromMilliseconds(ev.RttMs.Value));
+                }
+                catch { }
+            }
+            if (statusCode == 429 || statusCode == 403)
+            {
+                _pacing?.NotifyHttpStatus(statusCode);
+                var key = ($"{_accountManager?.CurrentUser?.UserId ?? "anonymous"}:write");
+                _breaker?.RecordFailure(key, statusCode == 429 ? "HTTP_429" : "HTTP_403");
+                _logger.LogWarning("检测到异常状态码 {Status}，已触发熔断记录 | url={Url}", statusCode, ev.Url);
+                Interlocked.Increment(ref _totalResponses);
+                if (statusCode == 429) Interlocked.Increment(ref _http429);
+                if (statusCode == 403) Interlocked.Increment(ref _http403);
+
+                {
+                    var labels = LabelSet.From(
+                        ("status", statusCode),
+                        ("endpoint", IdentifyApiEndpoint(ev.Url ?? string.Empty)?.ToString() ?? "unknown"));
+                    _mTotalResponses?.Add(1, in labels);
+                    if (statusCode == 429) _mHttp429?.Add(1, in labels);
+                    if (statusCode == 403) _mHttp403?.Add(1, in labels);
+                }
+                return;
+            }
+
+            // URL 层面的 CAPTCHA/验证提示（不依赖正文）
+            var urlLower = (ev.Url ?? string.Empty).ToLowerInvariant();
+            if (urlLower.Contains("captcha") || urlLower.Contains("geetest") || urlLower.Contains("verify"))
+            {
+                var key = ($"{_accountManager?.CurrentUser?.UserId ?? "anonymous"}:write");
+                _breaker?.RecordFailure(key, "CAPTCHA_HINT_URL");
+                _logger.LogWarning("检测到 CAPTCHA/验证提示 URL 迹象，已触发熔断记录 | url={Url}", ev.Url);
+                // 不 return，继续后续识别，以便不影响只读端点
+                Interlocked.Increment(ref _captchaHints);
+                {
+                    var labelsCH = LabelSet.From(("hint", "url"));
+                    _mCaptchaHints?.Add(1, in labelsCH);
+                }
+            }
+
             // 识别API端点类型
-            var endpointType = IdentifyApiEndpoint(response.Url);
+            var endpointType = IdentifyApiEndpoint(ev.Url ?? string.Empty);
             if (endpointType == null)
             {
                 return;
@@ -137,23 +253,48 @@ public class UniversalApiMonitor : IUniversalApiMonitor
                 return;
             }
 
-            _logger.LogDebug("[Resp] 命中端点 {Endpoint} | url={Url}", endpointType, response.Url);
+            _logger.LogDebug("[Resp] 命中端点 {Endpoint} | url={Url}", endpointType, ev.Url);
+            lock (_lock)
+            {
+                _endpointHits[endpointType.Value] = _endpointHits.GetValueOrDefault(endpointType.Value) + 1;
+            }
+            {
+                var labelsEH = LabelSet.From(("endpoint", endpointType.Value.ToString()));
+                _mEndpointHit?.Add(1, in labelsEH);
+            }
 
             // 只处理成功的响应
-            if (response.Status != 200)
+            if ((ev.Status ?? 0) != 200)
             {
+                Interlocked.Increment(ref _totalResponses);
+                {
+                    var labelsNR = LabelSet.From(("status", ev.Status ?? 0), ("endpoint", endpointType.Value.ToString()));
+                    _mTotalResponses?.Add(1, in labelsNR);
+                }
+                // 非200也可计入聚合（无需正文），便于基于分类器观察错误端点分布
+                try { _aggregator?.OnEvent(ev, _classifier!); } catch { }
                 return;
             }
 
             _logger.LogDebug("[Resp] 开始读取响应正文...");
-            var responseBody = await response.TextAsync();
+            var responseBody = ev.Http != null ? await ev.Http.ReadBodyAsync() : string.Empty;
             var sanitized = SanitizeResponseBodyForLog(responseBody);
+            // 进入聚合（窗口内去重/分组）
+            try
+            {
+                if (_classifier != null && _aggregator != null)
+                {
+                    var filled = new FilledHttpEvent(ev.Url ?? string.Empty, ev.Status ?? 200, responseBody, ev.RttMs);
+                    _aggregator.OnEvent(filled, _classifier);
+                }
+            }
+            catch { }
 
             // 使用对应的处理器处理响应
             if (_processors.TryGetValue(endpointType.Value, out var processor))
             {
                 _logger.LogDebug("[Resp] 调用处理器 {Processor}...", processor.GetType().Name);
-                var processedResponse = await processor.ProcessResponseAsync(response.Url, responseBody);
+                var processedResponse = await processor.ProcessResponseAsync(ev.Url!, responseBody);
                 if (processedResponse != null)
                 {
                     lock (_lock)
@@ -170,6 +311,28 @@ public class UniversalApiMonitor : IUniversalApiMonitor
                 {
                     _logger.LogDebug("[Resp] 处理器返回空结果 | endpoint={Endpoint}", endpointType);
                 }
+
+                // 计数 + 周期日志
+                Interlocked.Increment(ref _totalResponses);
+                Interlocked.Increment(ref _success2xx);
+                {
+                    var labelsOK = LabelSet.From(("status", ev.Status ?? 0), ("endpoint", endpointType.Value.ToString()));
+                    _mTotalResponses?.Add(1, in labelsOK);
+                    _mSuccess2xx?.Add(1, in labelsOK);
+                }
+                var every = Math.Max(0, _uamSettings.MetricsLogEveryResponses);
+                if (every > 0 && (Interlocked.Read(ref _responseEventSeq) % every == 0))
+                {
+                    var stats = GetNetworkStats();
+                    _logger.LogInformation("[Metrics] resp={Total} 2xx={Success} 429={R429} 403={R403} captchaHints={CH}",
+                        stats.TotalResponses, stats.Success2xx, stats.Http429, stats.Http403, stats.CaptchaHints);
+                }
+                if (sw != null)
+                {
+                    sw.Stop();
+                    var labelsProc = LabelSet.From(("endpoint", endpointType.Value.ToString()));
+                    _mProcessDurationMs?.Record(sw.Elapsed.TotalMilliseconds, in labelsProc);
+                }
             }
             else
             {
@@ -178,7 +341,7 @@ public class UniversalApiMonitor : IUniversalApiMonitor
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[Resp] 处理API响应时发生错误 | url={Url}", response.Url);
+            _logger.LogWarning(ex, "[Resp] 处理API响应时发生错误 | url={Url}", ev.Url);
         }
     }
 
@@ -369,11 +532,12 @@ public class UniversalApiMonitor : IUniversalApiMonitor
     /// </summary>
     public async Task StopMonitoringAsync()
     {
-        if (_context != null && _isMonitoring)
+        if (_isMonitoring)
         {
             try
             {
-                _context.Response -= OnResponseReceived;
+                _network.Event -= OnNetworkEvent;
+                await _network.UnbindAsync();
                 _isMonitoring = false;
                 _logger.LogInformation("已停止通用API监听");
             }
@@ -525,6 +689,52 @@ public class UniversalApiMonitor : IUniversalApiMonitor
         }
 
         ClearMonitoredData();
+    }
+
+    /// <summary>获取网络指标快照（线程安全拷贝）。</summary>
+    public NetworkStats GetNetworkStats()
+    {
+        lock (_lock)
+        {
+            return new NetworkStats
+            {
+                TotalResponses = _totalResponses,
+                Success2xx = _success2xx,
+                Http429 = _http429,
+                Http403 = _http403,
+                CaptchaHints = _captchaHints,
+                EndpointHits = new Dictionary<ApiEndpointType, long>(_endpointHits)
+            };
+        }
+    }
+
+
+    /// <summary>
+    /// 空实现网络监听器（用于测试或未提供实现的场景）。
+    /// </summary>
+    private sealed class NullNetworkMonitor : INetworkMonitor
+    {
+        public event Action<HushOps.Core.Automation.Abstractions.INetworkEvent>? Event { add { } remove { } }
+        public Task BindAsync(IAutoPage page, CancellationToken ct = default) => Task.CompletedTask;
+        public Task UnbindAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public void Dispose() { }
+    }
+
+    /// <summary>
+    /// 内部包装：承载已读取正文的 HTTP 事件以送入聚合器（避免在监听线程中读取正文）。
+    /// </summary>
+    private sealed class FilledHttpEvent : HushOps.Core.Automation.Abstractions.INetworkEvent
+    {
+        public FilledHttpEvent(string url, int status, string payload, double? rtt)
+        { Url = url; Status = status; Payload = payload; RttMs = rtt; }
+        public HushOps.Core.Automation.Abstractions.NetworkEventKind Kind => HushOps.Core.Automation.Abstractions.NetworkEventKind.HttpResponse;
+        public string Url { get; }
+        public int? Status { get; }
+        public HushOps.Core.Automation.Abstractions.NetworkDirection? Direction => null;
+        public string? Payload { get; }
+        public HushOps.Core.Automation.Abstractions.INetworkResponse? Http => null;
+        public DateTime TimestampUtc { get; } = DateTime.UtcNow;
+        public double? RttMs { get; }
     }
 }
 /// <summary>

@@ -185,10 +185,19 @@ public class AccountManager : IAccountManager
             if (!isLoggedIn)
             {
                 ClearUserInfo();
-                _logger.LogWarning("浏览器未登录，请先登录小红书账号");
-                
+                _logger.LogWarning("浏览器未登录，尝试以可视化模式显示以便登录...");
+                // 未登录时自动显示浏览器（Headful），便于用户交互登录
+                try
+                {
+                    await _browserManager.EnsureHeadfulForLoginAsync("https://www.xiaohongshu.com/explore");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "自动显示浏览器失败（忽略，不影响返回结果）");
+                }
+
                 return OperationResult<bool>.Fail(
-                    "浏览器未登录，请先登录小红书账号",
+                    "浏览器未登录，已自动显示浏览器，请完成登录后重试",
                     ErrorType.LoginRequired,
                     "NOT_LOGGED_IN");
             }
@@ -221,6 +230,34 @@ public class AccountManager : IAccountManager
             _logger.LogWarning(ex, "检查登录状态失败");
             return false;
         }
+    }
+
+    /// <summary>
+    /// 等待直到检测到浏览器已登录或超时（用于自动弹出浏览器后的人机登录流程）。
+    /// </summary>
+    public async Task<bool> WaitUntilLoggedInAsync(TimeSpan maxWait, TimeSpan pollInterval, CancellationToken ct = default)
+    {
+        var deadline = DateTime.UtcNow + maxWait;
+        while (DateTime.UtcNow < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                if (await _browserManager.IsLoggedInAsync())
+                {
+                    _logger.LogInformation("检测到已登录");
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "轮询登录状态时发生异常（忽略）");
+            }
+
+            try { await Task.Delay(pollInterval, ct); } catch (TaskCanceledException) { break; }
+        }
+        _logger.LogInformation("等待登录超时({Seconds}s)", (int)maxWait.TotalSeconds);
+        return false;
     }
 
     /// <summary>
@@ -270,7 +307,8 @@ public class AccountManager : IAccountManager
                     });
                 }
                 // 等待页面加载完成（统一等待服务）
-                await _pageLoadWaitService.WaitForPageLoadAsync(page);
+                var autoPage = HushOps.Core.Runtime.Playwright.PlaywrightAutoFactory.Wrap(page);
+                await _pageLoadWaitService.WaitForPageLoadAsync(autoPage);
             }
             finally
             {
