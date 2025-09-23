@@ -1,4 +1,4 @@
-# XiaoHongShuMCP
+# XiaoHongShuMCP 正在结合自研智能体，当前版本暂不可用（不通用），修复后会撤掉提示。
 
 > 基于 .NET 8.0 和 Model Context Protocol (MCP) 的小红书智能自动化服务器
 
