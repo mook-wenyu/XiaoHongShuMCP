@@ -1,4 +1,0 @@
-{"ts":"2025-09-14T12:00:00Z","evt":"config-unknown-keys","keys":["XHS__Unknown__Foo"]}
-{"ts":"2025-09-14T12:00:01Z","evt":"anti-detect-apply","locale":"zh-CN","tz":"Asia/Shanghai"}
-{"ts":"2025-09-14T12:00:02Z","evt":"read-eval","kind":"navigator","reason":"snapshot"}
-

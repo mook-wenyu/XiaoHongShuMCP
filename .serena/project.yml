@@ -3,7 +3,7 @@
 #  * For JavaScript, use typescript
 # Special requirements:
 #  * csharp: Requires the presence of a .sln file in the project folder.
-language: csharp
+language: typescript
 
 # whether to use the project's gitignore file to ignore files
 # Added on 2025-04-07
@@ -64,4 +64,4 @@ excluded_tools: []
 # (contrary to the memories, which are loaded on demand).
 initial_prompt: ""
 
-project_name: "XiaoHongShuMCP"
+project_name: "HushOps.Servers.XiaoHongShu"
