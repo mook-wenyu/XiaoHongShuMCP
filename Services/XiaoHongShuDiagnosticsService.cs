@@ -26,7 +26,7 @@ public sealed class XiaoHongShuDiagnosticsService
         _logger.LogInformation("XHS 服务器配置 {@Payload}", new
         {
             @event = "xhs_server_configuration",
-            accountCount = options.Accounts.Count,
+            manualLoginRequired = true,
             options.Humanized.MinDelayMs,
             options.Humanized.MaxDelayMs,
             options.Humanized.Jitter

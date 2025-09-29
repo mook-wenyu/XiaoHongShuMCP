@@ -9,7 +9,7 @@
 ## 功能概览
 
 - **Stdio-only MCP 服务器**：通过 `ModelContextProtocol.Server` 托管工具，默认暴露程序集内标记的工具方法。
-- **人性化行动编排**：`HumanizedActionService` 根据账号画像、关键词与延迟配置执行浏览、点赞、收藏、评论等动作。
+- **人性化行动编排**：`HumanizedActionService` 根据画像、关键词与延迟配置执行浏览、点赞、收藏、评论等动作。
 - **浏览器自动化封装**：`IBrowserAutomationService` 负责页面跳转与随机浏览，配合人性化延迟控制节奏。
 - **笔记交互能力**：`INoteEngagementService`、`INoteCaptureService` 提供笔记收藏、点赞与批量捕获等接口。
 - **浏览器配置模式切换**：通过 `xhs_browser_open` 工具选择用户或独立浏览器配置，支持路径自动发现与新建，并缓存已打开配置。
@@ -20,7 +20,7 @@
 | 目录/文件 | 说明 |
 | --- | --- |
 | `Program.cs` | 主入口，注册配置、日志与 MCP 服务器，支持 `--tools-list` 输出工具清单 |
-| `Configuration/` | 包含 `XiaoHongShuOptions`，统一账号、画像、人性化节奏设置 |
+| `Configuration/` | 包含 `XiaoHongShuOptions`，统一默认关键词、画像与人性化节奏设置 |
 | `Services/Browser` | 浏览器自动化实现与接口 |
 | `Services/Humanization` | 画像存储、关键词解析、人性化动作实现 |
 | `Services/Notes` | 笔记仓储与互动服务 |
@@ -52,6 +52,13 @@ dotnet run --project HushOps.Servers.XiaoHongShu.csproj
 dotnet run --project HushOps.Servers.XiaoHongShu.csproj -- --tools-list
 ```
 
+### Playwright 浏览器安装
+
+- **自动安装**：服务器在首次创建 Playwright 会话前会检测浏览器是否已安装，缺失时自动执行 `Microsoft.Playwright.Program.Main("install")`，默认仅下载 Chromium 与 FFMPEG，并在日志中输出安装进度；可通过配置 `playwrightInstallation:skipIfBrowsersPresent` 控制是否在检测到缓存时跳过安装。
+- **手动安装脚本**：CI/CD 或受限环境可运行 `Tools/install-playwright.ps1` / `Tools/install-playwright.sh`；脚本默认使用现成的 `playwright.ps1`，若仓库尚未生成，可在维护者环境携带 `-BuildWhenMissing`（或 `--allow-build`）以触发一次 `dotnet build`。脚本支持 `--configuration`、`--framework`、`--cache-path`、`--browser`、`--force`，以及新增的 `--download-host` / `-DownloadHost`（自定义镜像）与 `--skip-if-present` / `-SkipIfBrowsersPresent` 配置。
+- **缓存与镜像**：可以在配置文件设置 `playwrightInstallation:browsersPath` 指向共享缓存目录，减少重复下载；`playwrightInstallation:downloadHost` 支持自定义镜像源以应对受限网络环境。
+- **故障排查**：若自动安装失败，请手动执行 `pwsh bin/<Configuration>/<TFM>/playwright.ps1 install` 并检查网络/代理设置。
+
 ## 配置说明
 
 - **JSON 配置**：
@@ -60,16 +67,21 @@ dotnet run --project HushOps.Servers.XiaoHongShu.csproj -- --tools-list
 - **环境变量**：统一以 `HUSHOPS_XHS_SERVER_` 作为前缀，例如：
 
 ```bash
-set HUSHOPS_XHS_SERVER_XHS__Accounts__0__Id=demo-account
-set HUSHOPS_XHS_SERVER_XHS__Accounts__0__Cookies="COOKIE=..."
+set HUSHOPS_XHS_SERVER_XHS__DefaultKeyword=旅行攻略
 set HUSHOPS_XHS_SERVER_XHS__Humanized__MinDelayMs=800
+set HUSHOPS_XHS_SERVER_XHS__Humanized__MaxDelayMs=2600
 ```
 
 - **选项要点**（`Configuration/XiaoHongShuOptions`）：
-  - `Accounts`：至少配置一个账号（Id、Cookies）。
   - `Portraits`：提供画像标签与自定义元数据，供关键词解析回退使用。
   - `Humanized`：包含 `MinDelayMs`、`MaxDelayMs`、`Jitter`，控制行为节奏。
   - `DefaultKeyword`：在画像与请求均无关键词时的兜底值。
+
+### 手工登录流程
+
+1. 启动服务器后，调用 `xhs_browser_open`（或使用 MCP 客户端自动调用）打开浏览器。
+2. 在弹出的浏览器窗口中手工登录小红书账号；服务不会保存 Cookie，进程结束后需重新登录。
+3. 登录完成后即可调用 `xhs_random_browse`、`xhs_keyword_browse`、`xhs_like`、`xhs_favorite`、`xhs_comment`、`xhs_note_capture` 等工具执行后续操作。
 
 ## 浏览器配置模式
 
@@ -92,9 +104,8 @@ set HUSHOPS_XHS_SERVER_XHS__Humanized__MinDelayMs=800
 
 ## 测试与质量
 
-- 当前仓库尚未纳入自动化测试，`Tests/` 目录计划在后续迭代补充。
-- 建议在新增测试项目后，将 `dotnet test` 纳入 CI 与 PR 检查。
-- 针对关键服务（配置绑定、人性化延迟、工具枚举、浏览器缓存）优先补齐单元测试。
+- 使用 `dotnet test Tests/HushOps.Servers.XiaoHongShu.Tests/HushOps.Servers.XiaoHongShu.Tests.csproj -c Release` 可运行 13 项单元/集成测试，覆盖 MCP 日志能力、脱敏、通知与端到端日志流程。
+- `dotnet build -c Release`、`dotnet test -c Release` 已作为基线命令，建议纳入 CI。
 - `dotnet run -- --verification-run` 会执行示例浏览器流程并访问状态码端点，默认使用 `https://httpbin.org/status/429`；如网络策略禁止外网访问，可在配置文件中设置 `verification.statusUrl` 指向内网或本地接口，并可通过 `verification.mockStatusCode` 在本地拦截并返回指定状态码。端点不可达时，程序会记录警告且不会退出失败。
 
 ## 开发约定

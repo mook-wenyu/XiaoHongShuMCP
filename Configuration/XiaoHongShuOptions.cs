@@ -5,17 +5,11 @@ using System.ComponentModel.DataAnnotations;
 namespace HushOps.Servers.XiaoHongShu.Configuration;
 
 /// <summary>
-/// 中文：小红书服务器配置模型，统一账号与人性化节奏设置。
+/// 中文：小红书服务器配置模型（保留默认关键词、画像与人性化节奏设置）。
 /// </summary>
 public sealed class XiaoHongShuOptions
 {
     public const string SectionName = "xhs";
-
-    /// <summary>
-    /// 中文：账号列表，至少提供一个。
-    /// </summary>
-    [MinLength(1, ErrorMessage = "至少需要配置一个账号。")]
-    public List<AccountOptions> Accounts { get; init; } = new();
 
     /// <summary>
     /// 中文：默认关键词，画像缺失或关键字为空时回退。
@@ -31,15 +25,6 @@ public sealed class XiaoHongShuOptions
     /// 中文：人性化节奏配置。
     /// </summary>
     public HumanizedOptions Humanized { get; init; } = new();
-
-    public sealed class AccountOptions
-    {
-        [Required]
-        public string Id { get; init; } = string.Empty;
-
-        [Required]
-        public string Cookies { get; init; } = string.Empty;
-    }
 
     public sealed class HumanizedOptions
     {

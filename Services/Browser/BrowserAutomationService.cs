@@ -9,6 +9,7 @@ using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Playwright;
 using HushOps.Servers.XiaoHongShu.Services.Notes;
 using Microsoft.Extensions.Logging;
+using Microsoft.Playwright;
 
 namespace HushOps.Servers.XiaoHongShu.Services.Browser;
 
@@ -195,6 +196,26 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
         {
             await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    public async Task<BrowserPageContext> EnsurePageContextAsync(string browserKey, CancellationToken cancellationToken)
+    {
+        var normalizedKey = NormalizeKey(browserKey);
+        if (!_openedProfiles.TryGetValue(normalizedKey, out var profile))
+        {
+            if (!IsUserProfile(normalizedKey))
+            {
+                throw new InvalidOperationException($"浏览器键 {normalizedKey} 未打开，请先调用 xhs_browser_open。");
+            }
+
+            profile = await EnsureProfileAsync(normalizedKey, null, cancellationToken).ConfigureAwait(false);
+        }
+
+        var fingerprint = await _fingerprintManager.GenerateAsync(profile.ProfileKey, cancellationToken).ConfigureAwait(false);
+        var network = await _networkStrategyManager.PrepareSessionAsync(profile.ProfileKey, cancellationToken).ConfigureAwait(false);
+
+        var page = await _playwrightSessionManager.EnsurePageAsync(profile, network, fingerprint, cancellationToken).ConfigureAwait(false);
+        return new BrowserPageContext(profile, fingerprint, network, page);
     }
 
     private BrowserOpenResult EnsureProfileExists(string browserKey)

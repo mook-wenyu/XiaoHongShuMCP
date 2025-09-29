@@ -1,4 +1,7 @@
 using System;
+using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
+using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
+using Microsoft.Playwright;
 
 namespace HushOps.Servers.XiaoHongShu.Services.Browser;
 
@@ -140,3 +143,9 @@ public sealed record BrowserSessionMetadata(
     int? NetworkRetryBaseDelayMs,
     int? NetworkMaxRetryAttempts,
     int? NetworkMitigationCount);
+
+public sealed record BrowserPageContext(
+    BrowserOpenResult Profile,
+    FingerprintContext Fingerprint,
+    NetworkSessionContext Network,
+    IPage Page);

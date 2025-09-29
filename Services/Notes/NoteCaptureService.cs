@@ -75,18 +75,34 @@ public sealed class NoteCaptureService : INoteCaptureService
     {
         using var stream = _fileSystem.File.Create(path);
         using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        var headers = notes[0].Metrics.Keys.Prepend("id").Prepend("url").Prepend("author").Prepend("title").ToArray();
+
+        var metricKeys = CollectMetricKeys(notes);
+        var headers = new List<string>(capacity: 4 + metricKeys.Count)
+        {
+            "title",
+            "author",
+            "url",
+            "id"
+        };
+        headers.AddRange(metricKeys);
+
         writer.WriteLine(string.Join(',', headers.Select(EscapeCsv)));
+
         foreach (var note in notes)
         {
-            var row = new List<string>
+            var row = new List<string>(capacity: headers.Count)
             {
                 note.Title,
                 note.Author,
                 note.Url,
                 note.Id
             };
-            row.AddRange(note.Metrics.Values);
+
+            foreach (var key in metricKeys)
+            {
+                row.Add(note.Metrics.TryGetValue(key, out var value) ? value ?? string.Empty : string.Empty);
+            }
+
             writer.WriteLine(string.Join(',', row.Select(EscapeCsv)));
         }
     }
@@ -104,11 +120,30 @@ public sealed class NoteCaptureService : INoteCaptureService
 
     private static string EscapeCsv(string value)
     {
-        if (value.IndexOfAny(new[] { ',', '\"', '\n', '\r' }) >= 0)
+        if (value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0)
         {
             return $"\"{value.Replace("\"", "\"\"")}\"";
         }
         return value;
+    }
+
+    private static IList<string> CollectMetricKeys(IReadOnlyList<NoteRecord> notes)
+    {
+        var keys = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var note in notes)
+        {
+            foreach (var key in note.Metrics.Keys)
+            {
+                if (seen.Add(key))
+                {
+                    keys.Add(key);
+                }
+            }
+        }
+
+        return keys;
     }
 }
 

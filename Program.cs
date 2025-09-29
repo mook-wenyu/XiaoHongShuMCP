@@ -4,11 +4,13 @@ using System.Linq;
 using System.Reflection;
 using HushOps.Servers.XiaoHongShu.Configuration;
 using HushOps.Servers.XiaoHongShu.Services;
+using HushOps.Servers.XiaoHongShu.Services.Logging;
 using HushOps.Servers.XiaoHongShu.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using System.Threading.Tasks;
@@ -23,6 +25,10 @@ builder.Services.AddLogging(static options =>
     {
         configure.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffK ";
         configure.SingleLine = true;
+    });
+    options.Services.Configure<ConsoleLoggerOptions>(static console =>
+    {
+        console.LogToStandardErrorThreshold = LogLevel.Trace;
     });
 });
 
@@ -52,7 +58,13 @@ builder.Services
     .Bind(builder.Configuration.GetSection(VerificationOptions.SectionName))
     .ValidateOnStart();
 
+builder.Services
+    .AddOptions<PlaywrightInstallationOptions>()
+    .Bind(builder.Configuration.GetSection(PlaywrightInstallationOptions.SectionName))
+    .ValidateOnStart();
+
 builder.Services.AddXiaoHongShuServer(builder.Configuration, builder.Environment);
+builder.Services.AddMcpLoggingBridge();
 
 builder.Services
     .AddMcpServer(options =>
@@ -63,7 +75,11 @@ builder.Services
             Title = "HushOps XiaoHongShu Server",
             Version = string.Empty
         };
+
+        options.Capabilities ??= new ServerCapabilities();
+        options.Capabilities.Logging ??= new LoggingCapability();
     })
+    .WithSetLoggingLevelHandler(McpLoggingHandlers.HandleSetLoggingLevelAsync)
     .WithStdioServerTransport()
     .WithToolsFromAssembly(typeof(Program).Assembly);
 

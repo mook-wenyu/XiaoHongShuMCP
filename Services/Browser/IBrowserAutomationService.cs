@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Playwright;
 
 namespace HushOps.Servers.XiaoHongShu.Services.Browser;
 
@@ -12,4 +13,5 @@ public interface IBrowserAutomationService
     IReadOnlyDictionary<string, BrowserOpenResult> OpenProfiles { get; }
     Task NavigateRandomAsync(string browserKey, string keyword, bool waitForLoad, CancellationToken cancellationToken);
     Task NavigateKeywordAsync(string browserKey, string keyword, bool waitForLoad, CancellationToken cancellationToken);
+    Task<BrowserPageContext> EnsurePageContextAsync(string browserKey, CancellationToken cancellationToken);
 }

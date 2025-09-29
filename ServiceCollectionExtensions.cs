@@ -7,6 +7,7 @@ using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Playwright;
 using HushOps.Servers.XiaoHongShu.Services.Humanization;
 using HushOps.Servers.XiaoHongShu.Services.Humanization.Behavior;
+using HushOps.Servers.XiaoHongShu.Services.Humanization.Interactions;
 using HushOps.Servers.XiaoHongShu.Services.Notes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,6 +35,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IHumanDelayProvider, HumanDelayProvider>();
         services.AddSingleton<IKeywordResolver, KeywordResolver>();
         services.AddSingleton<IBehaviorController, DefaultBehaviorController>();
+        services.AddSingleton<IInteractionLocatorBuilder, InteractionLocatorBuilder>();
+        services.AddSingleton<IHumanizedActionScriptBuilder, DefaultHumanizedActionScriptBuilder>();
+        services.AddSingleton<IHumanizedInteractionExecutor, HumanizedInteractionExecutor>();
+        services.AddSingleton<ISessionConsistencyInspector, SessionConsistencyInspector>();
         services.AddSingleton<IHumanizedActionService, HumanizedActionService>();
 
         services.AddSingleton<IProfileFingerprintManager, ProfileFingerprintManager>();

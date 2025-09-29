@@ -16,4 +16,9 @@
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="9.0.9" />
     <PackageReference Include="Microsoft.Playwright" Version="1.45.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <None Remove="Tests/**/*.cs" />
+  </ItemGroup>
 </Project>

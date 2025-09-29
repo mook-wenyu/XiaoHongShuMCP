@@ -65,8 +65,7 @@ public sealed class DefaultKeywordProvider : IDefaultKeywordProvider
             return Task.FromResult<string?>(_options.DefaultKeyword!.Trim());
         }
 
-        var account = _options.Accounts.FirstOrDefault();
-        return Task.FromResult<string?>(account?.Id);
+        return Task.FromResult<string?>(null);
     }
 }
 

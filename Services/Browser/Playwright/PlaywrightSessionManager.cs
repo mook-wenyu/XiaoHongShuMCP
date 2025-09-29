@@ -1,20 +1,41 @@
 using System;
 using System.Collections.Concurrent;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using HushOps.Servers.XiaoHongShu.Configuration;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
 
 namespace HushOps.Servers.XiaoHongShu.Services.Browser.Playwright;
 
-public sealed record PlaywrightSession(IBrowserContext Context, string ProfileKey);
+public sealed class PlaywrightSession
+{
+    public PlaywrightSession(IBrowserContext context, IPage page, string profileKey)
+    {
+        Context = context ?? throw new ArgumentNullException(nameof(context));
+        Page = page ?? throw new ArgumentNullException(nameof(page));
+        ProfileKey = profileKey;
+    }
+
+    public IBrowserContext Context { get; }
+
+    public string ProfileKey { get; }
+
+    public IPage Page { get; private set; }
+
+    public void ReplacePage(IPage page)
+    {
+        Page = page;
+    }
+}
 
 public interface IPlaywrightSessionManager
 {
     Task<PlaywrightSession> EnsureSessionAsync(BrowserOpenResult openResult, NetworkSessionContext networkContext, FingerprintContext fingerprintContext, CancellationToken cancellationToken);
+    Task<IPage> EnsurePageAsync(BrowserOpenResult openResult, NetworkSessionContext networkContext, FingerprintContext fingerprintContext, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -28,14 +49,19 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
     private readonly Lazy<Task<IPlaywright>> _playwright;
     private readonly Lazy<Task<IBrowser>> _browser;
     private readonly INetworkStrategyManager _networkStrategyManager;
+    private readonly PlaywrightInstallationOptions _installationOptions;
     private readonly Random _random = new();
 
-    public PlaywrightSessionManager(INetworkStrategyManager networkStrategyManager, ILogger<PlaywrightSessionManager> logger)
+    public PlaywrightSessionManager(
+        INetworkStrategyManager networkStrategyManager,
+        ILogger<PlaywrightSessionManager> logger,
+        IOptions<PlaywrightInstallationOptions> installationOptions)
     {
         _networkStrategyManager = networkStrategyManager;
         _logger = logger;
         _playwright = new Lazy<Task<IPlaywright>>(Microsoft.Playwright.Playwright.CreateAsync);
         _browser = new Lazy<Task<IBrowser>>(CreateBrowserAsync);
+        _installationOptions = installationOptions?.Value ?? new PlaywrightInstallationOptions();
     }
 
     public async Task<PlaywrightSession> EnsureSessionAsync(BrowserOpenResult openResult, NetworkSessionContext networkContext, FingerprintContext fingerprintContext, CancellationToken cancellationToken)
@@ -50,8 +76,22 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
         return session;
     }
 
+    public async Task<IPage> EnsurePageAsync(BrowserOpenResult openResult, NetworkSessionContext networkContext, FingerprintContext fingerprintContext, CancellationToken cancellationToken)
+    {
+        var session = await EnsureSessionAsync(openResult, networkContext, fingerprintContext, cancellationToken).ConfigureAwait(false);
+        if (session.Page is null || session.Page.IsClosed)
+        {
+            var page = await session.Context.NewPageAsync().ConfigureAwait(false);
+            session.ReplacePage(page);
+        }
+
+        return session.Page ?? throw new InvalidOperationException("无法创建 Playwright 页面实例。");
+    }
+
     private async Task<PlaywrightSession> CreateSessionAsync(BrowserOpenResult openResult, NetworkSessionContext networkContext, FingerprintContext fingerprintContext, CancellationToken cancellationToken)
     {
+        await PlaywrightInstaller.EnsureInstalledAsync(_installationOptions, _logger, cancellationToken).ConfigureAwait(false);
+
         var browser = await _browser.Value.ConfigureAwait(false);
 
         var contextOptions = new BrowserNewContextOptions
@@ -79,15 +119,6 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
             };
         }
 
-        if (Directory.Exists(openResult.ProfilePath))
-        {
-            var storagePath = Path.Combine(openResult.ProfilePath, "storage-state.json");
-            if (File.Exists(storagePath))
-            {
-                contextOptions.StorageStatePath = storagePath;
-            }
-        }
-
         var context = await browser.NewContextAsync(contextOptions).ConfigureAwait(false);
 
         if (fingerprintContext.ExtraHeaders.Count > 0)
@@ -107,13 +138,15 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
 
         await ApplyNetworkControlsAsync(openResult.ProfileKey, context, networkContext, cancellationToken).ConfigureAwait(false);
 
+        var page = await context.NewPageAsync().ConfigureAwait(false);
+
         _logger.LogInformation(
             "[Playwright] context created profile={Profile} ua={UA} proxy={Proxy}",
             openResult.ProfileKey,
             fingerprintContext.UserAgent,
             networkContext.ProxyAddress ?? "none");
 
-        return new PlaywrightSession(context, openResult.ProfileKey);
+        return new PlaywrightSession(context, page, openResult.ProfileKey);
     }
 
     private async Task ApplyNetworkControlsAsync(string profileKey, IBrowserContext context, NetworkSessionContext networkContext, CancellationToken cancellationToken)
@@ -188,6 +221,10 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
         {
             try
             {
+                if (session.Page is not null && !session.Page.IsClosed)
+                {
+                    await session.Page.CloseAsync().ConfigureAwait(false);
+                }
                 await session.Context.CloseAsync().ConfigureAwait(false);
             }
             catch

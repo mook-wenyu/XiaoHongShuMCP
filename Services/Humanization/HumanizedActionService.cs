@@ -1,153 +1,298 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using HushOps.Servers.XiaoHongShu.Configuration;
 using HushOps.Servers.XiaoHongShu.Infrastructure.ToolExecution;
 using HushOps.Servers.XiaoHongShu.Services.Browser;
-using HushOps.Servers.XiaoHongShu.Services.Notes;
 using HushOps.Servers.XiaoHongShu.Services.Humanization.Behavior;
+using HushOps.Servers.XiaoHongShu.Services.Humanization.Interactions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace HushOps.Servers.XiaoHongShu.Services.Humanization;
 
 /// <summary>
-/// 中文：拟人化行为实现，负责选择关键词、节奏控制与浏览器交互。
+/// 中文：拟人化动作服务，负责生成计划、执行脚本并记录一致性指标。
+/// English: Humanized action service that prepares plans, executes scripts, and captures consistency metrics.
 /// </summary>
 public sealed class HumanizedActionService : IHumanizedActionService
 {
     private readonly IKeywordResolver _keywordResolver;
     private readonly IHumanDelayProvider _delayProvider;
     private readonly IBrowserAutomationService _browserAutomation;
-    private readonly INoteEngagementService _noteEngagement;
+    private readonly IHumanizedActionScriptBuilder _scriptBuilder;
+    private readonly IHumanizedInteractionExecutor _executor;
     private readonly IBehaviorController _behaviorController;
+    private readonly ISessionConsistencyInspector _consistencyInspector;
+    private readonly HumanBehaviorOptions _behaviorOptions;
     private readonly ILogger<HumanizedActionService> _logger;
 
     public HumanizedActionService(
         IKeywordResolver keywordResolver,
         IHumanDelayProvider delayProvider,
         IBrowserAutomationService browserAutomation,
-        INoteEngagementService noteEngagement,
+        IHumanizedActionScriptBuilder scriptBuilder,
+        IHumanizedInteractionExecutor executor,
         IBehaviorController behaviorController,
+        ISessionConsistencyInspector consistencyInspector,
+        IOptions<HumanBehaviorOptions> behaviorOptions,
         ILogger<HumanizedActionService> logger)
     {
-        _keywordResolver = keywordResolver;
-        _delayProvider = delayProvider;
-        _browserAutomation = browserAutomation;
-        _noteEngagement = noteEngagement;
-        _behaviorController = behaviorController;
-        _logger = logger;
+        _keywordResolver = keywordResolver ?? throw new ArgumentNullException(nameof(keywordResolver));
+        _delayProvider = delayProvider ?? throw new ArgumentNullException(nameof(delayProvider));
+        _browserAutomation = browserAutomation ?? throw new ArgumentNullException(nameof(browserAutomation));
+        _scriptBuilder = scriptBuilder ?? throw new ArgumentNullException(nameof(scriptBuilder));
+        _executor = executor ?? throw new ArgumentNullException(nameof(executor));
+        _behaviorController = behaviorController ?? throw new ArgumentNullException(nameof(behaviorController));
+        _consistencyInspector = consistencyInspector ?? throw new ArgumentNullException(nameof(consistencyInspector));
+        if (behaviorOptions is null)
+        {
+            throw new ArgumentNullException(nameof(behaviorOptions));
+        }
+
+        _behaviorOptions = behaviorOptions.Value ?? new HumanBehaviorOptions();
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<HumanizedActionOutcome> ExecuteAsync(HumanizedActionRequest request, HumanizedActionKind kind, CancellationToken cancellationToken)
+    public async Task<HumanizedActionPlan> PrepareAsync(HumanizedActionRequest request, HumanizedActionKind kind, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(request);
+
         var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["kind"] = kind.ToString()
+            ["kind"] = kind.ToString(),
+            ["requestId"] = request.RequestId ?? string.Empty
         };
 
-        var requestedKey = string.IsNullOrWhiteSpace(request.BrowserKey) ? "user" : request.BrowserKey.Trim();
+        var requestedKey = string.IsNullOrWhiteSpace(request.BrowserKey)
+            ? BrowserOpenRequest.UserProfileKey
+            : request.BrowserKey.Trim();
         metadata["browserKey"] = requestedKey;
+
+        var behaviorProfileKey = string.IsNullOrWhiteSpace(request.BehaviorProfile)
+            ? _behaviorOptions.DefaultProfile
+            : request.BehaviorProfile.Trim();
+        metadata["behaviorProfile"] = behaviorProfileKey;
 
         if (!_browserAutomation.TryGetOpenProfile(requestedKey, out var profile))
         {
             if (!string.Equals(requestedKey, BrowserOpenRequest.UserProfileKey, StringComparison.OrdinalIgnoreCase))
             {
-                return HumanizedActionOutcome.Fail("ERR_BROWSER_KEY_NOT_FOUND", $"浏览器键 {requestedKey} 未打开，请先调用 xhs_browser_open。", metadata);
+                throw new InvalidOperationException($"浏览器键 {requestedKey} 未打开，请先调用 xhs_browser_open。");
             }
 
             profile = await _browserAutomation.EnsureProfileAsync(requestedKey, null, cancellationToken).ConfigureAwait(false);
         }
 
-        metadata["browserKey"] = profile!.ProfileKey;
+        profile = profile!.EnsureValid();
+
+        metadata["browserKey"] = profile.ProfileKey;
         metadata["browserPath"] = profile.ProfilePath;
+        metadata["browserAlreadyOpen"] = profile.AlreadyOpen.ToString();
+        metadata["browserAutoOpened"] = profile.AutoOpened.ToString();
+        metadata["browserIsNew"] = profile.IsNewProfile.ToString();
+        metadata["browserFallback"] = profile.UsedFallbackPath.ToString();
         if (!string.IsNullOrWhiteSpace(profile.ProfileDirectoryName))
         {
             metadata["browserFolder"] = profile.ProfileDirectoryName!;
         }
-        metadata["browserAlreadyOpen"] = profile.AlreadyOpen.ToString();
-        metadata["browserAutoOpened"] = profile.AutoOpened.ToString();
 
-        if (profile.SessionMetadata is not null)
+        if (profile.SessionMetadata is { } session)
         {
-            metadata["fingerprintHash"] = profile.SessionMetadata.FingerprintHash ?? string.Empty;
-            metadata["fingerprintUserAgent"] = profile.SessionMetadata.UserAgent ?? string.Empty;
-            metadata["fingerprintTimezone"] = profile.SessionMetadata.Timezone ?? string.Empty;
-            metadata["fingerprintLanguage"] = profile.SessionMetadata.Language ?? string.Empty;
-            metadata["fingerprintViewportWidth"] = profile.SessionMetadata.ViewportWidth?.ToString() ?? string.Empty;
-            metadata["fingerprintViewportHeight"] = profile.SessionMetadata.ViewportHeight?.ToString() ?? string.Empty;
-            metadata["fingerprintDeviceScale"] = profile.SessionMetadata.DeviceScaleFactor?.ToString("F1") ?? string.Empty;
-            metadata["fingerprintIsMobile"] = profile.SessionMetadata.IsMobile?.ToString() ?? string.Empty;
-            metadata["fingerprintHasTouch"] = profile.SessionMetadata.HasTouch?.ToString() ?? string.Empty;
-            metadata["networkProxyId"] = profile.SessionMetadata.ProxyId ?? string.Empty;
-            metadata["networkProxyAddress"] = profile.SessionMetadata.ProxyAddress ?? string.Empty;
-            metadata["networkExitIp"] = profile.SessionMetadata.ExitIpAddress ?? string.Empty;
-            if (profile.SessionMetadata.NetworkDelayMinMs.HasValue)
+            metadata["fingerprintHash"] = session.FingerprintHash ?? string.Empty;
+            metadata["fingerprintUserAgent"] = session.UserAgent ?? string.Empty;
+            metadata["fingerprintTimezone"] = session.Timezone ?? string.Empty;
+            metadata["fingerprintLanguage"] = session.Language ?? string.Empty;
+            metadata["fingerprintViewportWidth"] = session.ViewportWidth?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            metadata["fingerprintViewportHeight"] = session.ViewportHeight?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            metadata["fingerprintDeviceScale"] = session.DeviceScaleFactor?.ToString("F1", CultureInfo.InvariantCulture) ?? string.Empty;
+            metadata["fingerprintIsMobile"] = session.IsMobile?.ToString() ?? string.Empty;
+            metadata["fingerprintHasTouch"] = session.HasTouch?.ToString() ?? string.Empty;
+            metadata["networkProxyId"] = session.ProxyId ?? string.Empty;
+            metadata["networkProxyAddress"] = session.ProxyAddress ?? string.Empty;
+            metadata["networkExitIp"] = session.ExitIpAddress ?? string.Empty;
+            if (session.NetworkDelayMinMs.HasValue)
             {
-                metadata["networkDelayMinMs"] = profile.SessionMetadata.NetworkDelayMinMs.Value.ToString();
+                metadata["networkDelayMinMs"] = session.NetworkDelayMinMs.Value.ToString(CultureInfo.InvariantCulture);
             }
-            if (profile.SessionMetadata.NetworkDelayMaxMs.HasValue)
+
+            if (session.NetworkDelayMaxMs.HasValue)
             {
-                metadata["networkDelayMaxMs"] = profile.SessionMetadata.NetworkDelayMaxMs.Value.ToString();
+                metadata["networkDelayMaxMs"] = session.NetworkDelayMaxMs.Value.ToString(CultureInfo.InvariantCulture);
             }
-            if (profile.SessionMetadata.NetworkRetryBaseDelayMs.HasValue)
+
+            if (session.NetworkRetryBaseDelayMs.HasValue)
             {
-                metadata["networkRetryBaseDelayMs"] = profile.SessionMetadata.NetworkRetryBaseDelayMs.Value.ToString();
+                metadata["networkRetryBaseDelayMs"] = session.NetworkRetryBaseDelayMs.Value.ToString(CultureInfo.InvariantCulture);
             }
-            if (profile.SessionMetadata.NetworkMaxRetryAttempts.HasValue)
+
+            if (session.NetworkMaxRetryAttempts.HasValue)
             {
-                metadata["networkMaxRetryAttempts"] = profile.SessionMetadata.NetworkMaxRetryAttempts.Value.ToString();
+                metadata["networkMaxRetryAttempts"] = session.NetworkMaxRetryAttempts.Value.ToString(CultureInfo.InvariantCulture);
             }
-            if (profile.SessionMetadata.NetworkMitigationCount.HasValue)
+
+            if (session.NetworkMitigationCount.HasValue)
             {
-                metadata["networkMitigationCount"] = profile.SessionMetadata.NetworkMitigationCount.Value.ToString();
+                metadata["networkMitigationCount"] = session.NetworkMitigationCount.Value.ToString(CultureInfo.InvariantCulture);
             }
         }
 
-        var behaviorContext = new BehaviorActionContext(
+        var normalizedRequest = new HumanizedActionRequest(
+            request.Keyword,
+            request.PortraitId,
+            request.CommentText,
+            request.WaitForLoad,
             profile.ProfileKey,
-            MapBehaviorActionType(kind),
-            metadata,
-            cancellationToken);
+            request.RequestId,
+            behaviorProfileKey);
 
+        var resolvedKeyword = await _keywordResolver.ResolveAsync(request.Keyword, request.PortraitId, metadata, cancellationToken)
+            .ConfigureAwait(false);
+        metadata["resolvedKeyword"] = resolvedKeyword;
+
+        var script = _scriptBuilder.Build(normalizedRequest, kind, resolvedKeyword);
+        metadata["script.actionCount"] = script.Actions.Count.ToString(CultureInfo.InvariantCulture);
+        metadata["script.actions"] = string.Join(",", script.Actions.Select(action => action.Type.ToString()));
+        var plannedSummary = script.ToSummary();
+        metadata["humanized.plan.count"] = plannedSummary.Count.ToString(CultureInfo.InvariantCulture);
+        metadata["humanized.plan.actions"] = string.Join(",", plannedSummary.Actions);
+        metadata["plan.actionCount"] = plannedSummary.Count.ToString(CultureInfo.InvariantCulture);
+        metadata["plan.actions"] = metadata["humanized.plan.actions"];
+        for (var i = 0; i < script.Actions.Count; i++)
+        {
+            metadata[$"script.actions.{i}"] = script.Actions[i].Type.ToString();
+        }
+
+        for (var i = 0; i < plannedSummary.Actions.Count; i++)
+        {
+            metadata[$"humanized.plan.actions.{i}"] = plannedSummary.Actions[i];
+            metadata[$"plan.actions.{i}"] = plannedSummary.Actions[i];
+        }
+
+        var behaviorProfileOptions = ResolveBehaviorProfile(behaviorProfileKey);
+
+        return HumanizedActionPlan.Create(kind, normalizedRequest, resolvedKeyword, profile, behaviorProfileOptions, script, metadata);
+    }
+
+    public async Task<HumanizedActionOutcome> ExecuteAsync(HumanizedActionPlan plan, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        var metadata = new Dictionary<string, string>(plan.Metadata, StringComparer.OrdinalIgnoreCase)
+        {
+            ["kind"] = plan.Kind.ToString(),
+            ["browserKey"] = plan.BrowserKey,
+            ["behaviorProfile"] = plan.BehaviorProfile
+        };
+
+        if (!metadata.ContainsKey("requestId"))
+        {
+            metadata["requestId"] = plan.Request.RequestId ?? string.Empty;
+        }
+
+        var plannedSummary = plan.Script.ToSummary();
+        metadata["humanized.plan.count"] = plannedSummary.Count.ToString(CultureInfo.InvariantCulture);
+        metadata["humanized.plan.actions"] = string.Join(",", plannedSummary.Actions);
+        for (var i = 0; i < plannedSummary.Actions.Count; i++)
+        {
+            metadata[$"humanized.plan.actions.{i}"] = plannedSummary.Actions[i];
+        }
+
+        var behaviorContext = new BehaviorActionContext(plan.Profile.ProfileKey, MapBehaviorActionType(plan.Kind), metadata, cancellationToken);
         var preTrace = await _behaviorController.ExecuteBeforeActionAsync(behaviorContext).ConfigureAwait(false);
         AppendBehaviorTrace(metadata, preTrace, "pre");
 
-        var effectiveKey = profile.ProfileKey;
-
         try
         {
-            var keyword = await _keywordResolver.ResolveAsync(request.Keyword, request.PortraitId, metadata, cancellationToken).ConfigureAwait(false);
-            switch (kind)
+            metadata["resolvedKeyword"] = plan.ResolvedKeyword;
+            metadata["script.actionCount"] = plannedSummary.Count.ToString(CultureInfo.InvariantCulture);
+            metadata["script.actions"] = string.Join(",", plannedSummary.Actions);
+            metadata["plan.actionCount"] = plannedSummary.Count.ToString(CultureInfo.InvariantCulture);
+            metadata["plan.actions"] = metadata["script.actions"];
+            for (var i = 0; i < plannedSummary.Actions.Count; i++)
             {
-                case HumanizedActionKind.RandomBrowse:
-                    await _browserAutomation.NavigateRandomAsync(effectiveKey, keyword, request.WaitForLoad, cancellationToken).ConfigureAwait(false);
-                    break;
-                case HumanizedActionKind.KeywordBrowse:
-                    await _browserAutomation.NavigateKeywordAsync(effectiveKey, keyword, request.WaitForLoad, cancellationToken).ConfigureAwait(false);
-                    break;
-                case HumanizedActionKind.Like:
-                    await _noteEngagement.LikeAsync(keyword, cancellationToken).ConfigureAwait(false);
-                    break;
-                case HumanizedActionKind.Favorite:
-                    await _noteEngagement.FavoriteAsync(keyword, cancellationToken).ConfigureAwait(false);
-                    break;
-                case HumanizedActionKind.Comment:
-                    if (string.IsNullOrWhiteSpace(request.CommentText))
-                    {
-                        return HumanizedActionOutcome.Fail("ERR_INVALID_ARGUMENT", "commentText 不能为空", metadata);
-                    }
-                    metadata["comment"] = request.CommentText!.Trim();
-                    await _noteEngagement.CommentAsync(keyword, request.CommentText!.Trim(), cancellationToken).ConfigureAwait(false);
-                    break;
-                default:
-                    return HumanizedActionOutcome.Fail("ERR_UNSUPPORTED", $"不支持的动作类型：{kind}", metadata);
+                metadata[$"script.actions.{i}"] = plannedSummary.Actions[i];
+                metadata[$"plan.actions.{i}"] = plannedSummary.Actions[i];
+            }
+
+            metadata["execution.status"] = "pending";
+            metadata["execution.actionCount"] = "0";
+            metadata["execution.actions"] = string.Empty;
+            metadata["humanized.execute.status"] = "pending";
+            metadata["humanized.execute.count"] = "0";
+            metadata["humanized.execute.actions"] = string.Empty;
+
+            var pageContext = await _browserAutomation.EnsurePageContextAsync(plan.Profile.ProfileKey, cancellationToken)
+                .ConfigureAwait(false);
+
+            metadata["fingerprintUserAgent"] = pageContext.Fingerprint.UserAgent;
+            metadata["fingerprintTimezone"] = pageContext.Fingerprint.Timezone;
+            metadata["fingerprintLanguage"] = pageContext.Fingerprint.Language;
+            metadata["fingerprintViewportWidth"] = pageContext.Fingerprint.ViewportWidth.ToString(CultureInfo.InvariantCulture);
+            metadata["fingerprintViewportHeight"] = pageContext.Fingerprint.ViewportHeight.ToString(CultureInfo.InvariantCulture);
+            metadata["fingerprintIsMobile"] = pageContext.Fingerprint.IsMobile.ToString();
+            metadata["fingerprintHasTouch"] = pageContext.Fingerprint.HasTouch.ToString();
+            metadata["networkProxyAddress"] = pageContext.Network.ProxyAddress ?? string.Empty;
+            metadata["networkDelayMinMs"] = pageContext.Network.DelayMinMs.ToString(CultureInfo.InvariantCulture);
+            metadata["networkDelayMaxMs"] = pageContext.Network.DelayMaxMs.ToString(CultureInfo.InvariantCulture);
+            metadata["networkMitigationCount"] = pageContext.Network.MitigationCount.ToString(CultureInfo.InvariantCulture);
+
+            var report = await _consistencyInspector.InspectAsync(pageContext, plan.BehaviorProfileOptions, cancellationToken)
+                .ConfigureAwait(false);
+            metadata["consistency.uaMatch"] = report.UserAgentMatch.ToString();
+            metadata["consistency.languageMatch"] = report.LanguageMatch.ToString();
+            metadata["consistency.timezoneMatch"] = report.TimezoneMatch.ToString();
+            metadata["consistency.viewportMatch"] = report.ViewportMatch.ToString();
+            metadata["consistency.isMobileMatch"] = report.IsMobileMatch.ToString();
+            metadata["consistency.proxyConfigured"] = report.ProxyConfigured.ToString();
+            metadata["consistency.proxyRequirementSatisfied"] = report.ProxyRequirementSatisfied.ToString();
+            metadata["consistency.gpuInfoAvailable"] = report.GpuInfoAvailable.ToString();
+            metadata["consistency.gpuRequirementSatisfied"] = report.GpuRequirementSatisfied.ToString();
+            metadata["consistency.gpuSuspicious"] = report.GpuSuspicious.ToString();
+            metadata["consistency.automationDetected"] = report.AutomationIndicatorsDetected.ToString();
+            metadata["consistency.pageUserAgent"] = report.PageUserAgent ?? string.Empty;
+            metadata["consistency.pageLanguage"] = report.PageLanguage ?? string.Empty;
+            metadata["consistency.pageTimezone"] = report.PageTimezone ?? string.Empty;
+            metadata["consistency.pageViewportWidth"] = report.PageViewportWidth.ToString(CultureInfo.InvariantCulture);
+            metadata["consistency.pageViewportHeight"] = report.PageViewportHeight.ToString(CultureInfo.InvariantCulture);
+            metadata["consistency.hardwareConcurrency"] = report.HardwareConcurrency.ToString(CultureInfo.InvariantCulture);
+            metadata["consistency.deviceMemoryGb"] = report.DeviceMemoryGb?.ToString("F1", CultureInfo.InvariantCulture) ?? string.Empty;
+            metadata["consistency.platform"] = report.Platform ?? string.Empty;
+            metadata["consistency.vendor"] = report.Vendor ?? string.Empty;
+            metadata["consistency.gpuVendor"] = report.GpuVendor ?? string.Empty;
+            metadata["consistency.gpuRenderer"] = report.GpuRenderer ?? string.Empty;
+            metadata["consistency.connection.effectiveType"] = report.ConnectionEffectiveType ?? string.Empty;
+            metadata["consistency.connection.downlinkMbps"] = report.ConnectionDownlinkMbps?.ToString("F2", CultureInfo.InvariantCulture) ?? string.Empty;
+            metadata["consistency.connection.rttMs"] = report.ConnectionRttMs?.ToString("F0", CultureInfo.InvariantCulture) ?? string.Empty;
+            metadata["consistency.connection.saveData"] = report.ConnectionSaveDataEnabled.ToString();
+            for (var i = 0; i < report.Warnings.Count; i++)
+            {
+                metadata[$"consistency.warning.{i}"] = report.Warnings[i];
+            }
+
+            await _executor.ExecuteAsync(pageContext.Page, plan.Script, cancellationToken).ConfigureAwait(false);
+            var executedSummary = plan.Script.ToSummary();
+            metadata["execution.actionCount"] = executedSummary.Count.ToString(CultureInfo.InvariantCulture);
+            metadata["execution.actions"] = string.Join(",", executedSummary.Actions);
+            metadata["execution.status"] = "success";
+            metadata["humanized.execute.count"] = executedSummary.Count.ToString(CultureInfo.InvariantCulture);
+            metadata["humanized.execute.actions"] = string.Join(",", executedSummary.Actions);
+            metadata["humanized.execute.status"] = "success";
+            for (var i = 0; i < executedSummary.Actions.Count; i++)
+            {
+                metadata[$"execution.actions.{i}"] = executedSummary.Actions[i];
+                metadata[$"humanized.execute.actions.{i}"] = executedSummary.Actions[i];
             }
 
             await _delayProvider.DelayBetweenActionsAsync(cancellationToken).ConfigureAwait(false);
-            var postSuccessTrace = await _behaviorController
-                .ExecuteAfterActionAsync(behaviorContext, new BehaviorResult(true, "ok"))
+
+            var postTrace = await _behaviorController.ExecuteAfterActionAsync(behaviorContext, new BehaviorResult(true, "ok"))
                 .ConfigureAwait(false);
-            AppendBehaviorTrace(metadata, postSuccessTrace, "post");
+            AppendBehaviorTrace(metadata, postTrace, "post");
+
             return HumanizedActionOutcome.Ok(metadata);
         }
         catch (OperationCanceledException)
@@ -156,13 +301,65 @@ public sealed class HumanizedActionService : IHumanizedActionService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[HumanizedAction] 执行失败 kind={Kind}", kind);
+            var status = ServerToolExecutor.MapExceptionCode(ex);
+            _logger.LogWarning(ex, "[HumanizedAction] 执行失败 kind={Kind} status={Status}", plan.Kind, status);
             metadata["error"] = ex.Message;
-            var failureTrace = await _behaviorController
-                .ExecuteAfterActionAsync(behaviorContext, new BehaviorResult(false, ServerToolExecutor.MapExceptionCode(ex)))
+            metadata["execution.status"] = "failed";
+            metadata["execution.actionCount"] = "0";
+            metadata["execution.actions"] = string.Empty;
+            metadata["humanized.execute.status"] = "failed";
+            metadata["humanized.execute.count"] = "0";
+            metadata["humanized.execute.actions"] = string.Empty;
+
+            var failureTrace = await _behaviorController.ExecuteAfterActionAsync(behaviorContext, new BehaviorResult(false, status))
                 .ConfigureAwait(false);
             AppendBehaviorTrace(metadata, failureTrace, "post");
-            return HumanizedActionOutcome.Fail(ServerToolExecutor.MapExceptionCode(ex), ex.Message, metadata);
+
+            return HumanizedActionOutcome.Fail(status, ex.Message, metadata);
+        }
+    }
+
+    public async Task<HumanizedActionOutcome> ExecuteAsync(HumanizedActionRequest request, HumanizedActionKind kind, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        try
+        {
+            var plan = await PrepareAsync(request, kind, cancellationToken).ConfigureAwait(false);
+            return await ExecuteAsync(plan, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["kind"] = kind.ToString(),
+                ["browserKey"] = string.IsNullOrWhiteSpace(request.BrowserKey) ? BrowserOpenRequest.UserProfileKey : request.BrowserKey.Trim(),
+                ["behaviorProfile"] = string.IsNullOrWhiteSpace(request.BehaviorProfile) ? _behaviorOptions.DefaultProfile : request.BehaviorProfile.Trim(),
+                ["requestId"] = request.RequestId ?? string.Empty,
+            };
+
+            metadata["error"] = ex.Message;
+
+            return HumanizedActionOutcome.Fail("ERR_BROWSER_KEY_NOT_FOUND", ex.Message, metadata);
+        }
+        catch (Exception ex)
+        {
+            var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["kind"] = kind.ToString(),
+                ["browserKey"] = string.IsNullOrWhiteSpace(request.BrowserKey) ? BrowserOpenRequest.UserProfileKey : request.BrowserKey.Trim(),
+                ["behaviorProfile"] = string.IsNullOrWhiteSpace(request.BehaviorProfile) ? _behaviorOptions.DefaultProfile : request.BehaviorProfile.Trim(),
+                ["requestId"] = request.RequestId ?? string.Empty,
+                ["error"] = ex.Message
+            };
+
+            var status = ServerToolExecutor.MapExceptionCode(ex);
+            _logger.LogWarning(ex, "[HumanizedAction] 准备阶段失败 kind={Kind} status={Status}", kind, status);
+            return HumanizedActionOutcome.Fail(status, ex.Message, metadata);
         }
     }
 
@@ -173,7 +370,7 @@ public sealed class HumanizedActionService : IHumanizedActionService
             return;
         }
 
-        metadata[$"behavior.{stage}.durationMs"] = trace.DurationMs.ToString("F0");
+        metadata[$"behavior.{stage}.durationMs"] = trace.DurationMs.ToString("F0", CultureInfo.InvariantCulture);
         foreach (var pair in trace.Extras)
         {
             metadata[$"behavior.{stage}.{pair.Key}"] = pair.Value;
@@ -190,6 +387,21 @@ public sealed class HumanizedActionService : IHumanizedActionService
             HumanizedActionKind.Comment => BehaviorActionType.Comment,
             _ => BehaviorActionType.Unknown
         };
+
+    private HumanBehaviorProfileOptions ResolveBehaviorProfile(string profileKey)
+    {
+        if (!string.IsNullOrWhiteSpace(profileKey) && _behaviorOptions.Profiles.TryGetValue(profileKey, out var configured))
+        {
+            return configured;
+        }
+
+        if (_behaviorOptions.Profiles.TryGetValue(_behaviorOptions.DefaultProfile, out var fallback))
+        {
+            return fallback;
+        }
+
+        return HumanBehaviorProfileOptions.CreateDefault();
+    }
 }
 
 public interface IKeywordResolver

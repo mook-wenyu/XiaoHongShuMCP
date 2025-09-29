@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HushOps.Servers.XiaoHongShu.Configuration;
@@ -31,13 +30,11 @@ public sealed class XiaoHongShuServerHostedService : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         var value = _options.Value ?? new XiaoHongShuOptions();
-        if (!value.Accounts.Any())
+        _logger.LogInformation("XHS 服务器启动，需在浏览器内手工登录小红书账号 {@Payload}", new
         {
-            _logger.LogWarning("XHS 服务器启动时未发现账号配置，将以只读模式运行。{@Payload}", new
-            {
-                @event = "xhs_server_missing_accounts"
-            });
-        }
+            @event = "xhs_server_manual_login_required",
+            manualLoginRequired = true
+        });
 
         _diagnostics.LogConfiguration(value);
         return Task.CompletedTask;
