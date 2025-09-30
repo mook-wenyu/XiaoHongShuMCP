@@ -177,7 +177,7 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
     public async Task NavigateRandomAsync(string browserKey, string keyword, bool waitForLoad, CancellationToken cancellationToken)
     {
         var profile = EnsureProfileExists(browserKey);
-        var notes = await _repository.QueryAsync(keyword, 10, "comprehensive", "all", "all", cancellationToken).ConfigureAwait(false);
+        var notes = await _repository.QueryAsync(keyword, 10, cancellationToken).ConfigureAwait(false);
         var selected = notes.Count > 0 ? notes[Random.Shared.Next(notes.Count)] : null;
         LogNavigation(profile.ProfileKey, "random", keyword, selected);
         if (waitForLoad)
@@ -189,7 +189,7 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
     public async Task NavigateKeywordAsync(string browserKey, string keyword, bool waitForLoad, CancellationToken cancellationToken)
     {
         var profile = EnsureProfileExists(browserKey);
-        var notes = await _repository.QueryAsync(keyword, 5, "latest", "all", "all", cancellationToken).ConfigureAwait(false);
+        var notes = await _repository.QueryAsync(keyword, 5, cancellationToken).ConfigureAwait(false);
         var selected = notes.Count > 0 ? notes[0] : null;
         LogNavigation(profile.ProfileKey, "keyword", keyword, selected);
         if (waitForLoad)

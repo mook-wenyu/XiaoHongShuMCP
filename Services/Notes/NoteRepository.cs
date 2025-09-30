@@ -36,7 +36,7 @@ public sealed class NoteRepository : INoteRepository
         _notes = new Lazy<IReadOnlyList<NoteRecord>>(LoadNotes, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
-    public Task<IReadOnlyList<NoteRecord>> QueryAsync(string keyword, int targetCount, string sortBy, string noteType, string publishTime, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<NoteRecord>> QueryAsync(string keyword, int targetCount, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -49,17 +49,8 @@ public sealed class NoteRepository : INoteRepository
             query = query.Where(note => MatchKeyword(note, term));
         }
 
-        if (!string.Equals(noteType, "all", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(noteType))
-        {
-            query = query.Where(note => string.Equals(GetValueOrDefault(note.Additional, "type"), noteType, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (!string.Equals(publishTime, "all", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(publishTime))
-        {
-            query = ApplyPublishTimeFilter(query, publishTime);
-        }
-
-        query = ApplySorting(query, sortBy);
+        // 固定使用 score 降序排序（comprehensive 默认行为）
+        query = query.OrderByDescending(note => TryParseDouble(GetValueOrDefault(note.Metrics, "score")));
 
         var result = query.Take(Math.Clamp(targetCount, 1, 200)).ToList();
         if (result.Count == 0)
@@ -93,36 +84,6 @@ public sealed class NoteRepository : INoteRepository
             _logger.LogError(ex, "[NoteRepository] 解析种子数据失败 path={Path}", _seedPath);
             return Array.Empty<NoteRecord>();
         }
-    }
-
-    private static IEnumerable<NoteRecord> ApplySorting(IEnumerable<NoteRecord> source, string sortBy)
-    {
-        return sortBy?.Trim().ToLowerInvariant() switch
-        {
-            "latest" => source.OrderByDescending(note => TryParseDate(GetValueOrDefault(note.Additional, "publishedAtUtc"))),
-            "likes" => source.OrderByDescending(note => TryParseInt(GetValueOrDefault(note.Metrics, "likes"))),
-            "comments" => source.OrderByDescending(note => TryParseInt(GetValueOrDefault(note.Metrics, "comments"))),
-            _ => source.OrderByDescending(note => TryParseDouble(GetValueOrDefault(note.Metrics, "score")))
-        };
-    }
-
-    private static IEnumerable<NoteRecord> ApplyPublishTimeFilter(IEnumerable<NoteRecord> source, string publishTime)
-    {
-        var cutoff = publishTime.Trim().ToLowerInvariant() switch
-        {
-            "24h" => DateTimeOffset.UtcNow.AddHours(-24),
-            "3d" => DateTimeOffset.UtcNow.AddDays(-3),
-            "7d" => DateTimeOffset.UtcNow.AddDays(-7),
-            "30d" => DateTimeOffset.UtcNow.AddDays(-30),
-            _ => DateTimeOffset.MinValue
-        };
-
-        if (cutoff == DateTimeOffset.MinValue)
-        {
-            return source;
-        }
-
-        return source.Where(note => TryParseDate(GetValueOrDefault(note.Additional, "publishedAtUtc")) >= cutoff);
     }
 
     private static bool MatchKeyword(NoteRecord note, string term)

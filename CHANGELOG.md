@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### BREAKING CHANGES
 
+#### 笔记采集服务简化 (TASK-20251001-003)
+
+**影响范围**: 内部服务层（NoteCaptureContext, INoteRepository, NoteRepository）
+
+**变更内容**:
+
+1. **删除 NoteCaptureContext 的三个参数**
+   - SortBy → 完全删除
+   - NoteType → 完全删除
+   - PublishTime → 完全删除
+
+2. **简化 INoteRepository.QueryAsync 签名**
+   - 从 5 个参数简化为 2 个参数
+   - 只保留 keyword 和 targetCount
+
+3. **简化 NoteRepository 查询逻辑**
+   - 删除类型过滤（noteType）
+   - 删除时间过滤（publishTime）
+   - 删除排序选择（sortBy）
+   - 固定使用 score 降序排序（comprehensive 默认行为）
+
+4. **更新所有调用方**
+   - NoteCaptureTool
+   - NoteCaptureService
+   - BrowserAutomationService
+   - NoteEngagementService
+
+**理由**:
+- 极简主义设计：删除所有动态过滤和排序配置
+- 简化封装层级：减少参数传递链路
+- 固定最佳实践：始终使用综合评分排序
+- 降低复杂度：从 5 参数简化为 2 参数
+
+**测试覆盖**:
+- 构建通过：0 warnings, 0 errors
+- 测试结果：NoteCaptureToolTests 2/2 通过
+
+**注意**: 此为内部服务层破坏性变更，不影响 MCP 工具层 API。
+
+---
+
 #### 笔记采集工具极简化 (TASK-20251001-002)
 
 **影响范围**: `xhs_note_capture` MCP 工具

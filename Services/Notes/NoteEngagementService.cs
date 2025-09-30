@@ -42,7 +42,7 @@ public sealed class NoteEngagementService : INoteEngagementService
 
     private async Task ExecuteAsync(string action, string keyword, Action<NoteRecord> onSuccess, CancellationToken cancellationToken)
     {
-        var notes = await _repository.QueryAsync(keyword, 1, "relevance", "all", "all", cancellationToken).ConfigureAwait(false);
+        var notes = await _repository.QueryAsync(keyword, 1, cancellationToken).ConfigureAwait(false);
         var note = notes.FirstOrDefault();
         if (note is null)
         {

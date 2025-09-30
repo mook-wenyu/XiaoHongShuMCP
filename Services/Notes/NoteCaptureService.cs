@@ -32,7 +32,7 @@ public sealed class NoteCaptureService : INoteCaptureService
     public async Task<NoteCaptureResult> CaptureAsync(NoteCaptureContext context, CancellationToken cancellationToken)
     {
         var stopwatch = ValueStopwatch.StartNew();
-        var notes = await _repository.QueryAsync(context.Keyword, context.TargetCount, context.SortBy, context.NoteType, context.PublishTime, cancellationToken).ConfigureAwait(false);
+        var notes = await _repository.QueryAsync(context.Keyword, context.TargetCount, cancellationToken).ConfigureAwait(false);
         if (notes.Count == 0)
         {
             throw new InvalidOperationException("未采集到任何笔记，请检查关键词或画像标签是否有效。");
@@ -57,9 +57,6 @@ public sealed class NoteCaptureService : INoteCaptureService
         {
             ["keyword"] = context.Keyword,
             ["targetCount"] = context.TargetCount.ToString(CultureInfo.InvariantCulture),
-            ["sortBy"] = context.SortBy,
-            ["noteType"] = context.NoteType,
-            ["publishTime"] = context.PublishTime,
             ["includeAnalytics"] = context.IncludeAnalytics.ToString()
         };
 
@@ -149,7 +146,7 @@ public sealed class NoteCaptureService : INoteCaptureService
 
 public interface INoteRepository
 {
-    Task<IReadOnlyList<NoteRecord>> QueryAsync(string keyword, int targetCount, string sortBy, string noteType, string publishTime, CancellationToken cancellationToken);
+    Task<IReadOnlyList<NoteRecord>> QueryAsync(string keyword, int targetCount, CancellationToken cancellationToken);
 }
 
 public interface IFileSystem

@@ -65,9 +65,6 @@ public sealed class NoteCaptureTool
     private async Task<OperationResult<NoteCaptureToolResult>> ExecuteAsync(NoteCaptureToolRequest request, string requestId, CancellationToken cancellationToken)
     {
         // 硬编码默认值（破坏性变更）
-        const string DefaultSortBy = "comprehensive";
-        const string DefaultNoteType = "all";
-        const string DefaultPublishTime = "all";
         const bool DefaultIncludeAnalytics = false;
         const bool DefaultIncludeRaw = false;
         const string DefaultOutputDirectory = "./logs/note-capture";
@@ -133,9 +130,6 @@ public sealed class NoteCaptureTool
         var context = new NoteCaptureContext(
             keyword,
             NormalizeTargetCount(request.TargetCount),
-            DefaultSortBy,
-            DefaultNoteType,
-            DefaultPublishTime,
             DefaultIncludeAnalytics,
             DefaultIncludeRaw,
             DefaultOutputDirectory);

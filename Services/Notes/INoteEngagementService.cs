@@ -20,9 +20,6 @@ public interface INoteCaptureService
 public sealed record NoteCaptureContext(
     string Keyword,
     int TargetCount,
-    string SortBy,
-    string NoteType,
-    string PublishTime,
     bool IncludeAnalytics,
     bool IncludeRaw,
     string OutputDirectory);
