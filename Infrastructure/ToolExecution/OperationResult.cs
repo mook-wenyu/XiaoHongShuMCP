@@ -7,30 +7,30 @@ using Microsoft.Extensions.Logging;
 namespace HushOps.Servers.XiaoHongShu.Infrastructure.ToolExecution;
 
 /// <summary>
-/// 中文：统一工具执行结果封装，使用record类型确保可JSON序列化。
-/// English: Unified tool execution result wrapper, using record type to ensure JSON serializability.
+/// 中文：统一工具执行结果封装，使用record类型和具体类型确保可JSON序列化。
+/// English: Unified tool execution result wrapper, using record type and concrete types to ensure JSON serializability.
 /// </summary>
 public sealed record OperationResult<T>(
     bool Success,
     string Status,
     T? Data,
     string? ErrorMessage,
-    IReadOnlyDictionary<string, string> Metadata)
+    Dictionary<string, string> Metadata)
 {
-    private static readonly IReadOnlyDictionary<string, string> EmptyMetadata = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+    private static readonly Dictionary<string, string> EmptyMetadata = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// 中文：创建成功结果。
     /// English: Creates a success result.
     /// </summary>
-    public static OperationResult<T> Ok(T data, string status = "ok", IReadOnlyDictionary<string, string>? metadata = null)
+    public static OperationResult<T> Ok(T data, string status = "ok", Dictionary<string, string>? metadata = null)
         => new(true, status, data, null, metadata ?? EmptyMetadata);
 
     /// <summary>
     /// 中文：创建失败结果。
     /// English: Creates a failure result.
     /// </summary>
-    public static OperationResult<T> Fail(string status, string? errorMessage = null, IReadOnlyDictionary<string, string>? metadata = null)
+    public static OperationResult<T> Fail(string status, string? errorMessage = null, Dictionary<string, string>? metadata = null)
         => new(false, string.IsNullOrWhiteSpace(status) ? "ERR_UNEXPECTED" : status, default, errorMessage, metadata ?? EmptyMetadata);
 }
 

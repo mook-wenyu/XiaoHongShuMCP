@@ -32,7 +32,8 @@
       "mcp__chrome-devtools__upload_file",
       "mcp__chrome-devtools__wait_for",
       "mcp__chrome-devtools__list_pages",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

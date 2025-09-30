@@ -51,9 +51,13 @@ public sealed class InteractionStepTool
 
         _logger.LogInformation("[InteractionStepTool] navigate_explore success={Success} status={Status}", outcome.Success, outcome.Status);
 
+        var metadata = outcome.Metadata is Dictionary<string, string> dict
+            ? dict
+            : new Dictionary<string, string>(outcome.Metadata, StringComparer.OrdinalIgnoreCase);
+
         return outcome.Success
-            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("NavigateExplore", "已导航到发现页"), outcome.Status, outcome.Metadata)
-            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "导航失败", outcome.Metadata);
+            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("NavigateExplore", "已导航到发现页"), outcome.Status, metadata)
+            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "导航失败", metadata);
     }
 
     [McpServerTool(Name = "xhs_search_keyword"), Description("在搜索框输入关键词并搜索 | Search for keyword in search box")]
@@ -77,9 +81,13 @@ public sealed class InteractionStepTool
 
         _logger.LogInformation("[InteractionStepTool] search_keyword keyword={Keyword} success={Success} status={Status}", keyword, outcome.Success, outcome.Status);
 
+        var metadata = outcome.Metadata is Dictionary<string, string> dict
+            ? dict
+            : new Dictionary<string, string>(outcome.Metadata, StringComparer.OrdinalIgnoreCase);
+
         return outcome.Success
-            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("SearchKeyword", $"已搜索关键词: {keyword}"), outcome.Status, outcome.Metadata)
-            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "搜索失败", outcome.Metadata);
+            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("SearchKeyword", $"已搜索关键词: {keyword}"), outcome.Status, metadata)
+            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "搜索失败", metadata);
     }
 
     [McpServerTool(Name = "xhs_select_note"), Description("根据关键词数组选择笔记（命中任意关键词即成功） | Select note by keyword array matching")]
@@ -107,9 +115,13 @@ public sealed class InteractionStepTool
         _logger.LogInformation("[InteractionStepTool] select_note keywords={Keywords} success={Success} status={Status}",
             string.Join(",", keywords), outcome.Success, outcome.Status);
 
+        var metadata = outcome.Metadata is Dictionary<string, string> dict
+            ? dict
+            : new Dictionary<string, string>(outcome.Metadata, StringComparer.OrdinalIgnoreCase);
+
         return outcome.Success
-            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("SelectNote", $"已根据关键词选择笔记: {string.Join(",", keywords)}"), outcome.Status, outcome.Metadata)
-            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "选择笔记失败", outcome.Metadata);
+            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("SelectNote", $"已根据关键词选择笔记: {string.Join(",", keywords)}"), outcome.Status, metadata)
+            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "选择笔记失败", metadata);
     }
 
     [McpServerTool(Name = "xhs_like_current"), Description("点赞当前打开的笔记 | Like the currently open note")]
@@ -130,9 +142,13 @@ public sealed class InteractionStepTool
 
         _logger.LogInformation("[InteractionStepTool] like_current success={Success} status={Status}", outcome.Success, outcome.Status);
 
+        var metadata = outcome.Metadata is Dictionary<string, string> dict
+            ? dict
+            : new Dictionary<string, string>(outcome.Metadata, StringComparer.OrdinalIgnoreCase);
+
         return outcome.Success
-            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("LikeCurrentNote", "已点赞当前笔记"), outcome.Status, outcome.Metadata)
-            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "点赞失败", outcome.Metadata);
+            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("LikeCurrentNote", "已点赞当前笔记"), outcome.Status, metadata)
+            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "点赞失败", metadata);
     }
 
     [McpServerTool(Name = "xhs_favorite_current"), Description("收藏当前打开的笔记 | Favorite the currently open note")]
@@ -153,9 +169,13 @@ public sealed class InteractionStepTool
 
         _logger.LogInformation("[InteractionStepTool] favorite_current success={Success} status={Status}", outcome.Success, outcome.Status);
 
+        var metadata = outcome.Metadata is Dictionary<string, string> dict
+            ? dict
+            : new Dictionary<string, string>(outcome.Metadata, StringComparer.OrdinalIgnoreCase);
+
         return outcome.Success
-            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("FavoriteCurrentNote", "已收藏当前笔记"), outcome.Status, outcome.Metadata)
-            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "收藏失败", outcome.Metadata);
+            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("FavoriteCurrentNote", "已收藏当前笔记"), outcome.Status, metadata)
+            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "收藏失败", metadata);
     }
 
     [McpServerTool(Name = "xhs_comment_current"), Description("评论当前打开的笔记 | Comment on the currently open note")]
@@ -180,9 +200,13 @@ public sealed class InteractionStepTool
         _logger.LogInformation("[InteractionStepTool] comment_current text={Text} success={Success} status={Status}",
             commentText, outcome.Success, outcome.Status);
 
+        var metadata = outcome.Metadata is Dictionary<string, string> dict
+            ? dict
+            : new Dictionary<string, string>(outcome.Metadata, StringComparer.OrdinalIgnoreCase);
+
         return outcome.Success
-            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("CommentCurrentNote", $"已评论: {commentText}"), outcome.Status, outcome.Metadata)
-            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "评论失败", outcome.Metadata);
+            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("CommentCurrentNote", $"已评论: {commentText}"), outcome.Status, metadata)
+            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "评论失败", metadata);
     }
 
     [McpServerTool(Name = "xhs_scroll_browse"), Description("拟人化滚动浏览当前页面 | Humanized scroll browsing on current page")]
@@ -203,9 +227,13 @@ public sealed class InteractionStepTool
 
         _logger.LogInformation("[InteractionStepTool] scroll_browse success={Success} status={Status}", outcome.Success, outcome.Status);
 
+        var metadata = outcome.Metadata is Dictionary<string, string> dict
+            ? dict
+            : new Dictionary<string, string>(outcome.Metadata, StringComparer.OrdinalIgnoreCase);
+
         return outcome.Success
-            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("ScrollBrowse", "已拟人化滚动浏览当前页面"), outcome.Status, outcome.Metadata)
-            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "滚动浏览失败", outcome.Metadata);
+            ? OperationResult<InteractionStepResult>.Ok(new InteractionStepResult("ScrollBrowse", "已拟人化滚动浏览当前页面"), outcome.Status, metadata)
+            : OperationResult<InteractionStepResult>.Fail(outcome.Status, outcome.Message ?? "滚动浏览失败", metadata);
     }
 }
 

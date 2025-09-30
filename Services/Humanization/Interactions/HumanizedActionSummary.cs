@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 
@@ -9,7 +8,7 @@ namespace HushOps.Servers.XiaoHongShu.Services.Humanization.Interactions;
 /// <summary>
 /// 计划/执行的人机化动作概览，用于将动作数量与名称列表以结构化方式回传调用方。
 /// </summary>
-public sealed record HumanizedActionSummary(int Count, IReadOnlyList<string> Actions)
+public sealed record HumanizedActionSummary(int Count, string[] Actions)
 {
     public static HumanizedActionSummary Empty { get; } = new(0, Array.Empty<string>());
 
@@ -23,11 +22,11 @@ public sealed record HumanizedActionSummary(int Count, IReadOnlyList<string> Act
         var list = actions.Select(static action => action.Type.ToString())
             .Where(static name => !string.IsNullOrWhiteSpace(name))
             .Select(static name => name.Trim())
-            .ToList();
+            .ToArray();
 
-        return list.Count == 0
+        return list.Length == 0
             ? Empty
-            : new HumanizedActionSummary(list.Count, new ReadOnlyCollection<string>(list));
+            : new HumanizedActionSummary(list.Length, list);
     }
 
     public static HumanizedActionSummary FromStrings(IEnumerable<string> actions)
@@ -39,11 +38,11 @@ public sealed record HumanizedActionSummary(int Count, IReadOnlyList<string> Act
 
         var list = actions.Where(static name => !string.IsNullOrWhiteSpace(name))
             .Select(static name => name.Trim())
-            .ToList();
+            .ToArray();
 
-        return list.Count == 0
+        return list.Length == 0
             ? Empty
-            : new HumanizedActionSummary(list.Count, new ReadOnlyCollection<string>(list));
+            : new HumanizedActionSummary(list.Length, list);
     }
 }
 

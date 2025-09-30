@@ -59,7 +59,7 @@ public sealed class NoteCaptureTool
             nameof(CaptureAsync),
             requestId,
             async () => await ExecuteAsync(request, requestId, cancellationToken).ConfigureAwait(false),
-            (ex, rid) => OperationResult<NoteCaptureToolResult>.Fail(ServerToolExecutor.MapExceptionCode(ex), ex.Message, BuildErrorMetadata(request, rid, ex)));
+            (ex, rid) => OperationResult<NoteCaptureToolResult>.Fail(ServerToolExecutor.MapExceptionCode(ex), ex.Message, new Dictionary<string, string>(BuildErrorMetadata(request, rid, ex), StringComparer.OrdinalIgnoreCase)));
     }
 
     private async Task<OperationResult<NoteCaptureToolResult>> ExecuteAsync(NoteCaptureToolRequest request, string requestId, CancellationToken cancellationToken)
@@ -268,7 +268,7 @@ public sealed class NoteCaptureTool
 }
 
 public sealed record NoteCaptureToolRequest(
-    [property: Description("候选关键词列表（用于筛选匹配笔记）| Candidate keywords for filtering notes")] IReadOnlyList<string>? Keywords = null,
+    [property: Description("候选关键词列表（用于筛选匹配笔记）| Candidate keywords for filtering notes")] string[]? Keywords = null,
     [property: Description("画像 ID，用于推荐关键词 | Portrait identifier for keyword fallback")] string? PortraitId = null,
     [property: Description("目标笔记数量上限 | Maximum number of notes to collect")] int TargetCount = 20,
     [property: Description("浏览器键：user 表示用户配置，其它值映射为独立配置 | Browser key: 'user' for user profile, others map to isolated profiles")] string? BrowserKey = null,

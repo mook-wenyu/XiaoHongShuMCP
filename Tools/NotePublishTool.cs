@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -88,12 +89,16 @@ public sealed class NotePublishTool
 
             _logger.LogInformation("[NotePublishTool] 发布笔记完成 success={Success} status={Status}", outcome.Success, outcome.Status);
 
+            var metadata = outcome.Metadata is Dictionary<string, string> dict
+                ? dict
+                : new Dictionary<string, string>(outcome.Metadata, StringComparer.OrdinalIgnoreCase);
+
             return outcome.Success
                 ? OperationResult<NotePublishResult>.Ok(
                     new NotePublishResult(imagePath, noteTitle, noteContent, "已暂存并离开发布页面"),
                     outcome.Status,
-                    outcome.Metadata)
-                : OperationResult<NotePublishResult>.Fail(outcome.Status, outcome.Message ?? "发布失败", outcome.Metadata);
+                    metadata)
+                : OperationResult<NotePublishResult>.Fail(outcome.Status, outcome.Message ?? "发布失败", metadata);
         }
         catch (Exception ex)
         {

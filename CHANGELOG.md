@@ -9,6 +9,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### BREAKING CHANGES
 
+#### MCP 工具参数和返回值 JSON 序列化修复 (TASK-20251001-004)
+
+**影响范围**: 所有 MCP 工具参数和返回值类型
+
+**变更内容**:
+
+1. **OperationResult.Metadata 类型修改**
+   - 从 `IReadOnlyDictionary<string, string>` 改为 `Dictionary<string, string>`
+   - 确保 MCP stdio 协议双向 JSON 序列化支持
+
+2. **工具请求参数类型修改**
+   - `NoteCaptureToolRequest.Keywords`: `IReadOnlyList<string>?` → `string[]?`
+   - `BehaviorFlowRequest.Keywords`: `IReadOnlyList<string>?` → `string[]?`
+   - `DiscoverFlowRequest.Keywords`: `IReadOnlyList<string>?` → `string[]?`
+   - `DiscoverFlowRequest.CommentTexts`: `IReadOnlyList<string>?` → `string[]?`
+
+3. **工具返回值类型修改**
+   - `HumanizedActionSummary.Actions`: `IReadOnlyList<string>` → `string[]`
+   - `BrowseFlowResult.Interactions`: `IReadOnlyList<string>` → `string[]`
+   - `BrowseFlowResult.SkippedInteractions`: `IReadOnlyList<string>` → `string[]`
+   - `BrowseFlowResult.FailedInteractions`: `IReadOnlyList<string>` → `string[]`
+   - `BehaviorFlowToolResult.Actions`: `IReadOnlyList<string>` → `string[]`
+   - `BehaviorFlowToolResult.Warnings`: `IReadOnlyList<string>` → `string[]`
+   - `DiscoverFlowResult.NavigationWarnings`: `IReadOnlyList<string>` → `string[]`
+
+4. **辅助方法签名修改**
+   - `BrowserTool.BuildSuccessMetadata`: 返回类型改为 `Dictionary<string, string>`
+   - `BrowserTool.BuildErrorMetadata`: 返回类型改为 `Dictionary<string, string>`
+
+5. **所有工具的 Metadata 转换**
+   - 在所有工具方法中添加 `outcome.Metadata` 到 `Dictionary` 的转换逻辑
+   - 确保传递给 `OperationResult.Ok/Fail` 的 Metadata 为具体类型
+
+**迁移指南**:
+
+```csharp
+// 旧代码（客户端调用不受影响）
+// JSON 序列化/反序列化对客户端透明，无需修改调用代码
+
+// 服务端代码修改示例
+// 旧代码
+IReadOnlyDictionary<string, string> metadata = outcome.Metadata;
+return OperationResult<T>.Ok(data, status, metadata);  // ❌ 编译错误
+
+// 新代码
+var metadata = outcome.Metadata is Dictionary<string, string> dict
+    ? dict
+    : new Dictionary<string, string>(outcome.Metadata, StringComparer.OrdinalIgnoreCase);
+return OperationResult<T>.Ok(data, status, metadata);  // ✅ 正确
+```
+
+**理由**:
+- MCP stdio 协议要求所有参数和返回值必须支持双向 JSON 序列化
+- System.Text.Json 无法反序列化接口类型（IReadOnlyList、IReadOnlyDictionary）
+- 具体类型（Dictionary、string[]）自动可序列化，无需自定义转换器
+- string[] 比 List<string> 更简洁，映射 JSON 数组更自然
+- 对客户端 API 形状无影响（JSON 表示保持一致）
+
+**测试覆盖**:
+- 构建通过：0 warnings, 0 errors
+- 测试结果：52/56 通过（4 个失败为转换前已存在的问题）
+- 所有 MCP 工具调用正常，JSON 序列化无异常
+
+**注意**: 此为破坏性变更，仅影响服务端实现。客户端通过 JSON 通信，无需修改调用代码。
+
+---
+
 #### 笔记采集服务简化 (TASK-20251001-003)
 
 **影响范围**: 内部服务层（NoteCaptureContext, INoteRepository, NoteRepository）

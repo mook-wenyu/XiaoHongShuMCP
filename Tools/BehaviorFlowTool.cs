@@ -90,7 +90,7 @@ public sealed class BehaviorFlowTool
             return OperationResult<BrowseFlowResult>.Fail(
                 selectOutcome.Status,
                 selectOutcome.Message ?? "选择笔记失败",
-                selectOutcome.Metadata);
+                new Dictionary<string, string>(selectOutcome.Metadata, StringComparer.OrdinalIgnoreCase));
         }
 
         // 提取笔记信息和关键词信息
@@ -148,9 +148,9 @@ public sealed class BehaviorFlowTool
             noteId,
             noteTitle,
             noteUrl,
-            interactions,
-            skipped,
-            failed,
+            interactions.ToArray(),
+            skipped.ToArray(),
+            failed.ToArray(),
             behaviorProfile,
             requestId);
 
@@ -174,7 +174,7 @@ public sealed class BehaviorFlowTool
 
     private string? SelectCommentText(DiscoverFlowRequest request)
     {
-        if (request.CommentTexts is not { Count: > 0 })
+        if (request.CommentTexts is not { Length: > 0 })
         {
             return null;
         }
@@ -295,7 +295,7 @@ public sealed class BehaviorFlowTool
         bool Success,
         string Status,
         DiscoverInteractionResult Snapshot,
-        IReadOnlyDictionary<string, string> Metadata,
+        Dictionary<string, string> Metadata,
         string? Message);
     private static IReadOnlyList<string> NormalizeKeywords(IReadOnlyList<string>? keywords)
     {
@@ -367,7 +367,7 @@ public sealed class BehaviorFlowTool
 }
 
 public sealed record BehaviorFlowRequest(
-    [property: Description("候选关键词列表 | Candidate keywords; falls back to portrait/default when为空")] IReadOnlyList<string>? Keywords,
+    [property: Description("候选关键词列表 | Candidate keywords; falls back to portrait/default when为空")] string[]? Keywords,
     [property: Description("画像 ID，用于推荐关键词 | Portrait identifier for resolving fallback keywords")] string? PortraitId,
     [property: Description("浏览器键，user 表示用户配置 | Browser key: 'user' for the user profile, others map to isolated profiles")] string? BrowserKey = null,
     [property: Description("行为档案键，覆盖默认拟人化配置 | Behavior profile key overriding the default humanization profile")] string? BehaviorProfile = null);
@@ -383,9 +383,9 @@ public sealed record BrowseFlowResult(
     [property: Description("笔记 ID | Note identifier")] string? NoteId,
     [property: Description("笔记标题 | Note title")] string? NoteTitle,
     [property: Description("笔记链接 | Note URL")] string? NoteUrl,
-    [property: Description("执行的互动列表 | Executed interactions")] IReadOnlyList<string> Interactions,
-    [property: Description("跳过的互动列表 | Skipped interactions")] IReadOnlyList<string> SkippedInteractions,
-    [property: Description("失败的互动列表 | Failed interactions")] IReadOnlyList<string> FailedInteractions,
+    [property: Description("执行的互动列表 | Executed interactions")] string[] Interactions,
+    [property: Description("跳过的互动列表 | Skipped interactions")] string[] SkippedInteractions,
+    [property: Description("失败的互动列表 | Failed interactions")] string[] FailedInteractions,
     [property: Description("行为档案 | Behavior profile")] string BehaviorProfile,
     [property: Description("请求 ID | Request identifier")] string RequestId);
 
@@ -395,10 +395,10 @@ public sealed record BehaviorFlowToolResult(
     [property: Description("关联的请求 ID | Associated request identifier")] string? RequestId,
     [property: Description("解析后的关键词 | Resolved keyword used during execution")] string ResolvedKeyword,
     [property: Description("使用的行为档案 | Behavior profile applied for the run")] string BehaviorProfile,
-    [property: Description("执行的动作序列 | Ordered list of executed actions")] IReadOnlyList<string> Actions,
+    [property: Description("执行的动作序列 | Ordered list of executed actions")] string[] Actions,
     [property: Description("计划阶段的动作概览 | Summary of planned actions")] HumanizedActionSummary Planned,
     [property: Description("执行阶段的动作概览 | Summary of executed actions")] HumanizedActionSummary Executed,
-    [property: Description("一致性告警列表 | Consistency warnings emitted during execution")] IReadOnlyList<string> Warnings,
+    [property: Description("一致性告警列表 | Consistency warnings emitted during execution")] string[] Warnings,
     [property: Description("命中的关键词（同 ResolvedKeyword，提供更直观字段）| Selected keyword echoed for clients")] string? SelectedKeyword = null);
 /// <summary>
 /// 中文：互动执行结果（内部使用）。
@@ -411,13 +411,13 @@ internal sealed record InteractionResult(string Status, string? ActionType = nul
     public static InteractionResult Failed(string? message) => new("failed", Message: message);
 }
 public sealed record DiscoverFlowRequest(
-    [property: Description("候选关键词列表 | Candidate keywords for discover flow")] IReadOnlyList<string>? Keywords = null,
+    [property: Description("候选关键词列表 | Candidate keywords for discover flow")] string[]? Keywords = null,
     [property: Description("画像 ID，用于关键词兜底 | Portrait identifier for fallback keywords")] string? PortraitId = null,
     [property: Description("搜索结果选择策略 | Note selection strategy")] DiscoverNoteSelectionStrategy NoteSelection = DiscoverNoteSelectionStrategy.First,
     [property: Description("是否执行点赞 | Whether to perform like interaction")] bool PerformLike = true,
     [property: Description("是否执行收藏 | Whether to perform favorite interaction")] bool PerformFavorite = true,
     [property: Description("是否执行评论 | Whether to perform comment interaction")] bool PerformComment = true,
-    [property: Description("评论候选文本 | Candidate comment texts")] IReadOnlyList<string>? CommentTexts = null,
+    [property: Description("评论候选文本 | Candidate comment texts")] string[]? CommentTexts = null,
     [property: Description("浏览器键 | Browser profile key")] string? BrowserKey = null,
     [property: Description("行为档案键 | Behavior profile key")] string? BehaviorProfile = null);
 
@@ -437,7 +437,7 @@ public sealed record DiscoverFlowResult(
     [property: Description("笔记链接 | Selected note URL")] string? NoteUrl,
     [property: Description("导航计划概要 | Navigation planned summary")] HumanizedActionSummary NavigationPlanned,
     [property: Description("导航执行概要 | Navigation executed summary")] HumanizedActionSummary NavigationExecuted,
-    [property: Description("导航告警 | Navigation warnings")] IReadOnlyList<string> NavigationWarnings,
+    [property: Description("导航告警 | Navigation warnings")] string[] NavigationWarnings,
     [property: Description("互动结果 | Interaction results")] DiscoverFlowInteractions Interactions);
 
 public sealed record DiscoverFlowInteractions(

@@ -191,7 +191,7 @@ public sealed class HumanizedActionService : IHumanizedActionService
             metadata[$"script.actions.{i}"] = script.Actions[i].Type.ToString();
         }
 
-        for (var i = 0; i < plannedSummary.Actions.Count; i++)
+        for (var i = 0; i < plannedSummary.Actions.Length; i++)
         {
             metadata[$"humanized.plan.actions.{i}"] = plannedSummary.Actions[i];
             metadata[$"plan.actions.{i}"] = plannedSummary.Actions[i];
@@ -221,7 +221,7 @@ public sealed class HumanizedActionService : IHumanizedActionService
         var plannedSummary = plan.Script.ToSummary();
         metadata["humanized.plan.count"] = plannedSummary.Count.ToString(CultureInfo.InvariantCulture);
         metadata["humanized.plan.actions"] = string.Join(",", plannedSummary.Actions);
-        for (var i = 0; i < plannedSummary.Actions.Count; i++)
+        for (var i = 0; i < plannedSummary.Actions.Length; i++)
         {
             metadata[$"humanized.plan.actions.{i}"] = plannedSummary.Actions[i];
         }
@@ -239,7 +239,7 @@ public sealed class HumanizedActionService : IHumanizedActionService
             metadata["script.actions"] = string.Join(",", plannedSummary.Actions);
             metadata["plan.actionCount"] = plannedSummary.Count.ToString(CultureInfo.InvariantCulture);
             metadata["plan.actions"] = metadata["script.actions"];
-            for (var i = 0; i < plannedSummary.Actions.Count; i++)
+            for (var i = 0; i < plannedSummary.Actions.Length; i++)
             {
                 metadata[$"script.actions.{i}"] = plannedSummary.Actions[i];
                 metadata[$"plan.actions.{i}"] = plannedSummary.Actions[i];
@@ -314,7 +314,7 @@ public sealed class HumanizedActionService : IHumanizedActionService
             metadata["humanized.execute.count"] = executedSummary.Count.ToString(CultureInfo.InvariantCulture);
             metadata["humanized.execute.actions"] = string.Join(",", executedSummary.Actions);
             metadata["humanized.execute.status"] = "success";
-            for (var i = 0; i < executedSummary.Actions.Count; i++)
+            for (var i = 0; i < executedSummary.Actions.Length; i++)
             {
                 metadata[$"execution.actions.{i}"] = executedSummary.Actions[i];
                 metadata[$"humanized.execute.actions.{i}"] = executedSummary.Actions[i];

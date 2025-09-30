@@ -83,7 +83,7 @@ public sealed class BrowserTool
     /// 中文：构建成功元数据，仅保留 requestId 字段。
     /// English: Builds success metadata, keeping only requestId field.
     /// </summary>
-    private static IReadOnlyDictionary<string, string> BuildSuccessMetadata(BrowserOpenToolRequest request, BrowserOpenResult result, string requestId)
+    private static Dictionary<string, string> BuildSuccessMetadata(BrowserOpenToolRequest request, BrowserOpenResult result, string requestId)
     {
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -95,7 +95,7 @@ public sealed class BrowserTool
     /// 中文：构建错误元数据，仅保留 requestId 字段。
     /// English: Builds error metadata, keeping only requestId field.
     /// </summary>
-    private static IReadOnlyDictionary<string, string> BuildErrorMetadata(BrowserOpenToolRequest request, string? requestId, Exception ex)
+    private static Dictionary<string, string> BuildErrorMetadata(BrowserOpenToolRequest request, string? requestId, Exception ex)
     {
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
