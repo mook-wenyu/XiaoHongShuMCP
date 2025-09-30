@@ -1,28 +1,98 @@
-﻿# 鏂囨。绱㈠紩
+# 文档索引
 
-| 鏂囨。 | 鎻忚堪 | 鏇存柊鏃堕棿 |
-| --- | --- | --- |
-| [requirements.md](requirements.md) | 鏈€鏂伴渶姹傛憳瑕?| 2025-09-28 |
-| [design.md](design.md) | 璁捐鍐崇瓥涓庨闄╄褰?| 2025-09-28 |
-| [tasks.md](tasks.md) | 浠诲姟鎷嗚В涓庤繘搴?| 2025-09-28 |
-| [implementation.md](implementation.md) | 瀹炴柦瑕佺偣涓庝唬鐮佹敼鍔? | 2025-09-29 |
-| [testing.md](testing.md) | 娴嬭瘯鑼冨洿銆佺粨鏋滀笌閬楃暀椋庨櫓 | 2025-09-29 |
-| [coding-log.md](coding-log.md) | 鎿嶄綔鐣欑棔涓庡紓甯歌鏄? | 2025-09-29 |
-| [changelog.md](changelog.md) | 浜や粯鍙樻洿璁板綍 | 2025-09-28 |
+- **项目**: HushOps.Servers.XiaoHongShu
+- **最后更新**: 2025-02-01
+- **维护者**: Claude
 
-## 褰撳墠浠诲姟\r\n\r\n- [TASK-20250929-008](workstreams/TASK-20250929-008/)：NoteCapture 计划/执行动作可观测性增强（状态：Implement 进行中）\r\n
-- [TASK-20250927-005](workstreams/TASK-20250927-005/)锛氭嫙浜哄寲鍙嶆娴嬩氦浜掕兘鍔涘缓璁撅紙鐘舵€侊細Research 瀹屾垚锛?- [TASK-20250928-004](workstreams/TASK-20250928-004/)锛歁CP 鏈嶅姟鍣ㄥ榻愬畼鏂?C# SDK 鏀归€狅紙鐘舵€侊細Deliver 瀹屾垚锛屽緟瀹㈡埛绔仈璋冮獙璇佺粨鏋勫寲閫氱煡锛?- [TASK-20250928-005](workstreams/TASK-20250928-005/)锛歁CP 鏃ュ織绔埌绔獙璇佸熀绾匡紙鐘舵€侊細Implement 瀹屾垚锛屽緟 Deliver/鑱旇皟锛?- [TASK-20250928-006](workstreams/TASK-20250928-006/)锛歅laywright 娴忚鍣ㄥ畨瑁呬笌妫€娴嬫柟妗堬紙鐘舵€侊細Verify 杩涜涓級
-- [TASK-20250928-007](workstreams/TASK-20250928-007/)锛氭嫙浜哄寲浜や簰鍏叡鑳藉姏寤鸿锛堢姸鎬侊細Deliver 瀹屾垚锛?- [TASK-20250927-004](workstreams/TASK-20250927-004/)锛氱粺涓€ `profileKey`銆佺敤鎴疯嚜鍔ㄦ墦寮€涓庡伐鍏峰弻璇弿杩帮紙鐘舵€侊細杩涜涓級
-- [TASK-20250927-003](workstreams/TASK-20250927-003/)锛氱嫭绔嬫祻瑙堝櫒閰嶇疆鐩綍绾︽潫涓庝細璇濈紦瀛橈紙鐘舵€侊細寰呭疄鏈洪獙璇侊級
-- [TASK-20250927-002](workstreams/TASK-20250927-002/)锛氭祻瑙堝櫒閰嶇疆妯″紡鎵╁睍涓庡伐鍏锋洿鏂帮紙鐘舵€侊細寰呭畬鍠勬枃妗ｄ笌楠岃瘉锛?- [TASK-20250927-006](workstreams/TASK-20250927-006/)锛氭枃妗ｈˉ榻愩€丷elease 鏋勫缓淇涓庨獙璇佽鍒掞紙鐘舵€侊細杩涜涓級
-- [TASK-20250927-001](workstreams/TASK-20250927-001/)锛氶」鐩枃妗ｆ洿鏂颁笌浠撳簱鎸囧崡鍚屾锛堢姸鎬侊細宸插畬鎴愶級
-- [TASK-20250928-001](workstreams/TASK-20250928-001/)锛氫慨澶?NoteCapture CSV 鍒楅『搴忛敊浣嶏紙鐘舵€侊細瀹炵幇涓級
-- [TASK-20250928-002](workstreams/TASK-20250928-002/)锛歁CP STDIO 鏃ュ織閲嶅畾鍚戯紙鐘舵€侊細楠岃瘉杩涜涓級
-- [TASK-20250928-003](workstreams/TASK-20250928-003/)锛氱Щ闄よ处鍙烽厤缃笌绂佺敤 Cookie 鎸佷箙鍖栵紙鐘舵€侊細瀹炴柦涓級
+## 快速导航
 
-## 璧勬簮寮曠敤
+### 项目文档
+- [CLAUDE.md](../CLAUDE.md) - Claude Code 工作指南
+- [README.md](../README.md) - 项目说明文档
 
-- 椤圭洰鎸囧崡锛歔`AGENTS.md`](../AGENTS.md)
-- 瑙ｅ喅鏂规鏂囦欢锛歚HushOps.Servers.XiaoHongShu.csproj`
-- 涓荤▼搴忓叆鍙ｏ細`Program.cs`
+### 任务工作流
 
+#### TASK-20250201-001: 全面Bug修复
+**状态**: ✅ 已完成
+**时间**: 2025-02-01
+**概述**: 修复浏览器登录状态丢失、NavigateExplore超时、自动化检测暴露等严重bug
+
+**文档**:
+- [研究文档](workstreams/TASK-20250201-001/research.md) - 深度问题分析与技术调研
+- [设计文档](workstreams/TASK-20250201-001/design.md) - 方案设计与决策记录
+- [实现文档](workstreams/TASK-20250201-001/implementation.md) - 代码实现细节
+- [验证文档](workstreams/TASK-20250201-001/verification.md) - 测试验证结果
+- [交付文档](workstreams/TASK-20250201-001/delivery.md) - 交付清单与使用说明
+
+**核心变更**:
+- ✅ 使用LaunchPersistentContextAsync保留User模式登录状态
+- ✅ 注入WebdriverHideScript隐藏自动化检测特征
+- ✅ NavigateExplore添加ESC键关闭模态遮罩
+
+**测试结果**: 51/51 通过
+
+---
+
+#### TASK-20250130-001: 发布笔记功能
+**状态**: ✅ 已完成
+**时间**: 2025-01-30
+**概述**: 实现小红书笔记发布功能,支持图片上传、标题正文编辑、暂存离开
+
+**文档**:
+- [研究文档](workstreams/TASK-20250130-001/research.md) - 需求研究与技术调研
+- [设计文档](workstreams/TASK-20250130-001/design.md) - 方案设计与技术决策
+- [实现文档](workstreams/TASK-20250130-001/implementation.md) - 代码实现细节
+- [验证文档](workstreams/TASK-20250130-001/verification.md) - 测试验证结果
+- [交付文档](workstreams/TASK-20250130-001/delivery.md) - 交付清单与使用说明
+
+**核心变更**:
+- ✅ 新增 `xhs_publish_note` 工具
+- ✅ 扩展 `HumanizedActionKind` 添加 `PublishNote`
+- ✅ 扩展 `HumanizedActionType` 添加 `UploadFile`
+- ✅ 扩展 `HumanizedActionRequest` 添加图片/标题/正文参数
+
+**测试结果**: 51/51 通过
+
+## 文档结构
+
+```
+docs/
+├── index.md (本文档)
+└── workstreams/
+    ├── TASK-20250201-001/
+    │   ├── research.md        # 问题分析
+    │   ├── design.md          # 方案设计
+    │   ├── implementation.md  # 实现细节
+    │   ├── verification.md    # 测试验证
+    │   └── delivery.md        # 交付文档
+    └── TASK-20250130-001/
+        ├── research.md        # 研究分析
+        ├── design.md          # 设计方案
+        ├── implementation.md  # 实现细节
+        ├── verification.md    # 测试验证
+        └── delivery.md        # 交付文档
+```
+
+## 文档标准
+
+每个任务必须包含完整的 R-D-P-I-V-D 文档:
+- **Research**: 需求研究与技术调研
+- **Design**: 方案设计与技术决策
+- **Plan**: 任务计划(可选,简单任务可省略)
+- **Implementation**: 代码实现细节
+- **Verification**: 测试验证结果
+- **Delivery**: 交付清单与使用说明
+
+## 最近更新
+
+| 日期 | 任务ID | 描述 | 状态 |
+|------|-------|------|------|
+| 2025-02-01 | TASK-20250201-001 | 全面Bug修复 | ✅ 已完成 |
+| 2025-01-30 | TASK-20250130-001 | 发布笔记功能 | ✅ 已完成 |
+
+## 相关链接
+
+- [项目仓库](https://github.com/hushops/hushops-servers)
+- [MCP 协议文档](https://modelcontextprotocol.io/)
+- [Playwright 文档](https://playwright.dev/dotnet/)
+- [小红书开放平台](https://creator.xiaohongshu.com/)

@@ -41,7 +41,7 @@ public sealed class NoteCaptureTool
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    [McpServerTool(Name = "xhs_note_capture"), Description("抓取笔记并导出记录 | Capture notes and export structured records")]
+    [McpServerTool(Name = "xhs_note_capture"), Description("拟人化抓取当前页面指定数量详细笔记（一个一个点击）并导出 CSV | Capture notes from current page with humanized clicking and export to CSV")]
     public Task<OperationResult<NoteCaptureToolResult>> CaptureAsync(
         [Description("笔记抓取请求参数 | Request payload describing the capture operation")] NoteCaptureToolRequest request,
         [Description("取消执行的令牌 | Token that cancels the operation if triggered")] CancellationToken cancellationToken = default)
@@ -51,16 +51,18 @@ public sealed class NoteCaptureTool
             throw new ArgumentNullException(nameof(request));
         }
 
+        var requestId = Guid.NewGuid().ToString("N");
+
         return ServerToolExecutor.TryAsync(
             _logger,
             nameof(NoteCaptureTool),
             nameof(CaptureAsync),
-            request.RequestId,
-            async () => await ExecuteAsync(request, cancellationToken).ConfigureAwait(false),
+            requestId,
+            async () => await ExecuteAsync(request, requestId, cancellationToken).ConfigureAwait(false),
             (ex, rid) => OperationResult<NoteCaptureToolResult>.Fail(ServerToolExecutor.MapExceptionCode(ex), ex.Message, BuildErrorMetadata(request, rid, ex)));
     }
 
-    private async Task<OperationResult<NoteCaptureToolResult>> ExecuteAsync(NoteCaptureToolRequest request, CancellationToken cancellationToken)
+    private async Task<OperationResult<NoteCaptureToolResult>> ExecuteAsync(NoteCaptureToolRequest request, string requestId, CancellationToken cancellationToken)
     {
         var browserKey = NormalizeBrowserKey(request.BrowserKey);
         if (!_browserService.TryGetOpenProfile(browserKey, out var profile))
@@ -76,6 +78,8 @@ public sealed class NoteCaptureTool
         var behaviorProfile = string.IsNullOrWhiteSpace(request.BehaviorProfile) ? "default" : request.BehaviorProfile.Trim();
 
         var keyword = await ResolveKeywordAsync(request, cancellationToken).ConfigureAwait(false);
+        var selectedKeyword = keyword;
+        var keywordCandidates = BuildKeywordCandidates(request, keyword);
 
         HumanizedActionPlan? navigationPlan = null;
         HumanizedActionOutcome? navigationOutcome = null;
@@ -84,10 +88,11 @@ public sealed class NoteCaptureTool
         try
         {
             navigationPlan = await _humanizedActionService.PrepareAsync(
-                    new HumanizedActionRequest(keyword, request.PortraitId, null, true, browserKey, request.RequestId, behaviorProfile),
+                    new HumanizedActionRequest(keywordCandidates, request.PortraitId, null, browserKey, requestId, behaviorProfile),
                     HumanizedActionKind.KeywordBrowse,
                     cancellationToken)
                 .ConfigureAwait(false);
+            selectedKeyword = navigationPlan.ResolvedKeyword;
 
             navigationMetadata = navigationPlan.Metadata;
 
@@ -99,7 +104,7 @@ public sealed class NoteCaptureTool
                 if (!navigationOutcome.Success)
                 {
                     _logger.LogWarning("[NoteCaptureTool] humanized navigation failed keyword={Keyword} status={Status}", keyword, navigationOutcome.Status);
-                    var failureMetadata = MergeMetadata(request, keyword, navigationOutcome.Metadata, profile!, navigationMetadata);
+                    var failureMetadata = MergeMetadata(request, keyword, selectedKeyword, keywordCandidates, navigationOutcome.Metadata, profile!, navigationMetadata, requestId);
                     return OperationResult<NoteCaptureToolResult>.Fail(
                         navigationOutcome.Status,
                         navigationOutcome.Message ?? "humanized navigation failed",
@@ -115,7 +120,7 @@ public sealed class NoteCaptureTool
         {
             var status = ServerToolExecutor.MapExceptionCode(ex);
             _logger.LogWarning(ex, "[NoteCaptureTool] navigation preparation failed keyword={Keyword} status={Status}", keyword, status);
-            var failureMetadata = MergeMetadata(request, keyword, new Dictionary<string, string>(), profile!, navigationMetadata);
+            var failureMetadata = MergeMetadata(request, keyword, selectedKeyword, keywordCandidates, new Dictionary<string, string>(), profile!, navigationMetadata, requestId);
             failureMetadata["error"] = ex.Message;
             return OperationResult<NoteCaptureToolResult>.Fail(status, ex.Message, failureMetadata);
         }
@@ -131,7 +136,7 @@ public sealed class NoteCaptureTool
             request.OutputDirectory ?? string.Empty);
 
         var captureResult = await _captureService.CaptureAsync(context, cancellationToken).ConfigureAwait(false);
-        var metadata = MergeMetadata(request, keyword, captureResult.Metadata, profile!, navigationMetadata);
+        var metadata = MergeMetadata(request, keyword, selectedKeyword, keywordCandidates, captureResult.Metadata, profile!, navigationMetadata, requestId);
 
         var filterSelections = new NoteCaptureFilterSelections(
             NormalizeString(request.SortBy, "comprehensive"),
@@ -156,13 +161,15 @@ public sealed class NoteCaptureTool
             captureResult.RawPath,
             captureResult.Notes.Count,
             captureResult.Duration,
-            request.RequestId ?? string.Empty,
+            requestId,
             behaviorProfile,
             filterSelections,
             humanizedActions,
             plannedSummary,
             executedSummary,
-            consistencyWarnings);
+            consistencyWarnings,
+            SelectedKeyword: navigationPlan?.ResolvedKeyword ?? keyword);
+
 
         _logger.LogInformation("[NoteCaptureTool] success keyword={Keyword} collected={Count} csv={Csv}", keyword, captureResult.Notes.Count, captureResult.CsvPath);
 
@@ -171,9 +178,10 @@ public sealed class NoteCaptureTool
 
     private async Task<string> ResolveKeywordAsync(NoteCaptureToolRequest request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(request.Keyword))
+        var fromRequest = PickKeywordFromCandidates(request.Keywords);
+        if (!string.IsNullOrWhiteSpace(fromRequest))
         {
-            return request.Keyword.Trim();
+            return fromRequest!;
         }
 
         if (!string.IsNullOrWhiteSpace(request.PortraitId))
@@ -181,8 +189,7 @@ public sealed class NoteCaptureTool
             var portrait = await _portraitStore.GetAsync(request.PortraitId, cancellationToken).ConfigureAwait(false);
             if (portrait is not null && portrait.Tags.Count > 0)
             {
-                var index = Random.Shared.Next(portrait.Tags.Count);
-                return portrait.Tags[index];
+                return portrait.Tags[Random.Shared.Next(portrait.Tags.Count)];
             }
         }
 
@@ -192,7 +199,7 @@ public sealed class NoteCaptureTool
             return fallback.Trim();
         }
 
-        throw new InvalidOperationException("鏃犳硶瑙ｆ瀽鍏抽敭璇嶏細璇锋彁渚?keyword銆佺敾鍍忔垨閰嶇疆榛樿鍏抽敭璇嶃€?");
+        throw new InvalidOperationException("无法解析关键词：请提供关键词数组、画像或默认配置。");
     }
 
     private static int NormalizeTargetCount(int value)
@@ -201,102 +208,84 @@ public sealed class NoteCaptureTool
     private static string NormalizeString(string? value, string fallback)
         => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim().ToLowerInvariant();
 
+    /// <summary>
+    /// 中文：合并元数据，仅保留 requestId 字段。
+    /// English: Merges metadata, keeping only requestId field.
+    /// </summary>
     private static Dictionary<string, string> MergeMetadata(
         NoteCaptureToolRequest request,
         string keyword,
+        string selectedKeyword,
+        IReadOnlyList<string> keywordCandidates,
         IReadOnlyDictionary<string, string> captureMetadata,
         BrowserOpenResult profile,
-        IReadOnlyDictionary<string, string>? navigationMetadata)
+        IReadOnlyDictionary<string, string>? navigationMetadata,
+        string requestId)
     {
-        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["keyword"] = keyword,
-            ["portraitId"] = request.PortraitId ?? string.Empty,
-            ["includeRaw"] = request.IncludeRaw.ToString(),
-            ["includeAnalytics"] = request.IncludeAnalytics.ToString(),
-            ["requestId"] = request.RequestId ?? string.Empty,
-            ["browserKey"] = profile.ProfileKey,
-            ["browserPath"] = profile.ProfilePath,
-            ["browserIsNew"] = profile.IsNewProfile.ToString(),
-            ["browserFallback"] = profile.UsedFallbackPath.ToString(),
-            ["browserAlreadyOpen"] = profile.AlreadyOpen.ToString(),
-            ["browserAutoOpened"] = profile.AutoOpened.ToString(),
-            ["behaviorProfile"] = string.IsNullOrWhiteSpace(request.BehaviorProfile) ? "default" : request.BehaviorProfile.Trim(),
-            ["runHumanizedNavigation"] = request.RunHumanizedNavigation.ToString()
+            ["requestId"] = requestId
         };
-
-        if (!string.IsNullOrWhiteSpace(profile.ProfileDirectoryName))
-        {
-            metadata["browserFolder"] = profile.ProfileDirectoryName!;
-        }
-
-        if (profile.SessionMetadata is not null)
-        {
-            metadata["fingerprintHash"] = profile.SessionMetadata.FingerprintHash ?? string.Empty;
-            metadata["fingerprintUserAgent"] = profile.SessionMetadata.UserAgent ?? string.Empty;
-            metadata["fingerprintTimezone"] = profile.SessionMetadata.Timezone ?? string.Empty;
-            metadata["fingerprintLanguage"] = profile.SessionMetadata.Language ?? string.Empty;
-            metadata["fingerprintViewportWidth"] = profile.SessionMetadata.ViewportWidth?.ToString() ?? string.Empty;
-            metadata["fingerprintViewportHeight"] = profile.SessionMetadata.ViewportHeight?.ToString() ?? string.Empty;
-            metadata["fingerprintDeviceScale"] = profile.SessionMetadata.DeviceScaleFactor?.ToString("F1") ?? string.Empty;
-            metadata["fingerprintIsMobile"] = profile.SessionMetadata.IsMobile?.ToString() ?? string.Empty;
-            metadata["fingerprintHasTouch"] = profile.SessionMetadata.HasTouch?.ToString() ?? string.Empty;
-            metadata["networkProxyId"] = profile.SessionMetadata.ProxyId ?? string.Empty;
-            metadata["networkProxyAddress"] = profile.SessionMetadata.ProxyAddress ?? string.Empty;
-            metadata["networkExitIp"] = profile.SessionMetadata.ExitIpAddress ?? string.Empty;
-            if (profile.SessionMetadata.NetworkDelayMinMs.HasValue)
-            {
-                metadata["networkDelayMinMs"] = profile.SessionMetadata.NetworkDelayMinMs.Value.ToString();
-            }
-            if (profile.SessionMetadata.NetworkDelayMaxMs.HasValue)
-            {
-                metadata["networkDelayMaxMs"] = profile.SessionMetadata.NetworkDelayMaxMs.Value.ToString();
-            }
-            if (profile.SessionMetadata.NetworkRetryBaseDelayMs.HasValue)
-            {
-                metadata["networkRetryBaseDelayMs"] = profile.SessionMetadata.NetworkRetryBaseDelayMs.Value.ToString();
-            }
-            if (profile.SessionMetadata.NetworkMaxRetryAttempts.HasValue)
-            {
-                metadata["networkMaxRetryAttempts"] = profile.SessionMetadata.NetworkMaxRetryAttempts.Value.ToString();
-            }
-            if (profile.SessionMetadata.NetworkMitigationCount.HasValue)
-            {
-                metadata["networkMitigationCount"] = profile.SessionMetadata.NetworkMitigationCount.Value.ToString();
-            }
-        }
-
-        if (navigationMetadata is not null)
-        {
-            foreach (var pair in navigationMetadata)
-            {
-                metadata[pair.Key] = pair.Value;
-            }
-        }
-
-        foreach (var pair in captureMetadata)
-        {
-            metadata[pair.Key] = pair.Value;
-        }
-
-        return metadata;
     }
 
+    private static IReadOnlyList<string> BuildKeywordCandidates(NoteCaptureToolRequest request, string resolvedKeyword)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(resolvedKeyword))
+        {
+            set.Add(resolvedKeyword.Trim());
+        }
+
+        if (request.Keywords is not null)
+        {
+            foreach (var candidate in request.Keywords)
+            {
+                if (string.IsNullOrWhiteSpace(candidate))
+                {
+                    continue;
+                }
+
+                set.Add(candidate.Trim());
+            }
+        }
+
+        return set.Count == 0 ? Array.Empty<string>() : set.ToArray();
+    }
+
+    private static string? PickKeywordFromCandidates(IReadOnlyList<string>? keywords)
+    {
+        if (keywords is null || keywords.Count == 0)
+        {
+            return null;
+        }
+
+        var candidates = keywords
+            .Where(static k => !string.IsNullOrWhiteSpace(k))
+            .Select(static k => k.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (candidates.Length == 0)
+        {
+            return null;
+        }
+
+        return candidates.Length == 1
+            ? candidates[0]
+            : candidates[Random.Shared.Next(candidates.Length)];
+    }
+
+    /// <summary>
+    /// 中文：构建错误元数据，仅保留 requestId 字段。
+    /// English: Builds error metadata, keeping only requestId field.
+    /// </summary>
     private static IReadOnlyDictionary<string, string> BuildErrorMetadata(NoteCaptureToolRequest request, string? requestId, Exception ex)
     {
-        var resolvedKey = NormalizeBrowserKey(request.BrowserKey);
-        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["requestId"] = requestId ?? string.Empty,
-            ["keyword"] = request.Keyword ?? string.Empty,
-            ["portraitId"] = request.PortraitId ?? string.Empty,
-            ["browserKey"] = resolvedKey,
-            ["behaviorProfile"] = string.IsNullOrWhiteSpace(request.BehaviorProfile) ? "default" : request.BehaviorProfile.Trim(),
-            ["runHumanizedNavigation"] = request.RunHumanizedNavigation.ToString(),
-            ["error"] = ex.Message
+            ["requestId"] = requestId ?? string.Empty
         };
-
-        return metadata;
     }
 
     private static string NormalizeBrowserKey(string? browserKey)
@@ -307,8 +296,8 @@ public sealed class NoteCaptureTool
 }
 
 public sealed record NoteCaptureToolRequest(
-    [property: Description("优先使用的关键词 | Preferred keyword to capture against")] string? Keyword,
-    [property: Description("画像 ID，用于推荐关键词 | Portrait identifier for keyword fallback")] string? PortraitId,
+    [property: Description("候选关键词列表（用于筛选匹配笔记）| Candidate keywords for filtering notes")] IReadOnlyList<string>? Keywords = null,
+    [property: Description("画像 ID，用于推荐关键词 | Portrait identifier for keyword fallback")] string? PortraitId = null,
     [property: Description("目标笔记数量上限 | Maximum number of notes to collect")] int TargetCount = 20,
     [property: Description("排序方式，默认 comprehensive | Sort strategy, defaults to comprehensive")] string? SortBy = "comprehensive",
     [property: Description("笔记类型过滤条件 | Note type filter")] string? NoteType = "all",
@@ -318,8 +307,7 @@ public sealed record NoteCaptureToolRequest(
     [property: Description("输出目录，空值使用默认路径 | Output directory; defaults when empty")] string? OutputDirectory = null,
     [property: Description("浏览器键：user 表示用户配置，其它值映射为独立配置 | Browser key: 'user' for user profile, others map to isolated profiles")] string? BrowserKey = null,
     [property: Description("行为档案键，用于覆盖默认拟人化配置 | Behavior profile key overriding the default humanization profile")] string? BehaviorProfile = null,
-    [property: Description("是否执行拟人化导航 | Whether to execute humanized navigation before capture")] bool RunHumanizedNavigation = true,
-    [property: Description("请求 ID，便于审计和重试 | Request identifier for auditing and retries")] string? RequestId = null);
+    [property: Description("是否执行拟人化点击笔记（逐个点击进入详情页）| Whether to execute humanized note clicking (click into detail pages one by one)")] bool RunHumanizedNavigation = true);
 
 public sealed record NoteCaptureToolResult(
     [property: Description("实际使用的关键词 | Keyword used during capture")] string Keyword,
@@ -333,13 +321,29 @@ public sealed record NoteCaptureToolResult(
     [property: Description("执行的拟人化动作序列 | Executed humanized actions during navigation")] IReadOnlyList<string> HumanizedActions,
     [property: Description("计划阶段的拟人化动作概览 | Summary of planned humanized actions")] HumanizedActionSummary Planned,
     [property: Description("执行阶段的拟人化动作概览 | Summary of executed humanized actions")] HumanizedActionSummary Executed,
-    [property: Description("一致性校验告警 | Consistency warnings recorded during execution")] IReadOnlyList<string>? ConsistencyWarnings = null);
+    [property: Description("一致性校验告警 | Consistency warnings recorded during execution")] IReadOnlyList<string>? ConsistencyWarnings = null,
+    [property: Description("命中的关键词（同 Keyword，提供更直观字段）| Selected keyword echoed for clients")] string? SelectedKeyword = null);
+
 
 
 public sealed record NoteCaptureFilterSelections(
     [property: Description("排序方式（归一化）| Normalized sort option")] string SortBy,
     [property: Description("笔记类型（归一化）| Normalized note type filter")] string NoteType,
     [property: Description("发布时间（归一化）| Normalized publish time filter")] string PublishTime);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

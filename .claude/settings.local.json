@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(powershell:*)",
+      "mcp__code-index__set_project_path",
+      "mcp__code-index__find_files",
+      "mcp__code-index__search_code_advanced",
+      "Bash(dotnet build:*)",
+      "mcp__shrimp-task-manager__plan_task",
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__shrimp-task-manager__process_thought",
+      "mcp__shrimp-task-manager__analyze_task",
+      "mcp__shrimp-task-manager__reflect_task",
+      "mcp__shrimp-task-manager__split_tasks",
+      "mcp__shrimp-task-manager__execute_task",
+      "mcp__shrimp-task-manager__verify_task",
+      "mcp__shrimp-task-manager__list_tasks",
+      "Bash(dotnet test:*)",
+      "Bash(findstr:*)",
+      "Bash(test:*)",
+      "Bash(dotnet run:*)",
+      "mcp__chrome-devtools__new_page",
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__evaluate_script",
+      "mcp__chrome-devtools__click",
+      "mcp__chrome-devtools__select_page",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__take_screenshot",
+      "Bash(python -c \"from PIL import Image; img = Image.new(''RGB'', (800, 600), color=''lightblue''); img.save(''D:/test-cover.jpg'')\")",
+      "Read(//c/Windows/Web/Wallpaper/Windows/**)",
+      "mcp__chrome-devtools__upload_file",
+      "mcp__chrome-devtools__wait_for",
+      "mcp__chrome-devtools__list_pages",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading;
 
 namespace HushOps.Servers.XiaoHongShu.Services.Humanization.Behavior;
@@ -12,9 +12,12 @@ public enum BehaviorActionType
     Unknown,
     NavigateRandom,
     NavigateKeyword,
-    Like,
-    Favorite,
-    Comment,
+    NavigateExplore,
+    SearchKeyword,
+    SelectNote,
+    LikeCurrentNote,
+    FavoriteCurrentNote,
+    CommentCurrentNote,
     Capture
 }
 
@@ -45,3 +48,4 @@ public sealed record BehaviorTrace(
     int TypoCount,
     int ScrollSegments,
     IReadOnlyDictionary<string, string> Extras);
+

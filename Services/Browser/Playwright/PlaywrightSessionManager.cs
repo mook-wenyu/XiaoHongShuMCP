@@ -92,39 +92,91 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
     {
         await PlaywrightInstaller.EnsureInstalledAsync(_installationOptions, _logger, cancellationToken).ConfigureAwait(false);
 
-        var browser = await _browser.Value.ConfigureAwait(false);
+        var playwright = await _playwright.Value.ConfigureAwait(false);
 
-        var contextOptions = new BrowserNewContextOptions
+        // 如果是用户配置模式且提供了profilePath,使用持久化上下文保留登录状态
+        IBrowserContext context;
+        if (openResult.Kind == BrowserProfileKind.User && !string.IsNullOrWhiteSpace(openResult.ProfilePath))
         {
-            UserAgent = fingerprintContext.UserAgent,
-            Locale = fingerprintContext.Language,
-            TimezoneId = fingerprintContext.Timezone,
-            AcceptDownloads = true,
-            IgnoreHTTPSErrors = true,
-            ViewportSize = new ViewportSize
-            {
-                Width = fingerprintContext.ViewportWidth,
-                Height = fingerprintContext.ViewportHeight
-            },
-            DeviceScaleFactor = (float?)fingerprintContext.DeviceScaleFactor,
-            IsMobile = fingerprintContext.IsMobile,
-            HasTouch = fingerprintContext.HasTouch
-        };
+            _logger.LogInformation(
+                "[Playwright] 使用持久化上下文 (LaunchPersistentContext) profile={Profile} path={Path}",
+                openResult.ProfileKey,
+                openResult.ProfilePath);
 
-        if (!string.IsNullOrWhiteSpace(networkContext.ProxyAddress))
-        {
-            contextOptions.Proxy = new Proxy
+            var launchOptions = new BrowserTypeLaunchPersistentContextOptions
             {
-                Server = networkContext.ProxyAddress
+                UserAgent = fingerprintContext.UserAgent,
+                Locale = fingerprintContext.Language,
+                TimezoneId = fingerprintContext.Timezone,
+                AcceptDownloads = true,
+                IgnoreHTTPSErrors = true,
+                Headless = false, // 用户模式必须非headless以便手动登录
+                ViewportSize = new ViewportSize
+                {
+                    Width = fingerprintContext.ViewportWidth,
+                    Height = fingerprintContext.ViewportHeight
+                },
+                DeviceScaleFactor = (float?)fingerprintContext.DeviceScaleFactor,
+                IsMobile = fingerprintContext.IsMobile,
+                HasTouch = fingerprintContext.HasTouch
             };
-        }
 
-        var context = await browser.NewContextAsync(contextOptions).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(networkContext.ProxyAddress))
+            {
+                launchOptions.Proxy = new Proxy
+                {
+                    Server = networkContext.ProxyAddress
+                };
+            }
+
+            context = await playwright.Chromium.LaunchPersistentContextAsync(
+                openResult.ProfilePath,
+                launchOptions).ConfigureAwait(false);
+        }
+        else
+        {
+            // 独立配置或未指定路径,使用临时上下文
+            _logger.LogInformation(
+                "[Playwright] 使用临时上下文 (NewContext) profile={Profile}",
+                openResult.ProfileKey);
+
+            var browser = await _browser.Value.ConfigureAwait(false);
+
+            var contextOptions = new BrowserNewContextOptions
+            {
+                UserAgent = fingerprintContext.UserAgent,
+                Locale = fingerprintContext.Language,
+                TimezoneId = fingerprintContext.Timezone,
+                AcceptDownloads = true,
+                IgnoreHTTPSErrors = true,
+                ViewportSize = new ViewportSize
+                {
+                    Width = fingerprintContext.ViewportWidth,
+                    Height = fingerprintContext.ViewportHeight
+                },
+                DeviceScaleFactor = (float?)fingerprintContext.DeviceScaleFactor,
+                IsMobile = fingerprintContext.IsMobile,
+                HasTouch = fingerprintContext.HasTouch
+            };
+
+            if (!string.IsNullOrWhiteSpace(networkContext.ProxyAddress))
+            {
+                contextOptions.Proxy = new Proxy
+                {
+                    Server = networkContext.ProxyAddress
+                };
+            }
+
+            context = await browser.NewContextAsync(contextOptions).ConfigureAwait(false);
+        }
 
         if (fingerprintContext.ExtraHeaders.Count > 0)
         {
             await context.SetExtraHTTPHeadersAsync(fingerprintContext.ExtraHeaders).ConfigureAwait(false);
         }
+
+        // 隐藏自动化检测特征
+        await context.AddInitScriptAsync(WebdriverHideScript).ConfigureAwait(false);
 
         if (fingerprintContext.CanvasNoise)
         {
@@ -139,6 +191,26 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
         await ApplyNetworkControlsAsync(openResult.ProfileKey, context, networkContext, cancellationToken).ConfigureAwait(false);
 
         var page = await context.NewPageAsync().ConfigureAwait(false);
+
+        // 自动导航到小红书首页（这是唯一允许的 URL 跳转，之后所有导航都通过点击完成）
+        try
+        {
+            await page.GotoAsync("https://www.xiaohongshu.com/explore", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.NetworkIdle,
+                Timeout = 30000
+            }).ConfigureAwait(false);
+
+            _logger.LogInformation(
+                "[Playwright] navigated to Xiaohongshu homepage profile={Profile}",
+                openResult.ProfileKey);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[Playwright] failed to navigate to Xiaohongshu homepage profile={Profile}, continuing with blank page",
+                openResult.ProfileKey);
+        }
 
         _logger.LogInformation(
             "[Playwright] context created profile={Profile} ua={UA} proxy={Proxy}",
@@ -201,6 +273,8 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
             }, cancellationToken);
         };
     }
+
+    private const string WebdriverHideScript = "(() => {Object.defineProperty(navigator, 'webdriver', {get: () => false});Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en']});window.chrome = {runtime: {}};})();";
 
     private const string CanvasNoiseScript = "(() => {const addNoise = () => {const toDataURL = HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL = function(){const result = toDataURL.apply(this, arguments);return result.replace('A','A');};const getImageData = CanvasRenderingContext2D.prototype.getImageData;CanvasRenderingContext2D.prototype.getImageData = function(){const data = getImageData.apply(this, arguments);for (let i = 0; i < data.data.length; i += 4){data.data[i] += Math.floor(Math.random()*3)-1;data.data[i+1] += Math.floor(Math.random()*3)-1;data.data[i+2] += Math.floor(Math.random()*3)-1;}return data;};}; if (typeof window !== 'undefined') { addNoise(); } })();";
 

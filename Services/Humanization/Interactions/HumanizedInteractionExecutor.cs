@@ -84,13 +84,7 @@ public sealed class HumanizedInteractionExecutor : IHumanizedInteractionExecutor
                 await PerformHoverAsync(page, action, profile, random, timeoutToken).ConfigureAwait(false);
                 break;
             case HumanizedActionType.Click:
-                await PerformClickAsync(page, action, profile, random, timeoutToken, ClickKind.Single).ConfigureAwait(false);
-                break;
-            case HumanizedActionType.DoubleClick:
-                await PerformClickAsync(page, action, profile, random, timeoutToken, ClickKind.Double).ConfigureAwait(false);
-                break;
-            case HumanizedActionType.ContextClick:
-                await PerformClickAsync(page, action, profile, random, timeoutToken, ClickKind.Context).ConfigureAwait(false);
+                await PerformClickAsync(page, action, profile, random, timeoutToken).ConfigureAwait(false);
                 break;
             case HumanizedActionType.MoveRandom:
                 await PerformRandomMoveAsync(page, profile, random, timeoutToken).ConfigureAwait(false);
@@ -110,30 +104,14 @@ public sealed class HumanizedInteractionExecutor : IHumanizedInteractionExecutor
             case HumanizedActionType.Hotkey:
                 await PerformHotkeyAsync(page, action, profile, random, timeoutToken).ConfigureAwait(false);
                 break;
-            case HumanizedActionType.SelectOption:
-                await PerformSelectOptionAsync(page, action, timeoutToken).ConfigureAwait(false);
+            case HumanizedActionType.WaitFor:
+                await PerformWaitForAsync(page, action, timeoutToken).ConfigureAwait(false);
                 break;
             case HumanizedActionType.UploadFile:
                 await PerformUploadFileAsync(page, action, timeoutToken).ConfigureAwait(false);
                 break;
-            case HumanizedActionType.IdlePause:
-                await PerformIdlePauseAsync(action, cancellationToken).ConfigureAwait(false);
-                break;
-            case HumanizedActionType.WaitFor:
-                await PerformWaitForAsync(page, action, timeoutToken).ConfigureAwait(false);
-                break;
-            case HumanizedActionType.Drag:
-                await PerformDragAsync(page, action, profile, random, timeoutToken).ConfigureAwait(false);
-                break;
-            case HumanizedActionType.DragAndDrop:
-                await PerformDragAndDropAsync(page, action, profile, random, timeoutToken).ConfigureAwait(false);
-                break;
-            case HumanizedActionType.Evaluate:
-            case HumanizedActionType.Custom:
-                await PerformEvaluateAsync(page, action, timeoutToken).ConfigureAwait(false);
-                break;
             default:
-                throw new NotSupportedException($"鍔ㄤ綔绫诲瀷 {action.Type} 灏氭湭瀹炵幇銆?");
+                throw new NotSupportedException($"动作类型 {action.Type} 尚未实现。");
         }
 
         if (action.Timing.DelayAfter > TimeSpan.Zero)
@@ -152,11 +130,11 @@ public sealed class HumanizedInteractionExecutor : IHumanizedInteractionExecutor
         await MoveMouseAsync(page, locator, profile, clickStrategy, random, cancellationToken, focus: false).ConfigureAwait(false);
     }
 
-    private async Task PerformClickAsync(IPage page, HumanizedAction action, HumanBehaviorProfileOptions profile, Random random, CancellationToken cancellationToken, ClickKind clickKind)
+    private async Task PerformClickAsync(IPage page, HumanizedAction action, HumanBehaviorProfileOptions profile, Random random, CancellationToken cancellationToken)
     {
         var locator = await ResolveLocatorAsync(page, action, cancellationToken).ConfigureAwait(false);
         var clickStrategy = ResolveClickStrategy(action, profile);
-        var target = await MoveMouseAsync(page, locator, profile, clickStrategy, random, cancellationToken, focus: clickKind == ClickKind.Single || clickKind == ClickKind.Double).ConfigureAwait(false);
+        var target = await MoveMouseAsync(page, locator, profile, clickStrategy, random, cancellationToken, focus: true).ConfigureAwait(false);
 
         var clickOptions = new LocatorClickOptions
         {
@@ -168,27 +146,7 @@ public sealed class HumanizedInteractionExecutor : IHumanizedInteractionExecutor
             Timeout = (float)Math.Max(500d, action.Timing.Timeout.TotalMilliseconds)
         };
 
-        switch (clickKind)
-        {
-            case ClickKind.Single:
-                await locator.ClickAsync(clickOptions).ConfigureAwait(false);
-                break;
-            case ClickKind.Double:
-                await locator.DblClickAsync(new LocatorDblClickOptions
-                {
-                    Position = clickOptions.Position,
-                    Timeout = clickOptions.Timeout
-                }).ConfigureAwait(false);
-                break;
-            case ClickKind.Context:
-                await locator.ClickAsync(new LocatorClickOptions
-                {
-                    Button = MouseButton.Right,
-                    Position = clickOptions.Position,
-                    Timeout = clickOptions.Timeout
-                }).ConfigureAwait(false);
-                break;
-        }
+        await locator.ClickAsync(clickOptions).ConfigureAwait(false);
     }
 
     private async Task PerformRandomMoveAsync(IPage page, HumanBehaviorProfileOptions profile, Random random, CancellationToken cancellationToken)
@@ -714,13 +672,6 @@ public sealed class HumanizedInteractionExecutor : IHumanizedInteractionExecutor
 
     private static double Clamp(double value, double min, double max)
         => Math.Min(Math.Max(value, min), max);
-
-    private enum ClickKind
-    {
-        Single,
-        Double,
-        Context
-    }
 
     private sealed record LocatorTarget(Point Absolute, Point Relative, LocatorBoundingBoxResult Box);
     private readonly record struct ClickStrategy(PixelRangeOptions Jitter, double EdgeProbability);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using HushOps.Servers.XiaoHongShu.Configuration;
@@ -131,8 +131,11 @@ public sealed class DefaultBehaviorController : IBehaviorController
             return false;
         }
 
-        return actionType is BehaviorActionType.NavigateKeyword or BehaviorActionType.NavigateRandom or BehaviorActionType.Capture
+        return actionType is BehaviorActionType.NavigateKeyword or BehaviorActionType.NavigateRandom
+            or BehaviorActionType.NavigateExplore or BehaviorActionType.SearchKeyword
+            or BehaviorActionType.SelectNote or BehaviorActionType.Capture
             ? Random.Shared.NextDouble() < profile.HesitationProbability
             : false;
     }
 }
+

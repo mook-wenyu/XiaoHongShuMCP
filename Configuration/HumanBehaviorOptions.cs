@@ -60,6 +60,19 @@ public sealed class HumanBehaviorProfileOptions
     public bool UseCurvedPaths { get; set; } = true;
     public DelayRangeOptions RandomIdleDuration { get; set; } = new(420, 960);
     public double RandomIdleProbability { get; set; } = 0.1;
+
+    /// <summary>
+    /// 中文：浏览时点赞的概率（0-1）。
+    /// English: Probability of liking a note during browse (0-1).
+    /// </summary>
+    public double LikeProbability { get; set; } = 0.3;
+
+    /// <summary>
+    /// 中文：浏览时收藏的概率（0-1）。
+    /// English: Probability of favoriting a note during browse (0-1).
+    /// </summary>
+    public double FavoriteProbability { get; set; } = 0.2;
+
     public string? RandomSeed { get; set; }
         = null;
     public int ViewportTolerancePx { get; set; } = 2;
@@ -92,7 +105,9 @@ public sealed class HumanBehaviorProfileOptions
         RandomMoveProbability = 0.18,
         UseCurvedPaths = true,
         RandomIdleDuration = new DelayRangeOptions(620, 1320),
-        RandomIdleProbability = 0.2
+        RandomIdleProbability = 0.2,
+        LikeProbability = 0.5,
+        FavoriteProbability = 0.3
     };
 
     public static HumanBehaviorProfileOptions CreateAggressive() => new()
@@ -117,7 +132,9 @@ public sealed class HumanBehaviorProfileOptions
         RandomMoveProbability = 0.05,
         UseCurvedPaths = true,
         RandomIdleDuration = new DelayRangeOptions(240, 520),
-        RandomIdleProbability = 0.05
+        RandomIdleProbability = 0.05,
+        LikeProbability = 0.6,
+        FavoriteProbability = 0.4
     };
 }
 

@@ -14,7 +14,9 @@ public sealed record ActionLocator(
     string? Placeholder = null,
     string? AltText = null,
     string? Title = null,
-    string? TestId = null)
+    string? TestId = null,
+    string? Id = null,
+    string? Selector = null)
 {
     public AriaRole? Role { get; } = Role;
 
@@ -30,6 +32,10 @@ public sealed record ActionLocator(
 
     public string? TestId { get; } = Normalize(TestId);
 
+    public string? Id { get; } = Normalize(Id);
+
+    public string? Selector { get; } = Normalize(Selector);
+
     public static ActionLocator Empty { get; } = new();
 
     public bool IsEmpty()
@@ -39,7 +45,9 @@ public sealed record ActionLocator(
            && Placeholder is null
            && AltText is null
            && Title is null
-           && TestId is null;
+           && TestId is null
+           && Id is null
+           && Selector is null;
 
     private static string? Normalize(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

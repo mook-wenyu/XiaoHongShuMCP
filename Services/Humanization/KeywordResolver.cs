@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -29,14 +29,17 @@ public sealed class KeywordResolver : IKeywordResolver
         _logger = logger;
     }
 
-    public async Task<string> ResolveAsync(string? keyword, string? portraitId, IDictionary<string, string> metadata, CancellationToken cancellationToken)
+    public async Task<string> ResolveAsync(IReadOnlyList<string> keywords, string? portraitId, IDictionary<string, string> metadata, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(keyword))
+        var fromRequest = PickFromCandidates(keywords);
+        if (fromRequest is not null)
         {
-            var normalized = keyword.Trim();
-            metadata["keyword"] = normalized;
-            metadata["source"] = "request";
-            return normalized;
+            metadata["keyword"] = fromRequest;
+            metadata["selectedKeyword"] = fromRequest;
+            metadata["keywords.selected"] = fromRequest;
+            metadata["keyword.source"] = "request";
+            metadata["keyword.candidates"] = keywords is null ? string.Empty : string.Join(",", keywords);
+            return fromRequest;
         }
 
         if (!string.IsNullOrWhiteSpace(portraitId))
@@ -46,8 +49,10 @@ public sealed class KeywordResolver : IKeywordResolver
             {
                 var weighted = SelectKeywordByWeight(portrait);
                 metadata["keyword"] = weighted;
+                metadata["selectedKeyword"] = weighted;
+                metadata["keywords.selected"] = weighted;
                 metadata["portraitId"] = portraitId!;
-                metadata["source"] = "portrait";
+                metadata["keyword.source"] = "portrait";
                 return weighted;
             }
         }
@@ -56,11 +61,40 @@ public sealed class KeywordResolver : IKeywordResolver
         if (!string.IsNullOrWhiteSpace(fallback))
         {
             metadata["keyword"] = fallback!;
-            metadata["source"] = "default";
+            metadata["selectedKeyword"] = fallback!;
+            metadata["keywords.selected"] = fallback!;
+            metadata["keyword.source"] = "default";
             return fallback!;
         }
 
         throw new InvalidOperationException("无法解析关键词：请求、画像与默认配置均为空。");
+    }
+
+    private static string? PickFromCandidates(IReadOnlyList<string>? keywords)
+    {
+        if (keywords is null || keywords.Count == 0)
+        {
+            return null;
+        }
+
+        var candidates = keywords
+            .Where(static k => !string.IsNullOrWhiteSpace(k))
+            .Select(static k => k.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (candidates.Length == 0)
+        {
+            return null;
+        }
+
+        if (candidates.Length == 1)
+        {
+            return candidates[0];
+        }
+
+        var index = Random.Shared.Next(candidates.Length);
+        return candidates[index];
     }
 
     private static string SelectKeywordByWeight(AccountPortrait portrait)
@@ -123,3 +157,4 @@ public interface IDefaultKeywordProvider
 {
     Task<string?> GetDefaultAsync(CancellationToken cancellationToken);
 }
+

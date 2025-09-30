@@ -43,6 +43,8 @@ public sealed class InteractionLocatorBuilder : IInteractionLocatorBuilder
 
         var candidates = new List<LocatorCandidate>();
 
+        AppendSelectorCandidate(page, locator, candidates);
+        AppendIdCandidate(page, locator, candidates);
         AppendRoleCandidates(page, locator, candidates);
         AppendTestIdCandidate(page, locator, candidates);
         AppendTextCandidate(page, locator, candidates);
@@ -66,7 +68,7 @@ public sealed class InteractionLocatorBuilder : IInteractionLocatorBuilder
     }
 
     private static string Describe(ActionLocator locator)
-        => $"role={locator.Role?.ToString() ?? "<null>"}, text={locator.Text ?? "<null>"}, label={locator.Label ?? "<null>"}, placeholder={locator.Placeholder ?? "<null>"}, altText={locator.AltText ?? "<null>"}, title={locator.Title ?? "<null>"}, testId={locator.TestId ?? "<null>"}";
+        => $"role={locator.Role?.ToString() ?? "<null>"}, text={locator.Text ?? "<null>"}, label={locator.Label ?? "<null>"}, placeholder={locator.Placeholder ?? "<null>"}, altText={locator.AltText ?? "<null>"}, title={locator.Title ?? "<null>"}, testId={locator.TestId ?? "<null>"}, id={locator.Id ?? "<null>"}, selector={locator.Selector ?? "<null>"}";
 
     private async Task<ILocator?> TryResolveAsync(LocatorCandidate candidate, CancellationToken cancellationToken)
     {
@@ -142,6 +144,23 @@ public sealed class InteractionLocatorBuilder : IInteractionLocatorBuilder
         catch (PlaywrightException ex) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogTrace(ex, "[LocatorBuilder] 滚动尝试失败");
+        }
+    }
+
+    private void AppendSelectorCandidate(IPage page, ActionLocator locator, ICollection<LocatorCandidate> output)
+    {
+        if (locator.Selector is not null)
+        {
+            output.Add(CreateCandidate(page, page.Locator(locator.Selector), $"selector:{locator.Selector}", "selector", allowScrollSearch: true));
+        }
+    }
+
+    private void AppendIdCandidate(IPage page, ActionLocator locator, ICollection<LocatorCandidate> output)
+    {
+        if (locator.Id is not null)
+        {
+            var selector = $"#{locator.Id}";
+            output.Add(CreateCandidate(page, page.Locator(selector), $"id:{locator.Id}", "id", allowScrollSearch: false));
         }
     }
 

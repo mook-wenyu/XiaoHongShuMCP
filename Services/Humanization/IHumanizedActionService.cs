@@ -20,23 +20,53 @@ public interface IHumanizedActionService
     Task<HumanizedActionOutcome> ExecuteAsync(HumanizedActionRequest request, HumanizedActionKind kind, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// 中文：拟人化动作类型枚举。
+/// English: Enumeration of humanized action kinds.
+/// </summary>
 public enum HumanizedActionKind
 {
+    /// <summary>随机浏览首页 | Random browse home page</summary>
     RandomBrowse,
+
+    /// <summary>按关键词浏览 | Browse by keyword</summary>
     KeywordBrowse,
-    Like,
-    Favorite,
-    Comment
+
+    /// <summary>导航到探索页 | Navigate to explore page</summary>
+    NavigateExplore,
+
+    /// <summary>搜索关键词 | Search keyword</summary>
+    SearchKeyword,
+
+    /// <summary>根据关键词选择笔记 | Select note by keyword matching</summary>
+    SelectNote,
+
+    /// <summary>点赞当前笔记 | Like current note</summary>
+    LikeCurrentNote,
+
+    /// <summary>收藏当前笔记 | Favorite current note</summary>
+    FavoriteCurrentNote,
+
+    /// <summary>评论当前笔记 | Comment on current note</summary>
+    CommentCurrentNote,
+
+    /// <summary>拟人化滚动浏览当前页面 | Humanized scroll browsing on current page</summary>
+    ScrollBrowse,
+
+    /// <summary>发布笔记（上传图片、填写标题和正文、暂存离开）| Publish note (upload image, fill title and content, save draft and leave)</summary>
+    PublishNote
 }
 
 public sealed record HumanizedActionRequest(
-    string? Keyword,
+    IReadOnlyList<string> Keywords,
     string? PortraitId,
     string? CommentText,
-    bool WaitForLoad,
     string BrowserKey,
     string? RequestId,
-    string BehaviorProfile = "default");
+    string BehaviorProfile = "default",
+    string? ImagePath = null,
+    string? NoteTitle = null,
+    string? NoteContent = null);
 
 public sealed record HumanizedActionOutcome(
     bool Success,
@@ -64,6 +94,8 @@ public sealed record HumanizedActionPlan(
     HumanizedActionScript Script,
     IReadOnlyDictionary<string, string> Metadata)
 {
+    public string SelectedKeyword => ResolvedKeyword;
+
     public static HumanizedActionPlan Create(
         HumanizedActionKind kind,
         HumanizedActionRequest request,
@@ -94,5 +126,8 @@ public sealed record HumanizedActionPlan(
             new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase)));
     }
 }
+
+
+
 
 

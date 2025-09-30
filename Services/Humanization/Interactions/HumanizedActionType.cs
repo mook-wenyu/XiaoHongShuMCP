@@ -12,20 +12,12 @@ public enum HumanizedActionType
     Unknown = 0,
     Hover,
     Click,
-    DoubleClick,
-    ContextClick,
-    Drag,
-    DragAndDrop,
     MoveRandom,
     Wheel,
     ScrollTo,
     InputText,
     PressKey,
     Hotkey,
-    SelectOption,
-    UploadFile,
-    IdlePause,
     WaitFor,
-    Evaluate,
-    Custom
+    UploadFile
 }

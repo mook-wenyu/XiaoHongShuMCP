@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -140,18 +140,43 @@ public sealed class HumanizedActionService : IHumanizedActionService
             }
         }
 
+        var normalizedKeywords = NormalizeKeywords(request.Keywords);
+        if (normalizedKeywords.Count > 0)
+        {
+            metadata["keywords.candidates"] = string.Join(",", normalizedKeywords);
+        }
+
         var normalizedRequest = new HumanizedActionRequest(
-            request.Keyword,
+            normalizedKeywords,
             request.PortraitId,
             request.CommentText,
-            request.WaitForLoad,
             profile.ProfileKey,
             request.RequestId,
             behaviorProfileKey);
 
-        var resolvedKeyword = await _keywordResolver.ResolveAsync(request.Keyword, request.PortraitId, metadata, cancellationToken)
-            .ConfigureAwait(false);
+        // 判断操作是否需要关键词解析
+        // NavigateExplore、LikeCurrentNote、FavoriteCurrentNote、CommentCurrentNote、ScrollBrowse、KeywordBrowse 不需要关键词
+        var requiresKeyword = kind is HumanizedActionKind.SearchKeyword
+            or HumanizedActionKind.SelectNote
+            or HumanizedActionKind.RandomBrowse;
+
+        string resolvedKeyword;
+        if (requiresKeyword)
+        {
+            // 需要关键词的操作：执行解析（可能抛出异常）
+            resolvedKeyword = await _keywordResolver.ResolveAsync(normalizedKeywords, request.PortraitId, metadata, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            // 不需要关键词的操作：使用空字符串
+            resolvedKeyword = string.Empty;
+            metadata["keyword.source"] = "not_required";
+        }
+
         metadata["resolvedKeyword"] = resolvedKeyword;
+        metadata["selectedKeyword"] = resolvedKeyword;
+        metadata["keywords.selected"] = resolvedKeyword;
 
         var script = _scriptBuilder.Build(normalizedRequest, kind, resolvedKeyword);
         metadata["script.actionCount"] = script.Actions.Count.ToString(CultureInfo.InvariantCulture);
@@ -208,6 +233,8 @@ public sealed class HumanizedActionService : IHumanizedActionService
         try
         {
             metadata["resolvedKeyword"] = plan.ResolvedKeyword;
+            metadata["selectedKeyword"] = plan.ResolvedKeyword;
+            metadata["keywords.selected"] = plan.ResolvedKeyword;
             metadata["script.actionCount"] = plannedSummary.Count.ToString(CultureInfo.InvariantCulture);
             metadata["script.actions"] = string.Join(",", plannedSummary.Actions);
             metadata["plan.actionCount"] = plannedSummary.Count.ToString(CultureInfo.InvariantCulture);
@@ -274,6 +301,12 @@ public sealed class HumanizedActionService : IHumanizedActionService
             }
 
             await _executor.ExecuteAsync(pageContext.Page, plan.Script, cancellationToken).ConfigureAwait(false);
+
+            if (plan.Kind == HumanizedActionKind.SelectNote)
+            {
+                await CaptureNoteDetailAsync(pageContext, metadata, cancellationToken).ConfigureAwait(false);
+            }
+
             var executedSummary = plan.Script.ToSummary();
             metadata["execution.actionCount"] = executedSummary.Count.ToString(CultureInfo.InvariantCulture);
             metadata["execution.actions"] = string.Join(",", executedSummary.Actions);
@@ -382,11 +415,119 @@ public sealed class HumanizedActionService : IHumanizedActionService
         {
             HumanizedActionKind.RandomBrowse => BehaviorActionType.NavigateRandom,
             HumanizedActionKind.KeywordBrowse => BehaviorActionType.NavigateKeyword,
-            HumanizedActionKind.Like => BehaviorActionType.Like,
-            HumanizedActionKind.Favorite => BehaviorActionType.Favorite,
-            HumanizedActionKind.Comment => BehaviorActionType.Comment,
+            HumanizedActionKind.NavigateExplore => BehaviorActionType.NavigateExplore,
+            HumanizedActionKind.SearchKeyword => BehaviorActionType.SearchKeyword,
+            HumanizedActionKind.SelectNote => BehaviorActionType.SelectNote,
+            HumanizedActionKind.LikeCurrentNote => BehaviorActionType.LikeCurrentNote,
+            HumanizedActionKind.FavoriteCurrentNote => BehaviorActionType.FavoriteCurrentNote,
+            HumanizedActionKind.CommentCurrentNote => BehaviorActionType.CommentCurrentNote,
             _ => BehaviorActionType.Unknown
         };
+
+    private static async Task CaptureNoteDetailAsync(
+        BrowserPageContext pageContext,
+        IDictionary<string, string> metadata,
+        CancellationToken cancellationToken)
+    {
+        if (pageContext is null || metadata is null)
+        {
+            return;
+        }
+
+        const string script = """
+() => {
+    const url = window.location && typeof window.location.href === 'string' ? window.location.href : '';
+    const titleElement = document.querySelector('[data-note-title]')
+        || document.querySelector('h1')
+        || document.querySelector('h2');
+    const title = titleElement ? (titleElement.textContent || '').trim() : '';
+    const noteIdAttr = document.querySelector('[data-note-id]')?.getAttribute('data-note-id') || '';
+    return { url, title, noteId: noteIdAttr };
+}
+""";
+
+        try
+        {
+            var snapshot = await pageContext.Page.EvaluateAsync<NoteDetailSnapshot>(script).ConfigureAwait(false);
+
+            metadata["detail.captureStatus"] = "ok";
+
+            if (snapshot is null)
+            {
+                metadata["detail.captureStatus"] = "empty";
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(snapshot.Url))
+            {
+                metadata["detail.url"] = snapshot.Url;
+            }
+
+            var noteId = snapshot.NoteId;
+            if (string.IsNullOrWhiteSpace(noteId) && !string.IsNullOrWhiteSpace(snapshot.Url))
+            {
+                noteId = ExtractNoteIdFromUrl(snapshot.Url);
+            }
+
+            if (!string.IsNullOrWhiteSpace(noteId))
+            {
+                metadata["detail.noteId"] = noteId.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(snapshot.Title))
+            {
+                metadata["detail.title"] = snapshot.Title.Trim();
+            }
+        }
+        catch (Exception ex)
+        {
+            metadata["detail.captureStatus"] = "failed";
+            metadata["detail.captureError"] = ex.Message;
+        }
+    }
+
+    private static string ExtractNoteIdFromUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var uri = Uri.TryCreate(url, UriKind.Absolute, out var absolute)
+                ? absolute
+                : Uri.TryCreate(url, UriKind.Relative, out var relative)
+                    ? relative
+                    : null;
+
+            var path = uri?.IsAbsoluteUri == true ? uri.AbsolutePath : uri?.OriginalString ?? url;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return string.Empty;
+            }
+
+            var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            var lastSegment = segments[^1];
+            var trimmed = lastSegment.Split('?', '#')[0];
+            return trimmed;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// 中文：笔记详情页快照。
+    /// English: Note detail page snapshot.
+    /// </summary>
+    private sealed record NoteDetailSnapshot(string? Url, string? NoteId, string? Title);
 
     private HumanBehaviorProfileOptions ResolveBehaviorProfile(string profileKey)
     {
@@ -402,14 +543,35 @@ public sealed class HumanizedActionService : IHumanizedActionService
 
         return HumanBehaviorProfileOptions.CreateDefault();
     }
+
+    private static IReadOnlyList<string> NormalizeKeywords(IReadOnlyList<string> keywords)
+    {
+        if (keywords is null || keywords.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var normalized = keywords
+            .Where(static k => !string.IsNullOrWhiteSpace(k))
+            .Select(static k => k.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return normalized.Length == 0 ? Array.Empty<string>() : normalized;
+    }
 }
 
 public interface IKeywordResolver
 {
-    Task<string> ResolveAsync(string? keyword, string? portraitId, IDictionary<string, string> metadata, CancellationToken cancellationToken);
+    Task<string> ResolveAsync(IReadOnlyList<string> keywords, string? portraitId, IDictionary<string, string> metadata, CancellationToken cancellationToken);
 }
 
 public interface IHumanDelayProvider
 {
     Task DelayBetweenActionsAsync(CancellationToken cancellationToken);
 }
+
+
+
+
+

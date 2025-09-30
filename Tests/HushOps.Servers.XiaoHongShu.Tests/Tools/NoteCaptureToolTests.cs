@@ -70,17 +70,20 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
     {
         var tool = CreateTool(out var humanizedService, navigationShouldFail: false);
 
-        var request = new NoteCaptureToolRequest("闇茶惀", null, 5, "comprehensive", "all", "all", false, false, null, "user", "default", true, "req-1");
+        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "comprehensive", "all", "all", false, false, null, "user", "default", true);
 
         var result = await tool.CaptureAsync(request, CancellationToken.None);
 
         Assert.True(result.Success);
         Assert.Equal("default", result.Data!.BehaviorProfileId);
+        Assert.Equal(result.Data.Keyword, result.Data.SelectedKeyword);
+        // Metadata now only contains requestId after simplification
+        Assert.Single(result.Metadata);
+        Assert.Contains("requestId", result.Metadata.Keys);
         Assert.Equal("comprehensive", result.Data!.FilterSelections.SortBy);
         Assert.NotEmpty(result.Data.HumanizedActions);
         Assert.Equal(1, result.Data.Planned.Count);
         Assert.Equal(1, result.Data.Executed.Count);
-        Assert.True(bool.Parse(result.Metadata!["runHumanizedNavigation"]));
         Assert.True(humanizedService.PrepareCalled);
         Assert.True(humanizedService.ExecutePlanCalled);
     }
@@ -90,7 +93,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
     {
         var tool = CreateTool(out var humanizedService, navigationShouldFail: true);
 
-        var request = new NoteCaptureToolRequest("闇茶惀", null, 5, "comprehensive", "all", "all", false, false, null, "user", "default", false, "req-2");
+        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "comprehensive", "all", "all", false, false, null, "user", "default", false);
 
         var result = await tool.CaptureAsync(request, CancellationToken.None);
 
@@ -98,7 +101,9 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
         Assert.Equal(new[] { "InputText" }, result.Data!.HumanizedActions);
         Assert.Equal(1, result.Data.Planned.Count);
         Assert.Equal(0, result.Data.Executed.Count);
-        Assert.False(bool.Parse(result.Metadata!["runHumanizedNavigation"]));
+        // Metadata now only contains requestId after simplification
+        Assert.Single(result.Metadata);
+        Assert.Contains("requestId", result.Metadata.Keys);
         Assert.True(humanizedService.PrepareCalled);
         Assert.False(humanizedService.ExecutePlanCalled);
     }
@@ -142,7 +147,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
     private sealed class StubKeywordProvider : IDefaultKeywordProvider
     {
         public Task<string?> GetDefaultAsync(CancellationToken cancellationToken)
-            => Task.FromResult<string?>("闇茶惀");
+            => Task.FromResult<string?>("露营");
     }
 
     private sealed class StubBrowserAutomationService : IBrowserAutomationService
@@ -195,7 +200,8 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
                 metadata[$"humanized.plan.actions.{i}"] = actions[i];
             }
             var profile = new BrowserOpenResult(BrowserProfileKind.User, request.BrowserKey, "/tmp/user", false, false, null, true, true, null);
-            return Task.FromResult(HumanizedActionPlan.Create(kind, request, request.Keyword ?? string.Empty, profile, new HumanBehaviorProfileOptions(), script, metadata));
+            var resolved = request.Keywords.FirstOrDefault() ?? string.Empty;
+            return Task.FromResult(HumanizedActionPlan.Create(kind, request, resolved, profile, new HumanBehaviorProfileOptions(), script, metadata));
         }
 
         public Task<HumanizedActionOutcome> ExecuteAsync(HumanizedActionPlan plan, CancellationToken cancellationToken)
@@ -245,6 +251,8 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
         }
     }
 }
+
+
 
 
 

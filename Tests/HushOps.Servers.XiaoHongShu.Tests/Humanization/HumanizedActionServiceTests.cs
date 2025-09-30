@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HushOps.Servers.XiaoHongShu.Configuration;
@@ -33,10 +34,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
 
         await _page.SetContentAsync("""
         <main>
-            <label>
-                搜索
-                <input placeholder='搜索' />
-            </label>
+            <a href="#" role="link">发现</a>
         </main>
         """);
 
@@ -91,15 +89,14 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
         var service = CreateService(behaviorOptions);
 
         var outcome = await service.ExecuteAsync(
-            new HumanizedActionRequest("露营", null, null, true, "user", "req-1", "default"),
-            HumanizedActionKind.KeywordBrowse,
+            new HumanizedActionRequest(Array.Empty<string>(), null, null, "user", "req-1", "default"),
+            HumanizedActionKind.NavigateExplore,
             CancellationToken.None);
 
         Assert.True(outcome.Success);
         Assert.Equal("ok", outcome.Status);
-        Assert.Equal("露营", await _page.EvaluateAsync<string>("() => document.querySelector('input').value"));
-        Assert.Equal("露营", outcome.Metadata["resolvedKeyword"]);
-        Assert.Contains("InputText", outcome.Metadata["script.actions"]);
+        Assert.Equal("", outcome.Metadata["resolvedKeyword"]); // NavigateExplore 不需要关键词
+        Assert.Contains("Click", outcome.Metadata["script.actions"]);
         Assert.Equal("True", outcome.Metadata["consistency.uaMatch"]);
         Assert.Equal("default", outcome.Metadata["behaviorProfile"]);
     }
@@ -111,12 +108,13 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
         var service = CreateService(behaviorOptions);
 
         var plan = await service.PrepareAsync(
-            new HumanizedActionRequest("露营", null, null, true, "user", "plan-1", "default"),
-            HumanizedActionKind.KeywordBrowse,
+            new HumanizedActionRequest(Array.Empty<string>(), null, null, "user", "plan-1", "default"),
+            HumanizedActionKind.NavigateExplore,
             CancellationToken.None);
 
         Assert.Equal("default", plan.BehaviorProfile);
-        Assert.Equal("露营", plan.ResolvedKeyword);
+        Assert.Equal("", plan.ResolvedKeyword); // NavigateExplore 不需要关键词
+        Assert.Equal("", plan.SelectedKeyword);
         Assert.NotEmpty(plan.Script.Actions);
         Assert.Contains("script.actionCount", plan.Metadata.Keys);
     }
@@ -149,8 +147,11 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
 
     private sealed class StubKeywordResolver : IKeywordResolver
     {
-        public Task<string> ResolveAsync(string? keyword, string? portraitId, IDictionary<string, string> metadata, CancellationToken cancellationToken)
-            => Task.FromResult(string.IsNullOrWhiteSpace(keyword) ? "默认" : keyword.Trim());
+        public Task<string> ResolveAsync(IReadOnlyList<string> keywords, string? portraitId, IDictionary<string, string> metadata, CancellationToken cancellationToken)
+        {
+            var candidate = keywords.FirstOrDefault(k => !string.IsNullOrWhiteSpace(k)) ?? "默认";
+            return Task.FromResult(candidate);
+        }
     }
 
     private sealed class StubDelayProvider : IHumanDelayProvider
@@ -204,3 +205,4 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
         }
     }
 }
+

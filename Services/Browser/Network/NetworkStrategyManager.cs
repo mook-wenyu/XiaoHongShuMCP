@@ -9,9 +9,13 @@ using Microsoft.Extensions.Options;
 
 namespace HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 
+/// <summary>
+/// 中文：网络会话上下文，ExitIp使用string类型确保可JSON序列化。
+/// English: Network session context, ExitIp uses string type to ensure JSON serializability.
+/// </summary>
 public sealed record NetworkSessionContext(
     string ProxyId,
-    IPAddress? ExitIp,
+    string? ExitIp,
     double AverageLatencyMs,
     double FailureRate,
     bool BandwidthSimulated,
@@ -54,10 +58,11 @@ public sealed class NetworkStrategyManager : INetworkStrategyManager
         var failureRate = Math.Round(_random.NextDouble() * 0.02, 4); // 0-2%
 
         var proxyId = template.ProxyPool;
-        IPAddress? exitIp = null;
+        string? exitIp = null;
         try
         {
-            exitIp = IPAddress.Parse("10." + _random.Next(10, 200) + "." + _random.Next(0, 255) + "." + _random.Next(0, 255));
+            var ip = IPAddress.Parse("10." + _random.Next(10, 200) + "." + _random.Next(0, 255) + "." + _random.Next(0, 255));
+            exitIp = ip.ToString();
         }
         catch
         {

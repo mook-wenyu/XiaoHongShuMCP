@@ -7,36 +7,31 @@ using Microsoft.Extensions.Logging;
 namespace HushOps.Servers.XiaoHongShu.Infrastructure.ToolExecution;
 
 /// <summary>
-/// 中文：统一工具执行结果封装，提供成功状态、错误码与数据。
+/// 中文：统一工具执行结果封装，使用record类型确保可JSON序列化。
+/// English: Unified tool execution result wrapper, using record type to ensure JSON serializability.
 /// </summary>
-public sealed class OperationResult<T>
+public sealed record OperationResult<T>(
+    bool Success,
+    string Status,
+    T? Data,
+    string? ErrorMessage,
+    IReadOnlyDictionary<string, string> Metadata)
 {
-    private OperationResult(bool success, string status, T? data, string? errorMessage, IReadOnlyDictionary<string, string>? metadata)
-    {
-        Success = success;
-        Status = status;
-        Data = data;
-        ErrorMessage = errorMessage;
-        Metadata = metadata ?? EmptyMetadata;
-    }
-
     private static readonly IReadOnlyDictionary<string, string> EmptyMetadata = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
-    public bool Success { get; }
-
-    public string Status { get; }
-
-    public T? Data { get; }
-
-    public string? ErrorMessage { get; }
-
-    public IReadOnlyDictionary<string, string> Metadata { get; }
-
+    /// <summary>
+    /// 中文：创建成功结果。
+    /// English: Creates a success result.
+    /// </summary>
     public static OperationResult<T> Ok(T data, string status = "ok", IReadOnlyDictionary<string, string>? metadata = null)
-        => new(true, status, data, null, metadata);
+        => new(true, status, data, null, metadata ?? EmptyMetadata);
 
+    /// <summary>
+    /// 中文：创建失败结果。
+    /// English: Creates a failure result.
+    /// </summary>
     public static OperationResult<T> Fail(string status, string? errorMessage = null, IReadOnlyDictionary<string, string>? metadata = null)
-        => new(false, string.IsNullOrWhiteSpace(status) ? "ERR_UNEXPECTED" : status, default, errorMessage, metadata);
+        => new(false, string.IsNullOrWhiteSpace(status) ? "ERR_UNEXPECTED" : status, default, errorMessage, metadata ?? EmptyMetadata);
 }
 
 /// <summary>
