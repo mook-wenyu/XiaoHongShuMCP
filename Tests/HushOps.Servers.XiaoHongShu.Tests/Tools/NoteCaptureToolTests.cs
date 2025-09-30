@@ -70,7 +70,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
     {
         var tool = CreateTool(out var humanizedService, navigationShouldFail: false);
 
-        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "comprehensive", "all", "all", false, false, null, "user", "default", true);
+        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "user", "default", true);
 
         var result = await tool.CaptureAsync(request, CancellationToken.None);
 
@@ -93,7 +93,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
     {
         var tool = CreateTool(out var humanizedService, navigationShouldFail: true);
 
-        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "comprehensive", "all", "all", false, false, null, "user", "default", false);
+        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "user", "default", false);
 
         var result = await tool.CaptureAsync(request, CancellationToken.None);
 

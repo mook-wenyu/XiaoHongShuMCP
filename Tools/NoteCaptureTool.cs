@@ -64,6 +64,14 @@ public sealed class NoteCaptureTool
 
     private async Task<OperationResult<NoteCaptureToolResult>> ExecuteAsync(NoteCaptureToolRequest request, string requestId, CancellationToken cancellationToken)
     {
+        // 硬编码默认值（破坏性变更）
+        const string DefaultSortBy = "comprehensive";
+        const string DefaultNoteType = "all";
+        const string DefaultPublishTime = "all";
+        const bool DefaultIncludeAnalytics = false;
+        const bool DefaultIncludeRaw = false;
+        const string DefaultOutputDirectory = "./logs/note-capture";
+
         var browserKey = NormalizeBrowserKey(request.BrowserKey);
         if (!_browserService.TryGetOpenProfile(browserKey, out var profile))
         {
@@ -128,20 +136,20 @@ public sealed class NoteCaptureTool
         var context = new NoteCaptureContext(
             keyword,
             NormalizeTargetCount(request.TargetCount),
-            NormalizeString(request.SortBy, "comprehensive"),
-            NormalizeString(request.NoteType, "all"),
-            NormalizeString(request.PublishTime, "all"),
-            request.IncludeAnalytics,
-            request.IncludeRaw,
-            request.OutputDirectory ?? string.Empty);
+            DefaultSortBy,
+            DefaultNoteType,
+            DefaultPublishTime,
+            DefaultIncludeAnalytics,
+            DefaultIncludeRaw,
+            DefaultOutputDirectory);
 
         var captureResult = await _captureService.CaptureAsync(context, cancellationToken).ConfigureAwait(false);
         var metadata = MergeMetadata(request, keyword, selectedKeyword, keywordCandidates, captureResult.Metadata, profile!, navigationMetadata, requestId);
 
         var filterSelections = new NoteCaptureFilterSelections(
-            NormalizeString(request.SortBy, "comprehensive"),
-            NormalizeString(request.NoteType, "all"),
-            NormalizeString(request.PublishTime, "all"));
+            DefaultSortBy,
+            DefaultNoteType,
+            DefaultPublishTime);
 
         var basePlannedSummary = navigationPlan?.Script.ToSummary() ?? HumanizedActionSummary.Empty;
         var telemetry = HumanizedActionMetadataReader.Read(
@@ -299,12 +307,6 @@ public sealed record NoteCaptureToolRequest(
     [property: Description("候选关键词列表（用于筛选匹配笔记）| Candidate keywords for filtering notes")] IReadOnlyList<string>? Keywords = null,
     [property: Description("画像 ID，用于推荐关键词 | Portrait identifier for keyword fallback")] string? PortraitId = null,
     [property: Description("目标笔记数量上限 | Maximum number of notes to collect")] int TargetCount = 20,
-    [property: Description("排序方式，默认 comprehensive | Sort strategy, defaults to comprehensive")] string? SortBy = "comprehensive",
-    [property: Description("笔记类型过滤条件 | Note type filter")] string? NoteType = "all",
-    [property: Description("发布时间过滤条件 | Publish time filter")] string? PublishTime = "all",
-    [property: Description("是否输出分析字段 | Whether to include analytics columns")] bool IncludeAnalytics = false,
-    [property: Description("是否同时保存原始 JSON | Whether to save raw JSON data")] bool IncludeRaw = false,
-    [property: Description("输出目录，空值使用默认路径 | Output directory; defaults when empty")] string? OutputDirectory = null,
     [property: Description("浏览器键：user 表示用户配置，其它值映射为独立配置 | Browser key: 'user' for user profile, others map to isolated profiles")] string? BrowserKey = null,
     [property: Description("行为档案键，用于覆盖默认拟人化配置 | Behavior profile key overriding the default humanization profile")] string? BehaviorProfile = null,
     [property: Description("是否执行拟人化点击笔记（逐个点击进入详情页）| Whether to execute humanized note clicking (click into detail pages one by one)")] bool RunHumanizedNavigation = true);

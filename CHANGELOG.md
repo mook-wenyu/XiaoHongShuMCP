@@ -9,6 +9,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### BREAKING CHANGES
 
+#### 笔记采集工具参数简化 (TASK-20251001-001)
+
+**影响范围**: `xhs_note_capture` MCP 工具
+
+**变更内容**:
+
+从 `NoteCaptureToolRequest` 中删除 6 个参数，改为使用硬编码默认值：
+
+1. **SortBy** (排序方式) → 硬编码为 `"comprehensive"`（综合排序）
+2. **NoteType** (笔记类型) → 硬编码为 `"all"`（所有类型）
+3. **PublishTime** (发布时间) → 硬编码为 `"all"`（所有时间）
+4. **IncludeAnalytics** (分析字段) → 硬编码为 `false`（不包含）
+5. **IncludeRaw** (原始 JSON) → 硬编码为 `false`（不生成）
+6. **OutputDirectory** (输出目录) → 硬编码为 `"./logs/note-capture"`（默认路径）
+
+**迁移指南**:
+
+```javascript
+// 旧代码（不再可用）
+await callTool("xhs_note_capture", {
+  keywords: ["露营"],
+  targetCount: 20,
+  sortBy: "comprehensive",        // ❌ 删除
+  noteType: "all",                // ❌ 删除
+  publishTime: "all",             // ❌ 删除
+  includeAnalytics: false,        // ❌ 删除
+  includeRaw: false,              // ❌ 删除
+  outputDirectory: "./output",    // ❌ 删除
+  browserKey: "user",
+  runHumanizedNavigation: true
+});
+
+// 新代码（简化后）
+await callTool("xhs_note_capture", {
+  keywords: ["露营"],
+  targetCount: 20,
+  browserKey: "user",
+  runHumanizedNavigation: true
+});
+```
+
+**理由**:
+- 极简主义设计：遵循 "Convention over Configuration" 原则
+- 减少 MCP 工具接口复杂度
+- 大多数用户使用默认值即可满足需求
+- 与之前的 Metadata 简化方向保持一致
+
+**测试覆盖**:
+- 更新 `NoteCaptureToolTests` 适配新参数结构
+- 构建通过：0 warnings, 0 errors
+- 测试结果：NoteCaptureToolTests 2/2 通过
+
+**内部实现**:
+- `NoteCaptureContext` 保持不变（内部使用）
+- `NoteCaptureFilterSelections` 保持不变（返回给客户端展示固定值）
+- 默认值在 `NoteCaptureTool.ExecuteAsync` 中硬编码
+
+**注意**: 此变更为破坏性更改，不向后兼容。所有客户端必须更新调用代码。
+
+---
+
 #### 数据结构序列化支持与元数据简化 (TASK-20250202-001)
 
 **影响范围**: 所有 MCP 工具返回值
