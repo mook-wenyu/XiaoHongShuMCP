@@ -9,6 +9,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### BREAKING CHANGES
 
+#### 笔记采集工具极简化 (TASK-20251001-002)
+
+**影响范围**: `xhs_note_capture` MCP 工具
+
+**变更内容**:
+
+1. **删除 RunHumanizedNavigation 参数**
+   - 强制始终执行人性化导航
+   - 无法关闭该功能
+
+2. **删除 NoteCaptureFilterSelections 类型**
+   - 完全移除该类型定义
+   - NoteCaptureToolResult 不再返回过滤条件信息
+
+3. **极简化 NoteCaptureToolResult**
+   - 从 13 个字段简化为 3 个核心字段
+   - 删除的字段：
+     * RawPath (IncludeRaw 固定 false)
+     * Duration (性能调试信息)
+     * RequestId (已在 Metadata 中)
+     * BehaviorProfileId (调试信息)
+     * FilterSelections (完整删除)
+     * HumanizedActions (调试信息)
+     * Planned (调试信息)
+     * Executed (调试信息)
+     * ConsistencyWarnings (调试信息)
+     * SelectedKeyword (与 Keyword 冗余)
+
+**迁移指南**:
+
+```javascript
+// 旧代码（不再可用）
+await callTool("xhs_note_capture", {
+  keywords: ["露营"],
+  targetCount: 20,
+  browserKey: "user",
+  runHumanizedNavigation: false  // ❌ 删除，强制为 true
+});
+
+// 新代码（极简后）
+await callTool("xhs_note_capture", {
+  keywords: ["露营"],
+  targetCount: 20,
+  browserKey: "user"
+});
+
+// 返回值变更
+// 旧代码（13 个字段）
+const {
+  keyword, csvPath, rawPath, collectedCount, duration,
+  requestId, behaviorProfileId, filterSelections,
+  humanizedActions, planned, executed, consistencyWarnings,
+  selectedKeyword
+} = result.data;
+
+// 新代码（3 个核心字段）
+const { keyword, csvPath, collectedCount } = result.data;
+
+// requestId 从 Metadata 获取
+const requestId = result.metadata.requestId;
+```
+
+**理由**:
+- 极简主义设计到极致
+- 强制执行最佳实践（始终人性化）
+- 删除所有调试和冗余信息
+- 客户端仅需要核心结果
+
+**测试覆盖**:
+- 更新 `NoteCaptureToolTests` 适配新结构
+- 测试改名：`CaptureAsync_WhenNavigationFails_ShouldReturnError`
+- 构建通过：0 warnings, 0 errors
+- 测试结果：NoteCaptureToolTests 2/2 通过
+
+**注意**: 此为极端破坏性变更，不向后兼容。所有客户端必须重写调用代码。
+
+---
+
 #### 笔记采集工具参数简化 (TASK-20251001-001)
 
 **影响范围**: `xhs_note_capture` MCP 工具

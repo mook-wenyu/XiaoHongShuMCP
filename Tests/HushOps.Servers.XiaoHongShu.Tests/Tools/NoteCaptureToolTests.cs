@@ -70,42 +70,34 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
     {
         var tool = CreateTool(out var humanizedService, navigationShouldFail: false);
 
-        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "user", "default", true);
+        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "user", "default");
 
         var result = await tool.CaptureAsync(request, CancellationToken.None);
 
         Assert.True(result.Success);
-        Assert.Equal("default", result.Data!.BehaviorProfileId);
-        Assert.Equal(result.Data.Keyword, result.Data.SelectedKeyword);
         // Metadata now only contains requestId after simplification
         Assert.Single(result.Metadata);
         Assert.Contains("requestId", result.Metadata.Keys);
-        Assert.Equal("comprehensive", result.Data!.FilterSelections.SortBy);
-        Assert.NotEmpty(result.Data.HumanizedActions);
-        Assert.Equal(1, result.Data.Planned.Count);
-        Assert.Equal(1, result.Data.Executed.Count);
         Assert.True(humanizedService.PrepareCalled);
         Assert.True(humanizedService.ExecutePlanCalled);
     }
 
     [Fact]
-    public async Task CaptureAsync_WhenNavigationDisabled_ShouldSkipExecution()
+    public async Task CaptureAsync_WhenNavigationFails_ShouldReturnError()
     {
         var tool = CreateTool(out var humanizedService, navigationShouldFail: true);
 
-        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "user", "default", false);
+        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "user", "default");
 
         var result = await tool.CaptureAsync(request, CancellationToken.None);
 
-        Assert.True(result.Success);
-        Assert.Equal(new[] { "InputText" }, result.Data!.HumanizedActions);
-        Assert.Equal(1, result.Data.Planned.Count);
-        Assert.Equal(0, result.Data.Executed.Count);
+        Assert.False(result.Success);
+        Assert.Equal("ERR_NAVIGATION", result.Status);
         // Metadata now only contains requestId after simplification
         Assert.Single(result.Metadata);
         Assert.Contains("requestId", result.Metadata.Keys);
         Assert.True(humanizedService.PrepareCalled);
-        Assert.False(humanizedService.ExecutePlanCalled);
+        Assert.True(humanizedService.ExecutePlanCalled);
     }
 
     private NoteCaptureTool CreateTool(out StubHumanizedActionService humanizedService, bool navigationShouldFail = false)

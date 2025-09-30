@@ -104,20 +104,17 @@ public sealed class NoteCaptureTool
 
             navigationMetadata = navigationPlan.Metadata;
 
-            if (request.RunHumanizedNavigation)
-            {
-                navigationOutcome = await _humanizedActionService.ExecuteAsync(navigationPlan, cancellationToken).ConfigureAwait(false);
-                navigationMetadata = navigationOutcome.Metadata;
+            navigationOutcome = await _humanizedActionService.ExecuteAsync(navigationPlan, cancellationToken).ConfigureAwait(false);
+            navigationMetadata = navigationOutcome.Metadata;
 
-                if (!navigationOutcome.Success)
-                {
-                    _logger.LogWarning("[NoteCaptureTool] humanized navigation failed keyword={Keyword} status={Status}", keyword, navigationOutcome.Status);
-                    var failureMetadata = MergeMetadata(request, keyword, selectedKeyword, keywordCandidates, navigationOutcome.Metadata, profile!, navigationMetadata, requestId);
-                    return OperationResult<NoteCaptureToolResult>.Fail(
-                        navigationOutcome.Status,
-                        navigationOutcome.Message ?? "humanized navigation failed",
-                        failureMetadata);
-                }
+            if (!navigationOutcome.Success)
+            {
+                _logger.LogWarning("[NoteCaptureTool] humanized navigation failed keyword={Keyword} status={Status}", keyword, navigationOutcome.Status);
+                var failureMetadata = MergeMetadata(request, keyword, selectedKeyword, keywordCandidates, navigationOutcome.Metadata, profile!, navigationMetadata, requestId);
+                return OperationResult<NoteCaptureToolResult>.Fail(
+                    navigationOutcome.Status,
+                    navigationOutcome.Message ?? "humanized navigation failed",
+                    failureMetadata);
             }
         }
         catch (OperationCanceledException)
@@ -146,37 +143,10 @@ public sealed class NoteCaptureTool
         var captureResult = await _captureService.CaptureAsync(context, cancellationToken).ConfigureAwait(false);
         var metadata = MergeMetadata(request, keyword, selectedKeyword, keywordCandidates, captureResult.Metadata, profile!, navigationMetadata, requestId);
 
-        var filterSelections = new NoteCaptureFilterSelections(
-            DefaultSortBy,
-            DefaultNoteType,
-            DefaultPublishTime);
-
-        var basePlannedSummary = navigationPlan?.Script.ToSummary() ?? HumanizedActionSummary.Empty;
-        var telemetry = HumanizedActionMetadataReader.Read(
-            metadata,
-            basePlannedSummary,
-            request.RunHumanizedNavigation && navigationOutcome is { Success: true }
-                ? basePlannedSummary
-                : HumanizedActionSummary.Empty);
-        var plannedSummary = telemetry.Planned;
-        var executedSummary = telemetry.Executed;
-        var humanizedActions = executedSummary.Actions.Count > 0 ? executedSummary.Actions : plannedSummary.Actions;
-        var consistencyWarnings = telemetry.Warnings;
-
         var result = new NoteCaptureToolResult(
             keyword,
             captureResult.CsvPath,
-            captureResult.RawPath,
-            captureResult.Notes.Count,
-            captureResult.Duration,
-            requestId,
-            behaviorProfile,
-            filterSelections,
-            humanizedActions,
-            plannedSummary,
-            executedSummary,
-            consistencyWarnings,
-            SelectedKeyword: navigationPlan?.ResolvedKeyword ?? keyword);
+            captureResult.Notes.Count);
 
 
         _logger.LogInformation("[NoteCaptureTool] success keyword={Keyword} collected={Count} csv={Csv}", keyword, captureResult.Notes.Count, captureResult.CsvPath);
@@ -308,30 +278,12 @@ public sealed record NoteCaptureToolRequest(
     [property: Description("画像 ID，用于推荐关键词 | Portrait identifier for keyword fallback")] string? PortraitId = null,
     [property: Description("目标笔记数量上限 | Maximum number of notes to collect")] int TargetCount = 20,
     [property: Description("浏览器键：user 表示用户配置，其它值映射为独立配置 | Browser key: 'user' for user profile, others map to isolated profiles")] string? BrowserKey = null,
-    [property: Description("行为档案键，用于覆盖默认拟人化配置 | Behavior profile key overriding the default humanization profile")] string? BehaviorProfile = null,
-    [property: Description("是否执行拟人化点击笔记（逐个点击进入详情页）| Whether to execute humanized note clicking (click into detail pages one by one)")] bool RunHumanizedNavigation = true);
+    [property: Description("行为档案键，用于覆盖默认拟人化配置 | Behavior profile key overriding the default humanization profile")] string? BehaviorProfile = null);
 
 public sealed record NoteCaptureToolResult(
-    [property: Description("实际使用的关键词 | Keyword used during capture")] string Keyword,
-    [property: Description("CSV 输出路径 | CSV export path")] string CsvPath,
-    [property: Description("原始 JSON 文件路径 | Raw JSON output path")] string? RawPath,
-    [property: Description("采集到的笔记数量 | Number of notes collected")] int CollectedCount,
-    [property: Description("操作耗时 | Duration of the operation")] TimeSpan Duration,
-    [property: Description("对应的请求 ID | Associated request identifier")] string RequestId,
-    [property: Description("实际使用的行为档案键 | Behavior profile applied for the run")] string BehaviorProfileId,
-    [property: Description("过滤条件摘要 | Summary of applied filter selections")] NoteCaptureFilterSelections FilterSelections,
-    [property: Description("执行的拟人化动作序列 | Executed humanized actions during navigation")] IReadOnlyList<string> HumanizedActions,
-    [property: Description("计划阶段的拟人化动作概览 | Summary of planned humanized actions")] HumanizedActionSummary Planned,
-    [property: Description("执行阶段的拟人化动作概览 | Summary of executed humanized actions")] HumanizedActionSummary Executed,
-    [property: Description("一致性校验告警 | Consistency warnings recorded during execution")] IReadOnlyList<string>? ConsistencyWarnings = null,
-    [property: Description("命中的关键词（同 Keyword，提供更直观字段）| Selected keyword echoed for clients")] string? SelectedKeyword = null);
-
-
-
-public sealed record NoteCaptureFilterSelections(
-    [property: Description("排序方式（归一化）| Normalized sort option")] string SortBy,
-    [property: Description("笔记类型（归一化）| Normalized note type filter")] string NoteType,
-    [property: Description("发布时间（归一化）| Normalized publish time filter")] string PublishTime);
+    [property: Description("搜索关键词 | Search keyword")] string Keyword,
+    [property: Description("CSV 文件路径 | CSV file path")] string CsvPath,
+    [property: Description("采集笔记数量 | Number of notes collected")] int CollectedCount);
 
 
 
