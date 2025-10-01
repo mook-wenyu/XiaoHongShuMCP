@@ -33,7 +33,18 @@
       "mcp__chrome-devtools__wait_for",
       "mcp__chrome-devtools__list_pages",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(timeout:*)",
+      "mcp__chrome-devtools__close_page",
+      "mcp__exa__web_search_exa",
+      "Bash(taskkill:*)",
+      "mcp__chrome-devtools__list_network_requests",
+      "mcp__chrome-devtools__get_network_request",
+      "mcp__chrome-devtools__navigate_page_history",
+      "mcp__exa__get_code_context_exa",
+      "Read(//d/RiderProjects/HushOps.Servers/**)",
+      "Bash(dotnet new:*)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []

@@ -55,7 +55,13 @@ public sealed class SessionConsistencyInspectorTests : IAsyncLifetime
             HasTouch: false,
             CanvasNoise: false,
             WebglMask: false,
-            ExtraHeaders: new Dictionary<string, string>());
+            ExtraHeaders: new Dictionary<string, string>(),
+            HardwareConcurrency: 8,
+            Vendor: "Google Inc.",
+            WebglVendor: "Intel Inc.",
+            WebglRenderer: "ANGLE (Intel, Intel(R) UHD Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)",
+            CanvasSeed: 0.5,
+            WebglSeed: 0.5);
 
         var network = new NetworkSessionContext(
             ProxyId: "proxy-local",

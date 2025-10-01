@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<INoteRepository, NoteRepository>();
         services.AddSingleton<INoteEngagementService, NoteEngagementService>();
         services.AddSingleton<INoteCaptureService, NoteCaptureService>();
+        services.AddSingleton<IPageNoteCaptureService, PageNoteCaptureService>();
 
         services.AddSingleton<IBrowserAutomationService, BrowserAutomationService>();
 

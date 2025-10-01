@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using HushOps.Servers.XiaoHongShu.Services.Notes;
 
 namespace HushOps.Servers.XiaoHongShu.Infrastructure.FileSystem;
@@ -33,6 +35,14 @@ public sealed class DefaultFileSystem : IFileSystem
     private sealed class FileAdapter : IFile
     {
         public Stream Create(string path) => System.IO.File.Create(path);
+
+        public bool Exists(string path) => System.IO.File.Exists(path);
+
+        public Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default)
+            => System.IO.File.ReadAllTextAsync(path, cancellationToken);
+
+        public Task WriteAllTextAsync(string path, string contents, CancellationToken cancellationToken = default)
+            => System.IO.File.WriteAllTextAsync(path, contents, cancellationToken);
     }
 
     private sealed class DirectoryAdapter : IDirectory

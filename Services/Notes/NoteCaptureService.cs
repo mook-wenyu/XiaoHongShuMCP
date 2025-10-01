@@ -160,6 +160,9 @@ public interface IFileSystem
 public interface IFile
 {
     Stream Create(string path);
+    bool Exists(string path);
+    Task<string> ReadAllTextAsync(string path, CancellationToken cancellationToken = default);
+    Task WriteAllTextAsync(string path, string contents, CancellationToken cancellationToken = default);
 }
 
 public interface IDirectory
