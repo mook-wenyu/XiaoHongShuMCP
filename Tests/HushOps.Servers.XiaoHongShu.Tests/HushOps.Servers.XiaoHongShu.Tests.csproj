@@ -8,7 +8,18 @@
 
   <ItemGroup>
     <ProjectReference Include="../../HushOps.Servers.XiaoHongShu.csproj" />
+  </ItemGroup>
+
+  <!-- 依赖引用策略：与主项目保持一致
+       - 开发模式（UseLocalProjects=true）：使用 ProjectReference
+       - 发布模式（默认）：使用 PackageReference
+  -->
+  <ItemGroup Condition="'$(UseLocalProjects)' == 'true'">
     <ProjectReference Include="../../../FingerprintBrowser/FingerprintBrowser.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseLocalProjects)' != 'true'">
+    <PackageReference Include="HushOps.FingerprintBrowser" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>

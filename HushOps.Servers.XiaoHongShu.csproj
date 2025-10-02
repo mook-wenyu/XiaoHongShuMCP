@@ -17,8 +17,17 @@
     <PackageReference Include="Microsoft.Playwright" Version="1.55.0" />
   </ItemGroup>
 
-  <ItemGroup>
+  <!-- 依赖引用策略：
+       - 开发模式（UseLocalProjects=true）：使用 ProjectReference，修改 FingerprintBrowser 立即生效
+       - 发布模式（默认）：使用 PackageReference，从 NuGet feed 获取稳定版本
+       - 切换方式：dotnet build /p:UseLocalProjects=true
+  -->
+  <ItemGroup Condition="'$(UseLocalProjects)' == 'true'">
     <ProjectReference Include="..\FingerprintBrowser\FingerprintBrowser.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseLocalProjects)' != 'true'">
+    <PackageReference Include="HushOps.FingerprintBrowser" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
