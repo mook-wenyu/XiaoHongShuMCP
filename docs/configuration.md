@@ -243,7 +243,6 @@ export HUSHOPS_XHS_SERVER_PlaywrightInstallation__DownloadHost=https://playwrigh
 - 执行 `dotnet run -- --tools-list`，确认服务器成功读取配置并暴露全部 MCP 工具。
 - 运行 `dotnet run -- --verification-run`，验证浏览器、指纹与网络策略组合是否正常，并检查日志是否包含 `STATUS: ok`。
 - 若使用环境变量覆盖参数，可结合 `set`/`export` 后再次执行上述命令确认生效。
-- 建议在 CI/CD 中新增 `dotnet test` 与 `dotnet run -- --verification-run` 步骤，将配置验证移动到流水线早期。
 
 ### 常见配置错误与解决方案
 
@@ -254,3 +253,4 @@ export HUSHOPS_XHS_SERVER_PlaywrightInstallation__DownloadHost=https://playwrigh
 | Playwright 反复下载 | 缺少缓存目录或未设置镜像 | 设定 `playwrightInstallation.browsersPath` 与 `downloadHost`，必要时手动运行安装脚本 |
 | FingerprintBrowser 未注册 | 未打包依赖或未调用 `ServiceCollectionExtensions` | 先执行 `dotnet pack`/`dotnet restore`，保持使用默认 `Program.cs` 模板，并确认日志中出现指纹加载成功记录 |
 | 代理策略未生效 | `networkStrategy` 模板未命中或缺少代理地址 | 检查 `defaultTemplate` 与模板键是否一致，并确认代理地址格式正确 |
+

@@ -89,11 +89,10 @@ dotnet run --project <项目路径>/HushOps.Servers.XiaoHongShu.csproj -- --veri
 
 ### 依赖说明（Dependency Overview）
 - 项目依赖独立 NuGet 包 `HushOps.FingerprintBrowser`，提供指纹浏览器能力。（The project depends on the standalone NuGet package `HushOps.FingerprintBrowser` to deliver fingerprint automation features.）
-- **发布模式（默认）/ Release mode (default）**：使用 `PackageReference`，从本地 NuGet feed 或远程源获取已打包版本，适用于 CI/CD 与团队协作。（Uses `PackageReference` to pull pre-packed artifacts from local or remote feeds, ideal for CI/CD and shared environments.）
 - **开发模式 / Development mode**：通过 `-p:UseLocalProjects=true` 切换为 `ProjectReference`，直接引用仓库内的 FingerprintBrowser 项目，适合本地调试。（Switches to `ProjectReference` via `-p:UseLocalProjects=true`, pointing to the in-repo FingerprintBrowser project for rapid local debugging.）
 
 ### 开发环境配置（Local Development Setup）
-1. 打包 FingerprintBrowser 到本地 NuGet 源，以便发布模式恢复依赖。（Pack FingerprintBrowser into the local NuGet feed so release mode can restore it.）
+1. 打包 FingerprintBrowser 到本地 NuGet 源，供包引用流程在恢复依赖时使用。（Pack FingerprintBrowser into the local NuGet feed so dependency restore can consume the package.）
 2. 确认 `nuget.config` 已包含 `LocalFeed` 指向 `D:/LocalNuGet` 或等价路径。（Ensure `nuget.config` lists the `LocalFeed` source pointing at `D:/LocalNuGet` or your equivalent path.）
 3. 需要调试时，可使用 `-p:UseLocalProjects=true` 切换为项目引用模式。（Use `-p:UseLocalProjects=true` to toggle into project-reference mode when debugging.）
 
@@ -123,52 +122,11 @@ dotnet pack -c Release -o ~/LocalNuGet
 dotnet build -p:UseLocalProjects=true
 ```
 
-### CI/CD 环境配置（CI/CD Environment Setup）
-- 默认采用 `PackageReference`，CI/CD 只需执行 `dotnet restore` / `dotnet build` 即可获取打包产物。（CI/CD runs rely on `PackageReference`; `dotnet restore` / `dotnet build` will pull the packaged artifact automatically.）
-- 推荐使用 GitHub Packages 托管 `HushOps.FingerprintBrowser`，以下命令需替换 `<GITHUB_USERNAME>` 与个人访问令牌（需 `write:packages` 权限）。（GitHub Packages is recommended for distribution; replace `<GITHUB_USERNAME>` and the personal access token with `write:packages` scope.）
-
-```pwsh
-# GitHub Packages feed 注册（requires PAT，需填写 Token）
-dotnet nuget add source `
-  --name GitHubPackages `
-  --username <GITHUB_USERNAME> `
-  --password <GITHUB_TOKEN> `
-  "https://nuget.pkg.github.com/<GITHUB_USERNAME>/index.json"
-
-# CI/CD 恢复 FingerprintBrowser（Restore FingerprintBrowser in CI/CD）
-dotnet restore
-dotnet build
-```
-
-```bash
-# GitHub Packages feed registration（需先导出 GH_TOKEN 或使用环境变量）
-dotnet nuget add source \
-  --name GitHubPackages \
-  --username "$GITHUB_USERNAME" \
-  --password "$GITHUB_TOKEN" \
-  "https://nuget.pkg.github.com/$GITHUB_USERNAME/index.json"
-
-# Restore FingerprintBrowser package（恢复 FingerprintBrowser 包）
-dotnet restore
-dotnet build
-```
-
-- 若无法访问外部仓库，可继续使用本地 `LocalFeed` 作为后备源，只需在 CI 环境提前同步 `FingerprintBrowser.nupkg` 即可。（If external feeds are unavailable, keep using the local `LocalFeed` as a fallback by pre-seeding `FingerprintBrowser.nupkg` in CI environments.）
-
-### 两种模式对比（Mode Comparison）
-
-| 模式 | 命令 | 适用场景 | 优点 | 缺点 |
-|------|------|----------|------|------|
-| **发布模式（默认）** | `dotnet build` | CI/CD、团队协作（CI/CD & team workflows） | 稳定、版本控制、构建快速（Stable, versioned, fast builds） | 需要先打包 `FingerprintBrowser`（Requires pre-packed FingerprintBrowser） |
-| **开发模式** | `dotnet build -p:UseLocalProjects=true` | 本地调试 FingerprintBrowser（Local debugging） | 修改立即生效、无需重复打包（Changes take effect immediately） | 依赖项目路径一致性（Requires consistent project paths） |
-
 ### 常见问题（FAQ）
 - **Q: 为什么编译报错“找不到 HushOps.FingerprintBrowser”？（Why does build fail with “missing HushOps.FingerprintBrowser”？）**
   - A: 需要先执行 `dotnet pack` 将 FingerprintBrowser 打包到本地 feed，再运行 `dotnet restore`。（Pack FingerprintBrowser into the feed with `dotnet pack`, then rerun `dotnet restore`.）
 - **Q: 如何切换回 ProjectReference 模式？（How do I switch back to ProjectReference mode?）**
   - A: 编译时附加 `-p:UseLocalProjects=true` 参数即可启用项目引用。（Append `-p:UseLocalProjects=true` to the build to enable project references.）
-- **Q: CI/CD 应如何配置？（How should CI/CD pipelines configure this dependency?）**
-  - A: 推荐使用 GitHub Packages，并在管道中添加 `dotnet nuget add source` 与 PAT；若受限，可同步本地 `LocalFeed` 作为备选。（Use GitHub Packages with a PAT-enabled `dotnet nuget add source`; if restricted, replicate the local `LocalFeed` as an alternative.）
 
 ## 使用教程
 
@@ -503,7 +461,6 @@ dotnet build
 - 查看连接日志：`View > Toggle Developer Tools` → Console 中应看到 `Connected to MCP server`。（Check devtools console for connection logs.)
 - 若工具列表为空，确认命令路径、`dotnet` 是否在环境变量中，以及服务器是否已完成 Playwright 安装。（Validate command path, PATH, and Playwright installation state.)
 - 完成配置后执行 `dotnet run -- --verification-run` 以验证浏览器、代理和指纹模块是否工作正常。（Verification run validates browser/proxy/fingerprint modules.)
-
 
 ## 开发者文档
 

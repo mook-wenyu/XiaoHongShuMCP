@@ -1,6 +1,6 @@
 # 贡献指南
 
-> 更新日期：2025-10-02 13:02 (UTC+8)  
+> 更新日期：2025-10-02 15:16 (UTC+8)  
 > 执行者：Codex
 
 ## 目录
@@ -12,7 +12,6 @@
 - [测试策略](#测试策略)
   - [测试框架](#测试框架)
   - [运行测试](#运行测试)
-  - [验证运行](#验证运行)
   - [测试规范](#测试规范)
   - [质量标准](#质量标准)
 - [贡献流程](#贡献流程)
@@ -65,22 +64,10 @@ dotnet test -c Release
 dotnet test --filter "FullyQualifiedName~HumanizedActionServiceTests"
 ```
 
-### 验证运行
-- 验证运行会执行示例浏览器流程并访问状态码端点，用于 CI/CD 或首次部署后的烟雾测试。
-
-```bash
-dotnet run -- --verification-run
-```
-
-- 可通过以下配置项调整行为：
-  - `verification.statusUrl`：状态码端点，默认 `https://httpbin.org/status/429`。
-  - `verification.mockStatusCode`：本地拦截并返回的状态码（可选）。
-  - 端点不可达时会记录警告，但不会导致进程失败退出。
-
 ### 测试规范
-- 日常开发建议在 Debug 构建下快速回归，在 CI 或发布前使用 Release 模式复核性能相关断言。
+- 日常开发建议在 Debug 构建下快速回归，在发布前使用 Release 模式复核性能相关断言。
 - 使用 `--filter` 精准定位特定用例时，请将筛选条件同步记录在 Pull Request 描述中，便于复现。
-- 对浏览器相关测试，应提前执行 `Tools/install-playwright.ps1 --SkipIfPresent`（或相应脚本）以避免缺失依赖导致验证运行失败。
+- 对浏览器相关测试，应提前执行 `Tools/install-playwright.ps1 --SkipIfPresent`（或相应脚本）以避免缺失依赖导致浏览器相关测试失败。
 
 ### 质量标准
 - **测试覆盖率**：目标维持 70% 以上，对关键路径需补充集成测试。
@@ -113,11 +100,9 @@ dotnet build
 # 运行测试
 dotnet test
 
-# 验证运行（可选）
-dotnet run -- --verification-run
 ```
 
-- 针对浏览器或网络相关变更，请附上验证运行日志或关键截图。
+- 针对浏览器或网络相关变更，请附上关键日志或截图。
 
 ### 4. 提交 Pull Request
 - 提供精炼的变更摘要，列出主要影响范围与验证结果。
@@ -150,3 +135,4 @@ HushOps.Servers.XiaoHongShu/
 - 问题反馈：通过 Issue 与维护团队沟通。
 - 功能建议：提交讨论帖或 Pull Request 说明提案价值。
 - 直接联系：317578863@qq.com。
+
