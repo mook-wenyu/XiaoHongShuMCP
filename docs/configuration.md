@@ -1,4 +1,4 @@
-﻿# 配置指南
+# 配置指南
 > 更新时间：2025-10-02 13:11 (UTC+8) · 执行：Codex
 
 ## 配置加载优先级
@@ -251,6 +251,6 @@ export HUSHOPS_XHS_SERVER_PlaywrightInstallation__DownloadHost=https://playwrigh
 | 工具列表为空 | 命令路径或环境变量未配置，服务器未启动 | 重新确认 `command` 与 `args` 指向 `.csproj`，并执行 `dotnet run -- --tools-list` 检查日志 |
 | 字符串参数被解析为 `null` | 旧版配置仍使用 `null` 而非空字符串 | 将相关字段替换为 `""`，再次运行 `dotnet run -- --tools-list` 验证 |
 | Playwright 反复下载 | 缺少缓存目录或未设置镜像 | 设定 `playwrightInstallation.browsersPath` 与 `downloadHost`，必要时手动运行安装脚本 |
-| FingerprintBrowser 未注册 | 未打包依赖或未调用 `ServiceCollectionExtensions` | 先执行 `dotnet pack`/`dotnet restore`，保持使用默认 `Program.cs` 模板，并确认日志中出现指纹加载成功记录 |
+| FingerprintBrowser 未注册 | `libs/FingerprintBrowser.dll` 缺失或 `.csproj` 引用被移除 | 确认 `libs/FingerprintBrowser.dll` 及配套文件存在，并保持 `.csproj` 中 `<Reference Include="FingerprintBrowser">` 与 `<HintPath>libs\\FingerprintBrowser.dll</HintPath>`；缺失时重新复制交付包提供的 DLL |
 | 代理策略未生效 | `networkStrategy` 模板未命中或缺少代理地址 | 检查 `defaultTemplate` 与模板键是否一致，并确认代理地址格式正确 |
 

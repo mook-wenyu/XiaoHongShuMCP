@@ -32,6 +32,8 @@ dotnet run -- --verification-run
 # 单独运行特定测试
 dotnet test --filter "FullyQualifiedName~HumanizedActionServiceTests"
 ```
+> 注意：FingerprintBrowser 依赖通过仓库内的 `libs/FingerprintBrowser.dll` 等预编译 DLL 提供，构建或调试时不要尝试 `dotnet pack` 或配置 LocalFeed；如缺少 DLL，请提醒用户从交付包重新覆盖 `libs/` 目录。（FingerprintBrowser distribution relies on the prebuilt DLLs under `libs/`; do not attempt `dotnet pack` or LocalFeed. Re-copy the delivered `libs/` bundle if the DLL is missing.）
+
 
 ## 核心架构
 

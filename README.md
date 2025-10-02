@@ -17,18 +17,6 @@
 
 ## 快速开始（Quick Start）
 
-### 首次运行流程图（First Run Flow）
-
-```mermaid
-graph TD
-    A[安装 .NET 8 SDK / Install .NET 8 SDK] --> B[恢复依赖 / Restore dependencies]
-    B --> C[配置 MCP 客户端 / Configure MCP clients]
-    C --> D[启动服务器并触发 Playwright 安装 / Start server & trigger Playwright install]
-    D --> E[验证工具列表 (--tools-list) / Verify tool list]
-    E --> F[执行验证运行 (--verification-run) / Run verification]
-    F --> G[按场景使用工具 / Use scenario workflows]
-```
-
 ### Windows（PowerShell）
 
 ```pwsh
@@ -87,46 +75,23 @@ dotnet run --project <项目路径>/HushOps.Servers.XiaoHongShu.csproj -- --veri
 
 ## 依赖说明（Dependency Notes）
 
-### 依赖说明（Dependency Overview）
-- 项目依赖独立 NuGet 包 `HushOps.FingerprintBrowser`，提供指纹浏览器能力。（The project depends on the standalone NuGet package `HushOps.FingerprintBrowser` to deliver fingerprint automation features.）
-- **开发模式 / Development mode**：通过 `-p:UseLocalProjects=true` 切换为 `ProjectReference`，直接引用仓库内的 FingerprintBrowser 项目，适合本地调试。（Switches to `ProjectReference` via `-p:UseLocalProjects=true`, pointing to the in-repo FingerprintBrowser project for rapid local debugging.）
+### 依赖概览（Dependency Overview）
+- 仓库默认附带 FingerprintBrowser 运行时依赖的预编译动态链接库，位于 `libs/` 目录：`FingerprintBrowser.dll` 以及按需提供的 `FingerprintBrowser.pdb`、`FingerprintBrowser.xml`。（The repository ships the prebuilt FingerprintBrowser runtime under `libs/`, including the DLL and optional PDB/XML files.）
+- FingerprintBrowser 不再通过 NuGet 包或 LocalFeed 发布；保持 `libs/` 目录原样即可使用。若目录缺失，请向维护团队索取最新压缩包并重新解压覆盖。（FingerprintBrowser is no longer distributed via NuGet or LocalFeed; keep the bundled `libs/` folder in place or re-extract it from the official archive when missing.）
+- `HushOps.Servers.XiaoHongShu.csproj` 已固定引用 `libs/FingerprintBrowser.dll`；请勿删除 `<HintPath>`，否则构建与运行都会缺失浏览器能力。（The `.csproj` pins the dependency through `<HintPath>libs\\FingerprintBrowser.dll</HintPath>`; removing it breaks build/runtime.）
 
-### 开发环境配置（Local Development Setup）
-1. 打包 FingerprintBrowser 到本地 NuGet 源，供包引用流程在恢复依赖时使用。（Pack FingerprintBrowser into the local NuGet feed so dependency restore can consume the package.）
-2. 确认 `nuget.config` 已包含 `LocalFeed` 指向 `D:/LocalNuGet` 或等价路径。（Ensure `nuget.config` lists the `LocalFeed` source pointing at `D:/LocalNuGet` or your equivalent path.）
-3. 需要调试时，可使用 `-p:UseLocalProjects=true` 切换为项目引用模式。（Use `-p:UseLocalProjects=true` to toggle into project-reference mode when debugging.）
-
-#### Windows PowerShell 示例（Windows PowerShell Example）
-```pwsh
-# 步骤1：打包 FingerprintBrowser 到本地 feed（Step 1: pack FingerprintBrowser into the local feed）
-Set-Location D:\RiderProjects\HushOps.Servers\FingerprintBrowser
-dotnet pack -c Release -o D:\LocalNuGet
-
-# 步骤2：验证 LocalFeed 是否存在于 nuget.config（Step 2: verify LocalFeed in nuget.config）
-# nuget.config 已包含 LocalFeed (D:\LocalNuGet) —— 如需调整，请编辑根目录 nuget.config
-
-# 步骤3：启用项目引用模式进行编译（Step 3: build with project references）
-dotnet build -p:UseLocalProjects=true
-```
-
-#### Linux / macOS Bash 示例（Linux / macOS Bash Example）
-```bash
-# Step 1: pack FingerprintBrowser into the local feed（步骤1：打包 FingerprintBrowser）
-cd ~/HushOps.Servers/FingerprintBrowser
-dotnet pack -c Release -o ~/LocalNuGet
-
-# Step 2: validate nuget.config contains LocalFeed（步骤2：确认 nuget.config 配置）
-# nuget.config should include LocalFeed (~/LocalNuGet); adjust paths if your workspace differs.
-
-# Step 3: build with project references when debugging（步骤3：以项目引用模式编译）
-dotnet build -p:UseLocalProjects=true
-```
+### 指纹浏览器分发（FingerprintBrowser Distribution）
+1. 运行前确认 `libs/` 目录存在 FingerprintBrowser DLL 及其配套文件；若缺失请重新解压官方交付包。（Check the `libs/` folder for the DLL bundle before running; re-unpack the official delivery if files are missing.）
+2. 恢复依赖与编译仅需执行常规 `dotnet restore` / `dotnet build`；无需 `dotnet pack`，也无需配置 LocalFeed。（Standard `dotnet restore` / `dotnet build` is enough; no `dotnet pack` or LocalFeed configuration is required.）
+3. 收到新的 FingerprintBrowser 版本时，替换 `libs/` 中的 DLL（及配套 PDB/XML），然后重启服务加载新版本。（When an update arrives, overwrite the DLL (and optional PDB/XML) inside `libs/` and restart the service.）
 
 ### 常见问题（FAQ）
-- **Q: 为什么编译报错“找不到 HushOps.FingerprintBrowser”？（Why does build fail with “missing HushOps.FingerprintBrowser”？）**
-  - A: 需要先执行 `dotnet pack` 将 FingerprintBrowser 打包到本地 feed，再运行 `dotnet restore`。（Pack FingerprintBrowser into the feed with `dotnet pack`, then rerun `dotnet restore`.）
-- **Q: 如何切换回 ProjectReference 模式？（How do I switch back to ProjectReference mode?）**
-  - A: 编译时附加 `-p:UseLocalProjects=true` 参数即可启用项目引用。（Append `-p:UseLocalProjects=true` to the build to enable project references.）
+- **Q: 编译报错“找不到 HushOps.FingerprintBrowser”怎么办？（Why does build fail with “missing HushOps.FingerprintBrowser”？）**
+  - A: 检查 `libs/FingerprintBrowser.dll` 是否存在且未被安全工具隔离，并确认 `.csproj` 中 `<HintPath>libs\\FingerprintBrowser.dll</HintPath>` 仍保留；必要时重新解压官方 `libs/` 目录。（Verify the DLL exists, is not quarantined, and the `<HintPath>` in the project file remains. Re-extract the bundled `libs/` folder if needed.）
+- **Q: 如何确认 FingerprintBrowser 的版本？（How do I verify the FingerprintBrowser version?）**
+  - A: 查看 `libs/FingerprintBrowser.dll` 的文件属性或随包提供的变更记录；运行时日志也会打印已加载的版本号。（Inspect the DLL file metadata or the provided changelog; runtime logs echo the loaded version.）
+- **Q: 可以改回使用 LocalFeed 或自行打包 DLL 吗？（Can I switch back to LocalFeed or build my own DLL?）**
+  - A: 当前只支持维护团队提供的预编译 DLL，已停止发布源码与 LocalFeed；如需定制版，请联系维护者协调。（Only the maintainer-supplied prebuilt DLL is supported; LocalFeed/source distribution is no longer available. Reach out to maintainers for special builds.）
 
 ## 使用教程
 
@@ -511,10 +476,9 @@ dotnet build -p:UseLocalProjects=true
 - 若需清理残留下载，删除 `%LOCALAPPDATA%/ms-playwright`（Windows）或 `~/.cache/ms-playwright` 后重新执行安装脚本。
 
 #### Q4: FingerprintBrowser 依赖报错怎么办？（FingerprintBrowser dependency issues）
-- 仓库根目录需要存在兄弟项目 `../FingerprintBrowser/` 并完成 `dotnet restore`；构建失败多因缺少该项目的输出。
-- 运行 `dotnet build ..\FingerprintBrowser\FingerprintBrowser.csproj`（Windows）或 `dotnet build ../FingerprintBrowser/FingerprintBrowser.csproj`（Linux/macOS）以确认依赖可编译。
-- 若运行时报 `IFingerprintBrowser` 未注册，请检查 `ServiceCollectionExtensions` 是否被调用（保持使用提供的 `Program.cs` 模板），并确保 `DOTNET_ENVIRONMENT` 未禁用默认配置。
-- 验证修复：执行 `dotnet run -- --verification-run`，日志中应包含指纹加载成功的条目。
+- 确认 `libs/FingerprintBrowser.dll` 及配套 `FingerprintBrowser.pdb` / `FingerprintBrowser.xml` 是否存在，且未被安全工具隔离或误删；若缺失请重新解压官方交付包覆盖。（Ensure the DLL/PDB/XML bundle under `libs/` exists and is not quarantined; re-extract the official package if anything is missing.）
+- 打开 `HushOps.Servers.XiaoHongShu.csproj`，确认 `<Reference Include="FingerprintBrowser">` 仍包含 `<HintPath>libs\\FingerprintBrowser.dll</HintPath>`；如被修改请还原。（Check the project file keeps the reference with the `libs\\FingerprintBrowser.dll` hint path; restore it if it was altered.）
+- 若运行日志提示版本或加载失败，替换 `libs/` 目录中的 DLL 为最新交付版本并重启服务；可通过 `dotnet run -- --tools-list` 验证加载是否恢复。（Replace the DLL with the latest delivery and restart the service if runtime logs report load failures; use `dotnet run -- --tools-list` to confirm recovery.）
 
 #### Q5: 如何调试 MCP 通信？（Debugging MCP communication）
 - 服务器侧：设置环境变量 `DOTNET_ENVIRONMENT=Development` 后运行，可获得更详细的日志；同时关注 `logs/` 和控制台输出。
