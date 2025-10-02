@@ -476,16 +476,6 @@ dotnet build
   - macOS：`~/Library/Application Support/Claude/claude_desktop_config.json`
   - Linux：`~/.config/Claude/claude_desktop_config.json`
   - 保存即热加载；若未生效，可在 `Claude > Developer > Reload Config` 中手动刷新或重新启动应用。（Config reloads on save; use Developer > Reload Config or restart when in doubt.)
-- **Claude Code（Cline/Cursor/Windsurf）**：
-  - Cline：Windows `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json`；macOS `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`；Linux `~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`。
-  - Cursor：项目级 `<项目路径>/.cursor/mcp.json`（推荐共享），或用户级 Windows `%USERPROFILE%\.cursor\mcp.json`、Linux/macOS `~/.cursor/mcp.json`。
-  - Windsurf：项目级 `<项目路径>/.windsurf/mcp.json`（推荐），或用户级 `~/.windsurf/mcp.json`。
-  - 保存后均会自动热加载；如需强制刷新，可在对应客户端的 MCP 设置面板点击 Reload/Restart。（All variants hot-reload after save; use the MCP settings panel to force reload when needed.)
-- **Codex CLI**：
-  - Windows：`%APPDATA%\Codex\codex.config.json`
-  - macOS：`~/Library/Application Support/Codex/codex.config.json`
-  - Linux：`~/.config/codex/codex.config.json`
-  - 修改配置后执行 `codex reload`（或重启 CLI）以应用最新服务器列表。（Run `codex reload` or restart the CLI to apply changes.)
 
 ### Claude Desktop 配置示例（Claude Desktop example）
 
@@ -508,121 +498,11 @@ dotnet build
 ```
 
 - Windows 需将路径改为 `D:/...` 或使用转义的反斜杠；macOS/Linux 直接使用 `/`。（Adjust path separators per OS.)
-- 保存后在 Claude Desktop 底部状态栏应出现 “Connected to MCP server: xiao-hong-shu”。（Expect status message confirming connection.)
-
-### Claude Code（Cline/Cursor/Windsurf）配置示例
-
-#### Cline（VS Code）
-
-在 `cline_mcp_settings.json` 中加入：
-
-```json
-{
-  "mcpServers": {
-    "xiao-hong-shu": {
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "<项目路径>/HushOps.Servers.XiaoHongShu/HushOps.Servers.XiaoHongShu.csproj"
-      ],
-      "disabled": false,
-      "metadata": {
-        "category": "automation"
-      }
-    }
-  }
-}
-```
-
-> 若文件已存在 `mcpServers`，仅需追加服务器条目即可；保存后执行 `Cline: Manage MCP Servers` → 检查 `Installed` 标签是否显示 `xiao-hong-shu (running)`。（Append entry if the object already exists; verify status via Cline panel.)
-
-#### Cursor
-
-项目目录下创建或更新 `.cursor/mcp.json`：
-
-```json
-{
-  "mcpServers": {
-    "xiao-hong-shu": {
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "<项目路径>/HushOps.Servers.XiaoHongShu/HushOps.Servers.XiaoHongShu.csproj"
-      ],
-      "cwd": "<项目路径>/HushOps.Servers.XiaoHongShu",
-      "env": {
-        "DOTNET_ENVIRONMENT": "Production"
-      }
-    }
-  }
-}
-```
-
-> Cursor 会优先读取项目级配置；若找不到则回退到用户级配置。可通过 `cursor-agent mcp list` 或 `Settings > Tools & Integrations > MCP` 页面查看连接状态。（Use cursor-agent CLI or settings UI to verify active servers.)
-
-#### Windsurf
-
-工作区目录创建 `.windsurf/mcp.json`（或使用用户级 `~/.windsurf/mcp.json`）：
-
-```json
-{
-  "mcpServers": {
-    "xiao-hong-shu": {
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "<项目路径>/HushOps.Servers.XiaoHongShu/HushOps.Servers.XiaoHongShu.csproj"
-      ],
-      "cwd": "<项目路径>/HushOps.Servers.XiaoHongShu",
-      "env": {
-        "DOTNET_ENVIRONMENT": "Production"
-      ],
-      "autoStart": true
-    }
-  }
-}
-```
-
-> Windsurf 保存后会自动重载；若未生效，可在 `Settings > MCP` 中点击 Reload MCP Servers。（Windsurf auto-reloads on save; use Settings > MCP > Reload if needed.)
-
-### Codex 配置示例
-
-在 `codex.config.json`（或运行 `codex config edit`）中追加：
-
-```json
-{
-  "mcpServers": {
-    "xiao-hong-shu": {
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "<项目路径>/HushOps.Servers.XiaoHongShu/HushOps.Servers.XiaoHongShu.csproj"
-      ],
-      "cwd": "<项目路径>/HushOps.Servers.XiaoHongShu",
-      "env": {
-        "DOTNET_ENVIRONMENT": "Production"
-      },
-      "autoStart": true
-    }
-  }
-}
-```
-
-> 编辑后执行 `codex reload` 或重新启动 Codex CLI 以加载最新 MCP 服务器。（Run `codex reload` or restart the CLI to pick up changes.)
-
-### 故障排查与验证（Troubleshooting & validation）
-
-1. 使用 `dotnet run -- --tools-list` 确认服务器能够返回工具列表。（Ensure server responds with tool catalogue.)
-2. 查看客户端日志：
-   - Claude Desktop：`View > Toggle Developer Tools` → Console 中应看到 `Connected to MCP server`。（Check devtools console for connection logs.)
-   - Claude Code（Cline/Cursor/Windsurf）：`Cline: Manage MCP Servers`、`cursor-agent mcp list` 或 Windsurf `Settings > MCP` 均应显示 `connected/running` 状态。（Use respective panels/CLI to confirm status.)
-   - Codex CLI：执行 `codex status` 或查看终端提示，确认 `xiao-hong-shu` 处于 `connected`。（Run `codex status` or observe CLI banner to ensure the server is connected.)
-3. 若工具列表为空，确认命令路径、`dotnet` 是否在环境变量中，以及服务器是否已完成 Playwright 安装。（Validate command path, PATH, and Playwright installation state.)
-4. 完成配置后执行 `dotnet run -- --verification-run` 以验证浏览器、代理和指纹模块是否工作正常。（Verification run validates browser/proxy/fingerprint modules.)
+- 保存后在 Claude Desktop 底部状态栏应出现 "Connected to MCP server: xiao-hong-shu"。（Expect status message confirming connection.)
+- 验证连接：使用 `dotnet run -- --tools-list` 确认服务器能够返回工具列表。（Ensure server responds with tool catalogue.)
+- 查看连接日志：`View > Toggle Developer Tools` → Console 中应看到 `Connected to MCP server`。（Check devtools console for connection logs.)
+- 若工具列表为空，确认命令路径、`dotnet` 是否在环境变量中，以及服务器是否已完成 Playwright 安装。（Validate command path, PATH, and Playwright installation state.)
+- 完成配置后执行 `dotnet run -- --verification-run` 以验证浏览器、代理和指纹模块是否工作正常。（Verification run validates browser/proxy/fingerprint modules.)
 
 
 ## 开发者文档
