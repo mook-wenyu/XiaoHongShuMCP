@@ -368,9 +368,9 @@ public sealed class BehaviorFlowTool
 
 public sealed record BehaviorFlowRequest(
     [property: Description("候选关键词列表 | Candidate keywords; falls back to portrait/default when为空")] string[]? Keywords,
-    [property: Description("画像 ID，用于推荐关键词 | Portrait identifier for resolving fallback keywords")] string? PortraitId,
-    [property: Description("浏览器键，user 表示用户配置 | Browser key: 'user' for the user profile, others map to isolated profiles")] string? BrowserKey = null,
-    [property: Description("行为档案键，覆盖默认拟人化配置 | Behavior profile key overriding the default humanization profile")] string? BehaviorProfile = null);
+    [property: Description("画像 ID，用于推荐关键词 | Portrait identifier for resolving fallback keywords")] string PortraitId = "",
+    [property: Description("浏览器键，user 表示用户配置 | Browser key: 'user' for the user profile, others map to isolated profiles")] string BrowserKey = "",
+    [property: Description("行为档案键，覆盖默认拟人化配置 | Behavior profile key overriding the default humanization profile")] string BehaviorProfile = "");
 
 /// <summary>
 /// 中文：浏览流程返回结果（用于 RandomBrowse 和 KeywordBrowse）。
@@ -412,14 +412,14 @@ internal sealed record InteractionResult(string Status, string? ActionType = nul
 }
 public sealed record DiscoverFlowRequest(
     [property: Description("候选关键词列表 | Candidate keywords for discover flow")] string[]? Keywords = null,
-    [property: Description("画像 ID，用于关键词兜底 | Portrait identifier for fallback keywords")] string? PortraitId = null,
+    [property: Description("画像 ID，用于关键词兜底 | Portrait identifier for fallback keywords")] string PortraitId = "",
     [property: Description("搜索结果选择策略 | Note selection strategy")] DiscoverNoteSelectionStrategy NoteSelection = DiscoverNoteSelectionStrategy.First,
     [property: Description("是否执行点赞 | Whether to perform like interaction")] bool PerformLike = true,
     [property: Description("是否执行收藏 | Whether to perform favorite interaction")] bool PerformFavorite = true,
     [property: Description("是否执行评论 | Whether to perform comment interaction")] bool PerformComment = true,
     [property: Description("评论候选文本 | Candidate comment texts")] string[]? CommentTexts = null,
-    [property: Description("浏览器键 | Browser profile key")] string? BrowserKey = null,
-    [property: Description("行为档案键 | Behavior profile key")] string? BehaviorProfile = null);
+    [property: Description("浏览器键 | Browser profile key")] string BrowserKey = "",
+    [property: Description("行为档案键 | Behavior profile key")] string BehaviorProfile = "");
 
 public enum DiscoverNoteSelectionStrategy
 {

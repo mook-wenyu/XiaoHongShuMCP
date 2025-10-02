@@ -1,8 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using HushOps.FingerprintBrowser.Core;
 using HushOps.Servers.XiaoHongShu.Services.Browser;
-using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Playwright;
 using Microsoft.Extensions.Logging;
@@ -20,7 +20,7 @@ public sealed class VerificationScenarioRunner
 {
     private readonly IBrowserAutomationService _browserAutomation;
     private readonly IPlaywrightSessionManager _sessionManager;
-    private readonly IProfileFingerprintManager _fingerprintManager;
+    private readonly IFingerprintBrowser _fingerprintBrowser;
     private readonly INetworkStrategyManager _networkStrategyManager;
     private readonly ILogger<VerificationScenarioRunner> _logger;
     private readonly VerificationOptions _options;
@@ -28,14 +28,14 @@ public sealed class VerificationScenarioRunner
     public VerificationScenarioRunner(
         IBrowserAutomationService browserAutomation,
         IPlaywrightSessionManager sessionManager,
-        IProfileFingerprintManager fingerprintManager,
+        IFingerprintBrowser fingerprintBrowser,
         INetworkStrategyManager networkStrategyManager,
         IOptions<VerificationOptions> options,
         ILogger<VerificationScenarioRunner> logger)
     {
         _browserAutomation = browserAutomation;
         _sessionManager = sessionManager;
-        _fingerprintManager = fingerprintManager;
+        _fingerprintBrowser = fingerprintBrowser;
         _networkStrategyManager = networkStrategyManager;
         _options = options?.Value ?? new VerificationOptions();
         _logger = logger;
@@ -47,7 +47,7 @@ public sealed class VerificationScenarioRunner
 
         var profile = await _browserAutomation.EnsureProfileAsync(BrowserOpenRequest.UserProfileKey, null, cancellationToken).ConfigureAwait(false);
 
-        var fingerprint = await _fingerprintManager.GenerateAsync(profile.ProfileKey, cancellationToken).ConfigureAwait(false);
+        var fingerprint = await _fingerprintBrowser.GetProfileAsync(profile.ProfileKey, cancellationToken).ConfigureAwait(false);
         var network = await _networkStrategyManager.PrepareSessionAsync(profile.ProfileKey, cancellationToken).ConfigureAwait(false);
         var session = await _sessionManager.EnsureSessionAsync(profile, network, fingerprint, cancellationToken).ConfigureAwait(false);
 

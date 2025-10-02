@@ -1,8 +1,9 @@
 using System;
+using HushOps.FingerprintBrowser.Core;
+using HushOps.FingerprintBrowser.Playwright;
 using HushOps.Servers.XiaoHongShu.Configuration;
 using HushOps.Servers.XiaoHongShu.Infrastructure.FileSystem;
 using HushOps.Servers.XiaoHongShu.Services.Browser;
-using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Playwright;
 using HushOps.Servers.XiaoHongShu.Services.Humanization;
@@ -12,6 +13,7 @@ using HushOps.Servers.XiaoHongShu.Services.Notes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace HushOps.Servers.XiaoHongShu.Services;
 
@@ -26,6 +28,8 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(environment);
 
+        // 注册 FingerprintBrowser SDK 配置
+        services.AddPlaywrightInstallation(configuration);
         services.AddSingleton<XiaoHongShuDiagnosticsService>();
         services.AddSingleton<IFileSystem>(_ => new DefaultFileSystem(environment.ContentRootPath));
 
@@ -41,7 +45,20 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISessionConsistencyInspector, SessionConsistencyInspector>();
         services.AddSingleton<IHumanizedActionService, HumanizedActionService>();
 
-        services.AddSingleton<IProfileFingerprintManager, ProfileFingerprintManager>();
+        // 注册 FingerprintBrowser SDK
+        services.AddSingleton(sp =>
+        {
+            var playwright = Microsoft.Playwright.Playwright.CreateAsync().GetAwaiter().GetResult();
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            return playwright;
+        });
+        services.AddSingleton<IFingerprintBrowser>(sp =>
+        {
+            var playwright = sp.GetRequiredService<Microsoft.Playwright.IPlaywright>();
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            return new PlaywrightFingerprintBrowser(playwright, loggerFactory);
+        });
+
         services.AddSingleton<INetworkStrategyManager, NetworkStrategyManager>();
         services.AddSingleton<IPlaywrightSessionManager, PlaywrightSessionManager>();
         services.AddSingleton<Diagnostics.VerificationScenarioRunner>();

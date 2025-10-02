@@ -269,10 +269,10 @@ public sealed class NoteCaptureTool
 
 public sealed record NoteCaptureToolRequest(
     [property: Description("候选关键词列表（用于筛选匹配笔记）| Candidate keywords for filtering notes")] string[]? Keywords = null,
-    [property: Description("画像 ID，用于推荐关键词 | Portrait identifier for keyword fallback")] string? PortraitId = null,
+    [property: Description("画像 ID，用于推荐关键词 | Portrait identifier for keyword fallback")] string PortraitId = "",
     [property: Description("目标笔记数量上限 | Maximum number of notes to collect")] int TargetCount = 20,
-    [property: Description("浏览器键：user 表示用户配置，其它值映射为独立配置 | Browser key: 'user' for user profile, others map to isolated profiles")] string? BrowserKey = null,
-    [property: Description("行为档案键，用于覆盖默认拟人化配置 | Behavior profile key overriding the default humanization profile")] string? BehaviorProfile = null);
+    [property: Description("浏览器键：user 表示用户配置，其它值映射为独立配置 | Browser key: 'user' for user profile, others map to isolated profiles")] string BrowserKey = "",
+    [property: Description("行为档案键，用于覆盖默认拟人化配置 | Behavior profile key overriding the default humanization profile")] string BehaviorProfile = "");
 
 public sealed record NoteCaptureToolResult(
     [property: Description("搜索关键词 | Search keyword")] string Keyword,

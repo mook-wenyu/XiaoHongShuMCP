@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
+using HushOps.FingerprintBrowser.Core;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Playwright;
 using HushOps.Servers.XiaoHongShu.Services.Notes;
@@ -20,7 +20,7 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
 {
     private readonly INoteRepository _repository;
     private readonly IFileSystem _fileSystem;
-    private readonly IProfileFingerprintManager _fingerprintManager;
+    private readonly IFingerprintBrowser _fingerprintBrowser;
     private readonly INetworkStrategyManager _networkStrategyManager;
     private readonly Playwright.IPlaywrightSessionManager _playwrightSessionManager;
     private readonly ILogger<BrowserAutomationService> _logger;
@@ -29,14 +29,14 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
     public BrowserAutomationService(
         INoteRepository repository,
         IFileSystem fileSystem,
-        IProfileFingerprintManager fingerprintManager,
+        IFingerprintBrowser fingerprintBrowser,
         INetworkStrategyManager networkStrategyManager,
         Playwright.IPlaywrightSessionManager playwrightSessionManager,
         ILogger<BrowserAutomationService> logger)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-        _fingerprintManager = fingerprintManager ?? throw new ArgumentNullException(nameof(fingerprintManager));
+        _fingerprintBrowser = fingerprintBrowser ?? throw new ArgumentNullException(nameof(fingerprintBrowser));
         _networkStrategyManager = networkStrategyManager ?? throw new ArgumentNullException(nameof(networkStrategyManager));
         _playwrightSessionManager = playwrightSessionManager ?? throw new ArgumentNullException(nameof(playwrightSessionManager));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -110,20 +110,20 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
             return warningResult;
         }
 
-        var fingerprint = await _fingerprintManager.GenerateAsync(validated.ProfileKey, cancellationToken).ConfigureAwait(false);
+        var fingerprint = await _fingerprintBrowser.GetProfileAsync(validated.ProfileKey, cancellationToken).ConfigureAwait(false);
         var network = await _networkStrategyManager.PrepareSessionAsync(validated.ProfileKey, cancellationToken).ConfigureAwait(false);
         var enriched = validated with
         {
             SessionMetadata = new BrowserSessionMetadata(
-                fingerprint.Hash,
+                null, // Hash 不再使用，SDK 内部管理
                 fingerprint.UserAgent,
-                fingerprint.Timezone,
-                fingerprint.Language,
+                fingerprint.TimezoneId,
+                fingerprint.Locale,
                 fingerprint.ViewportWidth,
                 fingerprint.ViewportHeight,
-                fingerprint.DeviceScaleFactor,
-                fingerprint.IsMobile,
-                fingerprint.HasTouch,
+                null, // DeviceScaleFactor 不再使用
+                null, // IsMobile 不再使用
+                null, // HasTouch 不再使用
                 network.ProxyId,
                 network.ProxyAddress,
                 network.ExitIp?.ToString(),
@@ -211,7 +211,7 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
             profile = await EnsureProfileAsync(normalizedKey, null, cancellationToken).ConfigureAwait(false);
         }
 
-        var fingerprint = await _fingerprintManager.GenerateAsync(profile.ProfileKey, cancellationToken).ConfigureAwait(false);
+        var fingerprint = await _fingerprintBrowser.GetProfileAsync(profile.ProfileKey, cancellationToken).ConfigureAwait(false);
         var network = await _networkStrategyManager.PrepareSessionAsync(profile.ProfileKey, cancellationToken).ConfigureAwait(false);
 
         var page = await _playwrightSessionManager.EnsurePageAsync(profile, network, fingerprint, cancellationToken).ConfigureAwait(false);

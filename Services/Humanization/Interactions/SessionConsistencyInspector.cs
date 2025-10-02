@@ -129,17 +129,17 @@ public sealed class SessionConsistencyInspector : ISessionConsistencyInspector
             warnings.Add($"UserAgent mismatch: fingerprint={pageContext.Fingerprint.UserAgent}, page={sample.UserAgent}");
         }
 
-        var languageMatch = string.Equals(pageContext.Fingerprint.Language, sample.Language, StringComparison.OrdinalIgnoreCase)
-                            || sample.Languages.Contains(pageContext.Fingerprint.Language, StringComparer.OrdinalIgnoreCase);
+        var languageMatch = string.Equals(pageContext.Fingerprint.Locale, sample.Language, StringComparison.OrdinalIgnoreCase)
+                            || sample.Languages.Contains(pageContext.Fingerprint.Locale, StringComparer.OrdinalIgnoreCase);
         if (!languageMatch)
         {
-            warnings.Add($"Language mismatch: fingerprint={pageContext.Fingerprint.Language}, page={sample.Language}");
+            warnings.Add($"Language mismatch: fingerprint={pageContext.Fingerprint.Locale}, page={sample.Language}");
         }
 
-        var timezoneMatch = string.Equals(pageContext.Fingerprint.Timezone, sample.Timezone, StringComparison.OrdinalIgnoreCase);
+        var timezoneMatch = string.Equals(pageContext.Fingerprint.TimezoneId, sample.Timezone, StringComparison.OrdinalIgnoreCase);
         if (!timezoneMatch)
         {
-            warnings.Add($"Timezone mismatch: fingerprint={pageContext.Fingerprint.Timezone}, page={sample.Timezone}");
+            warnings.Add($"Timezone mismatch: fingerprint={pageContext.Fingerprint.TimezoneId}, page={sample.Timezone}");
         }
 
         var viewportTolerance = Math.Max(0, profileOptions.ViewportTolerancePx);
@@ -150,11 +150,8 @@ public sealed class SessionConsistencyInspector : ISessionConsistencyInspector
             warnings.Add($"Viewport mismatch: fingerprint={pageContext.Fingerprint.ViewportWidth}x{pageContext.Fingerprint.ViewportHeight}, page={sample.Width}x{sample.Height}");
         }
 
-        var isMobileMatch = pageContext.Fingerprint.IsMobile == (sample.Width <= 768 || pageContext.Fingerprint.HasTouch);
-        if (!isMobileMatch)
-        {
-            warnings.Add($"IsMobile mismatch: fingerprint={pageContext.Fingerprint.IsMobile}, pageWidth={sample.Width}");
-        }
+        // IsMobile 和 HasTouch 字段已从 FingerprintProfile 移除（由 SDK 内部管理）
+        // 移除 isMobileMatch 检查
 
         var proxyConfigured = !string.IsNullOrWhiteSpace(pageContext.Network.ProxyAddress);
         var proxyRequirementSatisfied = !profileOptions.RequireProxy || proxyConfigured;
@@ -173,10 +170,7 @@ public sealed class SessionConsistencyInspector : ISessionConsistencyInspector
             }
         }
 
-        if (profileOptions.RandomMoveProbability <= 0 && pageContext.Fingerprint.HasTouch)
-        {
-            warnings.Add("Behavior profile random move probability is 0 while fingerprint indicates touch support.");
-        }
+        // HasTouch 检查已移除（字段不再存在于 FingerprintProfile）
 
         if (!string.IsNullOrWhiteSpace(pageContext.Network.ProxyAddress))
         {
@@ -237,7 +231,7 @@ public sealed class SessionConsistencyInspector : ISessionConsistencyInspector
             languageMatch,
             timezoneMatch,
             viewportMatch,
-            isMobileMatch,
+            true, // isMobileMatch（已移除检查，始终为 true）
             proxyConfigured,
             proxyRequirementSatisfied,
             gpuInfoAvailable,

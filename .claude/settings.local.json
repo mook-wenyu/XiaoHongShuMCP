@@ -44,7 +44,15 @@
       "mcp__exa__get_code_context_exa",
       "Read(//d/RiderProjects/HushOps.Servers/**)",
       "Bash(dotnet new:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "Bash(awk:*)",
+      "Bash(Select-String -Path \"obj\\project.assets.json\" -Pattern \"Microsoft.Playwright/1.55.0\")",
+      "Bash(Select-Object -First 3)",
+      "mcp__shrimp-task-manager__clear_all_tasks",
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(codex:*)"
     ],
     "deny": [],
     "ask": []

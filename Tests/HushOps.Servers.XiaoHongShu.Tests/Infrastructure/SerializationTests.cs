@@ -103,17 +103,17 @@ public sealed class SerializationTests
         Assert.Equal(0, deserialized.MitigationCount);
     }
 
-    [Fact(DisplayName = "NetworkSessionContext_ExitIp为null_应该可序列化为JSON")]
-    public void NetworkSessionContext_ExitIp为null_应该可序列化为JSON()
+    [Fact(DisplayName = "NetworkSessionContext_ExitIp为空字符串_应该可序列化为JSON")]
+    public void NetworkSessionContext_ExitIp为空字符串_应该可序列化为JSON()
     {
         // Arrange
         var context = new NetworkSessionContext(
             ProxyId: "proxy-2",
-            ExitIp: null,
+            ExitIp: "",
             AverageLatencyMs: 30.0,
             FailureRate: 0.01,
             BandwidthSimulated: false,
-            ProxyAddress: null,
+            ProxyAddress: "",
             DelayMinMs: 50,
             DelayMaxMs: 150,
             MaxRetryAttempts: 2,
@@ -129,11 +129,11 @@ public sealed class SerializationTests
         Assert.NotEmpty(json);
         Assert.NotNull(deserialized);
         Assert.Equal("proxy-2", deserialized!.ProxyId);
-        Assert.Null(deserialized.ExitIp);
+        Assert.Equal(string.Empty, deserialized.ExitIp);
         Assert.Equal(30.0, deserialized.AverageLatencyMs);
         Assert.Equal(0.01, deserialized.FailureRate);
         Assert.False(deserialized.BandwidthSimulated);
-        Assert.Null(deserialized.ProxyAddress);
+        Assert.Equal(string.Empty, deserialized.ProxyAddress);
         Assert.Equal(50, deserialized.DelayMinMs);
         Assert.Equal(150, deserialized.DelayMaxMs);
         Assert.Equal(2, deserialized.MaxRetryAttempts);

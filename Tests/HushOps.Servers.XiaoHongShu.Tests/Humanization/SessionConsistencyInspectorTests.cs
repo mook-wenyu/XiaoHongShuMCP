@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using HushOps.Servers.XiaoHongShu.Configuration;
 using HushOps.Servers.XiaoHongShu.Services.Browser;
-using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
+using HushOps.FingerprintBrowser.Core;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Humanization.Interactions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -28,7 +28,7 @@ public sealed class SessionConsistencyInspectorTests : IAsyncLifetime
     private IBrowserContext _context = null!;
     private IPage _page = null!;
     private BrowserOpenResult _profile = null!;
-    private FingerprintContext _fingerprint = null!;
+    private FingerprintProfile _fingerprint = null!;
     private NetworkSessionContext _network = null!;
 
     public async Task InitializeAsync()
@@ -43,19 +43,15 @@ public sealed class SessionConsistencyInspectorTests : IAsyncLifetime
         var navigatorSample = await _page.EvaluateAsync<NavigatorSample>(
             "() => ({ ua: navigator.userAgent ?? '', lang: navigator.language ?? '', tz: (Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''), width: window.innerWidth || 0, height: window.innerHeight || 0 })");
 
-        var fingerprint = new FingerprintContext(
-            Hash: Guid.NewGuid().ToString("N"),
+        var fingerprint = new FingerprintProfile(
+            ProfileKey: "user",
+            ProfileType: ProfileType.User,
             UserAgent: navigatorSample.UserAgent,
-            Timezone: string.IsNullOrWhiteSpace(navigatorSample.Timezone) ? "Asia/Shanghai" : navigatorSample.Timezone,
-            Language: string.IsNullOrWhiteSpace(navigatorSample.Language) ? "zh-CN" : navigatorSample.Language,
+            Platform: "Win32",
             ViewportWidth: navigatorSample.Width == 0 ? 1280 : navigatorSample.Width,
             ViewportHeight: navigatorSample.Height == 0 ? 720 : navigatorSample.Height,
-            DeviceScaleFactor: 1.0,
-            IsMobile: (navigatorSample.Width == 0 ? 1280 : navigatorSample.Width) <= 768,
-            HasTouch: false,
-            CanvasNoise: false,
-            WebglMask: false,
-            ExtraHeaders: new Dictionary<string, string>(),
+            Locale: string.IsNullOrWhiteSpace(navigatorSample.Language) ? "zh-CN" : navigatorSample.Language,
+            TimezoneId: string.IsNullOrWhiteSpace(navigatorSample.Timezone) ? "Asia/Shanghai" : navigatorSample.Timezone,
             HardwareConcurrency: 8,
             Vendor: "Google Inc.",
             WebglVendor: "Intel Inc.",
@@ -65,7 +61,7 @@ public sealed class SessionConsistencyInspectorTests : IAsyncLifetime
 
         var network = new NetworkSessionContext(
             ProxyId: "proxy-local",
-            ExitIp: null,
+            ExitIp: "",
             AverageLatencyMs: 80,
             FailureRate: 0.005,
             BandwidthSimulated: false,
@@ -78,7 +74,7 @@ public sealed class SessionConsistencyInspectorTests : IAsyncLifetime
 
         _fingerprint = fingerprint;
         _network = network;
-        _profile = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, null, true, true, null);
+        _profile = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, "", true, true, null);
     }
 
     public async Task DisposeAsync()
@@ -129,7 +125,7 @@ public sealed class SessionConsistencyInspectorTests : IAsyncLifetime
         profileOptions.RequireProxy = true;
         profileOptions.AllowedProxyPrefixes = Array.Empty<string>();
 
-        var networkWithoutProxy = _network with { ProxyAddress = null };
+        var networkWithoutProxy = _network with { ProxyAddress = "" };
         var context = CreateContext(networkWithoutProxy);
 
         var report = await inspector.InspectAsync(context, profileOptions, CancellationToken.None);
@@ -164,6 +160,7 @@ public sealed class SessionConsistencyInspectorTests : IAsyncLifetime
         }
     }
 }
+
 
 
 

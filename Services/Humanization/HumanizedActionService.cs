@@ -256,12 +256,11 @@ public sealed class HumanizedActionService : IHumanizedActionService
                 .ConfigureAwait(false);
 
             metadata["fingerprintUserAgent"] = pageContext.Fingerprint.UserAgent;
-            metadata["fingerprintTimezone"] = pageContext.Fingerprint.Timezone;
-            metadata["fingerprintLanguage"] = pageContext.Fingerprint.Language;
+            metadata["fingerprintTimezone"] = pageContext.Fingerprint.TimezoneId;
+            metadata["fingerprintLanguage"] = pageContext.Fingerprint.Locale;
             metadata["fingerprintViewportWidth"] = pageContext.Fingerprint.ViewportWidth.ToString(CultureInfo.InvariantCulture);
             metadata["fingerprintViewportHeight"] = pageContext.Fingerprint.ViewportHeight.ToString(CultureInfo.InvariantCulture);
-            metadata["fingerprintIsMobile"] = pageContext.Fingerprint.IsMobile.ToString();
-            metadata["fingerprintHasTouch"] = pageContext.Fingerprint.HasTouch.ToString();
+            // IsMobile 和 HasTouch 已移除（由 SDK 内部管理）
             metadata["networkProxyAddress"] = pageContext.Network.ProxyAddress ?? string.Empty;
             metadata["networkDelayMinMs"] = pageContext.Network.DelayMinMs.ToString(CultureInfo.InvariantCulture);
             metadata["networkDelayMaxMs"] = pageContext.Network.DelayMaxMs.ToString(CultureInfo.InvariantCulture);

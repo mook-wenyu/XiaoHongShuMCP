@@ -116,7 +116,7 @@ public sealed class PageNoteCaptureTool
 /// <param name="BrowserKey">浏览器键，默认 user | Browser key, default 'user'.</param>
 public sealed record PageNoteCaptureToolRequest(
     [property: Description("目标采集数量，默认 20 条 | Target number of notes to collect, default 20")] int TargetCount = 20,
-    [property: Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string? BrowserKey = null);
+    [property: Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string BrowserKey = "");
 
 /// <summary>
 /// 中文：页面笔记采集工具返回结果。

@@ -4,7 +4,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using HushOps.Servers.XiaoHongShu.Infrastructure.ToolExecution;
 using HushOps.Servers.XiaoHongShu.Services.Browser;
-using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Humanization;
 using HushOps.Servers.XiaoHongShu.Services.Humanization.Interactions;
@@ -55,7 +54,7 @@ public sealed class InteractionStepToolTests
             NullLogger<InteractionStepTool>.Instance);
 
         // Act
-        var result = await tool.ScrollBrowseAsync(null, null, CancellationToken.None);
+        var result = await tool.ScrollBrowseAsync(null!, null!, CancellationToken.None);
 
         // Assert
         Assert.True(result.Success);

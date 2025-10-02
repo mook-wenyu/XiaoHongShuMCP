@@ -1,5 +1,5 @@
 using System;
-using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
+using HushOps.FingerprintBrowser.Core;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using Microsoft.Playwright;
 
@@ -146,6 +146,6 @@ public sealed record BrowserSessionMetadata(
 
 public sealed record BrowserPageContext(
     BrowserOpenResult Profile,
-    FingerprintContext Fingerprint,
+    FingerprintProfile Fingerprint,
     NetworkSessionContext Network,
     IPage Page);

@@ -14,11 +14,11 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.9" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.9" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="9.0.9" />
-    <PackageReference Include="Microsoft.Playwright" Version="1.50.0" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.55.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FingerprintBrowser\FingerprintBrowser\FingerprintBrowser.csproj" />
+    <ProjectReference Include="..\FingerprintBrowser\FingerprintBrowser.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -40,10 +40,10 @@ public sealed class NotePublishTool
     [McpServerTool(Name = "xhs_publish_note"), Description("发布笔记（上传图片、填写标题正文、暂存离开）| Publish note (upload image, fill title/content, save draft and leave)")]
     public async Task<OperationResult<NotePublishResult>> PublishNoteAsync(
         [Description("图片文件路径 | Image file path")] string imagePath,
-        [Description("笔记标题，不填则使用默认标题 | Note title, defaults to generic title")] string? noteTitle = null,
-        [Description("笔记正文，不填则使用默认正文 | Note content, defaults to generic content")] string? noteContent = null,
-        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string? browserKey = null,
-        [Description("行为档案键，默认 default | Behavior profile key")] string? behaviorProfile = null,
+        [Description("笔记标题，不填则使用默认标题 | Note title, defaults to generic title")] string noteTitle = "",
+        [Description("笔记正文，不填则使用默认正文 | Note content, defaults to generic content")] string noteContent = "",
+        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string browserKey = "",
+        [Description("行为档案键，默认 default | Behavior profile key")] string behaviorProfile = "",
         [Description("取消执行的令牌 | Cancellation token")] CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(imagePath);

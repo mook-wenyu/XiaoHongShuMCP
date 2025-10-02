@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using HushOps.Servers.XiaoHongShu.Configuration;
+using HushOps.FingerprintBrowser.Installation;
 using HushOps.Servers.XiaoHongShu.Services;
 using HushOps.Servers.XiaoHongShu.Services.Logging;
 using HushOps.Servers.XiaoHongShu.Diagnostics;
@@ -44,11 +45,6 @@ builder.Services
     .ValidateOnStart();
 
 builder.Services
-    .AddOptions<FingerprintOptions>()
-    .Bind(builder.Configuration.GetSection(FingerprintOptions.SectionName))
-    .ValidateOnStart();
-
-builder.Services
     .AddOptions<NetworkStrategyOptions>()
     .Bind(builder.Configuration.GetSection(NetworkStrategyOptions.SectionName))
     .ValidateOnStart();
@@ -56,11 +52,6 @@ builder.Services
 builder.Services
     .AddOptions<VerificationOptions>()
     .Bind(builder.Configuration.GetSection(VerificationOptions.SectionName))
-    .ValidateOnStart();
-
-builder.Services
-    .AddOptions<PlaywrightInstallationOptions>()
-    .Bind(builder.Configuration.GetSection(PlaywrightInstallationOptions.SectionName))
     .ValidateOnStart();
 
 builder.Services.AddXiaoHongShuServer(builder.Configuration, builder.Environment);

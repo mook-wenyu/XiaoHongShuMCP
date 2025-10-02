@@ -12,27 +12,32 @@ public sealed class DefaultHumanizedActionScriptBuilderTests
     [Fact]
     public void BuildNavigateExplore_ShouldProduceNavigationSequence()
     {
-        var request = new HumanizedActionRequest(Array.Empty<string>(), null, null, "user", null, "profileB");
+        var request = new HumanizedActionRequest(Array.Empty<string>(), "", "", "user", "", "profileB");
 
         var script = _builder.Build(request, HumanizedActionKind.NavigateExplore, "");
 
-        Assert.True(script.Actions.Count >= 3);
+        Assert.True(script.Actions.Count >= 5);
 
-        var firstClick = script.Actions[0];
-        Assert.Equal(HumanizedActionType.Click, firstClick.Type);
-        Assert.Equal(AriaRole.Link, firstClick.Target.Role);
-        Assert.Equal("发现", firstClick.Target.Text);
-        Assert.Equal("profileB", firstClick.BehaviorProfile);
+        var firstAction = script.Actions[0];
+        Assert.Equal(HumanizedActionType.PressKey, firstAction.Type);
+        Assert.Equal("Escape", firstAction.Parameters.Text);
+        Assert.Equal("profileB", firstAction.BehaviorProfile);
 
         Assert.Contains(script.Actions, action =>
-            action.Type == HumanizedActionType.WaitFor &&
-            action.Target.Role == AriaRole.Main);
+            action.Type == HumanizedActionType.Click &&
+            string.Equals(action.Target.Text, "发现", StringComparison.Ordinal) &&
+            action.BehaviorProfile == "profileB");
+
+        Assert.Contains(script.Actions, action =>
+            action.Type == HumanizedActionType.Wheel &&
+            action.Parameters.WheelDeltaY == 300 &&
+            action.BehaviorProfile == "profileB");
     }
 
     [Fact]
     public void BuildSearchKeyword_ShouldCreateSearchSequence()
     {
-        var request = new HumanizedActionRequest(new[] { "护肤" }, null, null, "user", null, "profileA");
+        var request = new HumanizedActionRequest(new[] { "护肤" }, "", "", "user", "", "profileA");
 
         var script = _builder.Build(request, HumanizedActionKind.SearchKeyword, "护肤");
 
@@ -47,7 +52,7 @@ public sealed class DefaultHumanizedActionScriptBuilderTests
     [Fact]
     public void BuildKeywordBrowse_ShouldBrowseCurrentPage()
     {
-        var request = new HumanizedActionRequest(new[] { "护肤" }, null, null, "user", null, "profileA");
+        var request = new HumanizedActionRequest(new[] { "护肤" }, "", "", "user", "", "profileA");
 
         var script = _builder.Build(request, HumanizedActionKind.KeywordBrowse, "护肤");
 
@@ -60,24 +65,24 @@ public sealed class DefaultHumanizedActionScriptBuilderTests
     [Fact]
     public void BuildSelectNote_ShouldIncludeNoteClick()
     {
-        var request = new HumanizedActionRequest(new[] { "旅拍" }, null, null, "user", null, "profileB");
+        var request = new HumanizedActionRequest(new[] { "旅拍" }, "", "", "user", "", "profileB");
 
         var script = _builder.Build(request, HumanizedActionKind.SelectNote, "旅拍");
 
         Assert.Contains(script.Actions, action =>
             action.Type == HumanizedActionType.Click &&
-            action.Target.TestId == "note-card");
+            string.Equals(action.Target.Text, "旅拍", StringComparison.Ordinal) &&
+            action.BehaviorProfile == "profileB");
 
         Assert.Contains(script.Actions, action =>
-            action.Type == HumanizedActionType.WaitFor &&
-            action.Target.Role == AriaRole.Button &&
-            string.Equals(action.Target.Text, "点赞", StringComparison.Ordinal));
+            action.Type == HumanizedActionType.MoveRandom &&
+            action.BehaviorProfile == "profileB");
     }
 
     [Fact]
     public void BuildCommentCurrentNote_ShouldValidateCommentText()
     {
-        var request = new HumanizedActionRequest(Array.Empty<string>(), null, null, "user", null);
+        var request = new HumanizedActionRequest(Array.Empty<string>(), "", "", "user", "");
 
         Assert.Throws<InvalidOperationException>(() => _builder.Build(request, HumanizedActionKind.CommentCurrentNote, "keyword"));
     }
@@ -85,7 +90,7 @@ public sealed class DefaultHumanizedActionScriptBuilderTests
     [Fact]
     public void BuildRandomBrowse_ShouldIncludeWheelAndMove()
     {
-        var request = new HumanizedActionRequest(Array.Empty<string>(), null, null, "user", null);
+        var request = new HumanizedActionRequest(Array.Empty<string>(), "", "", "user", "");
 
         var script = _builder.Build(request, HumanizedActionKind.RandomBrowse, "");
 
@@ -97,33 +102,33 @@ public sealed class DefaultHumanizedActionScriptBuilderTests
     [Fact]
     public void BuildLikeCurrentNote_ShouldIncludeLikeClick()
     {
-        var request = new HumanizedActionRequest(Array.Empty<string>(), null, null, "user", null);
+        var request = new HumanizedActionRequest(Array.Empty<string>(), "", "", "user", "");
 
         var script = _builder.Build(request, HumanizedActionKind.LikeCurrentNote, "");
 
         Assert.Contains(script.Actions, action =>
             action.Type == HumanizedActionType.Click &&
-            action.Target.Role == AriaRole.Button &&
-            string.Equals(action.Target.Text, "点赞", StringComparison.Ordinal));
+            string.Equals(action.Target.Selector, ".like-wrapper", StringComparison.Ordinal) &&
+            action.BehaviorProfile == "default");
     }
 
     [Fact]
     public void BuildFavoriteCurrentNote_ShouldIncludeFavoriteClick()
     {
-        var request = new HumanizedActionRequest(Array.Empty<string>(), null, null, "user", null);
+        var request = new HumanizedActionRequest(Array.Empty<string>(), "", "", "user", "");
 
         var script = _builder.Build(request, HumanizedActionKind.FavoriteCurrentNote, "");
 
         Assert.Contains(script.Actions, action =>
             action.Type == HumanizedActionType.Click &&
-            action.Target.Role == AriaRole.Button &&
-            string.Equals(action.Target.Text, "收藏", StringComparison.Ordinal));
+            string.Equals(action.Target.Selector, ".collect-wrapper", StringComparison.Ordinal) &&
+            action.BehaviorProfile == "default");
     }
 
     [Fact]
     public void BuildScrollBrowse_ShouldProduceScrollSequence()
     {
-        var request = new HumanizedActionRequest(Array.Empty<string>(), null, null, "user", null, "profileA");
+        var request = new HumanizedActionRequest(Array.Empty<string>(), "", "", "user", "", "profileA");
 
         var script = _builder.Build(request, HumanizedActionKind.ScrollBrowse, "");
 

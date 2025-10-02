@@ -1,4 +1,4 @@
-锘縰sing System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using HushOps.Servers.XiaoHongShu.Configuration;
 using HushOps.Servers.XiaoHongShu.Infrastructure.ToolExecution;
 using HushOps.Servers.XiaoHongShu.Services.Browser;
-using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
+using HushOps.FingerprintBrowser.Core;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Humanization;
 using HushOps.Servers.XiaoHongShu.Services.Humanization.Behavior;
@@ -21,7 +21,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
     private IPlaywright _playwright = null!;
     private IBrowser _browser = null!;
     private IPage _page = null!;
-    private FingerprintContext _fingerprint = null!;
+    private FingerprintProfile _fingerprint = null!;
     private NetworkSessionContext _network = null!;
 
     public async Task InitializeAsync()
@@ -34,26 +34,22 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
 
         await _page.SetContentAsync("""
         <main>
-            <a href="#" role="link">鍙戠幇</a>
+            <a href="#" role="link">发现</a>
         </main>
         """);
 
         var sample = await _page.EvaluateAsync<NavigatorSample>(
             "() => ({ ua: navigator.userAgent ?? '', lang: navigator.language ?? '', tz: (Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''), width: window.innerWidth || 0, height: window.innerHeight || 0 })");
 
-        _fingerprint = new FingerprintContext(
-            Hash: "TEST",
+        _fingerprint = new FingerprintProfile(
+            ProfileKey: "user",
+            ProfileType: ProfileType.User,
             UserAgent: sample.UserAgent,
-            Timezone: string.IsNullOrWhiteSpace(sample.Timezone) ? "Asia/Shanghai" : sample.Timezone,
-            Language: string.IsNullOrWhiteSpace(sample.Language) ? "zh-CN" : sample.Language,
+            Platform: "Win32",
             ViewportWidth: sample.Width == 0 ? 1280 : sample.Width,
             ViewportHeight: sample.Height == 0 ? 720 : sample.Height,
-            DeviceScaleFactor: 1.0,
-            IsMobile: sample.Width <= 768,
-            HasTouch: false,
-            CanvasNoise: false,
-            WebglMask: false,
-            ExtraHeaders: new Dictionary<string, string>(),
+            Locale: string.IsNullOrWhiteSpace(sample.Language) ? "zh-CN" : sample.Language,
+            TimezoneId: string.IsNullOrWhiteSpace(sample.Timezone) ? "Asia/Shanghai" : sample.Timezone,
             HardwareConcurrency: 8,
             Vendor: "Google Inc.",
             WebglVendor: "Intel Inc.",
@@ -63,7 +59,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
 
         _network = new NetworkSessionContext(
             ProxyId: "proxy-local",
-            ExitIp: null,
+            ExitIp: "",
             AverageLatencyMs: 120,
             FailureRate: 0.01,
             BandwidthSimulated: false,
@@ -95,13 +91,13 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
         var service = CreateService(behaviorOptions);
 
         var outcome = await service.ExecuteAsync(
-            new HumanizedActionRequest(Array.Empty<string>(), null, null, "user", "req-1", "default"),
+            new HumanizedActionRequest(Array.Empty<string>(), "", "", "user", "req-1", "default"),
             HumanizedActionKind.NavigateExplore,
             CancellationToken.None);
 
         Assert.True(outcome.Success);
         Assert.Equal("ok", outcome.Status);
-        Assert.Equal("", outcome.Metadata["resolvedKeyword"]); // NavigateExplore 涓嶉渶瑕佸叧閿瘝
+        Assert.Equal("", outcome.Metadata["resolvedKeyword"]); // NavigateExplore 不需要关键词
         Assert.Contains("Click", outcome.Metadata["script.actions"]);
         Assert.Equal("True", outcome.Metadata["consistency.uaMatch"]);
         Assert.Equal("default", outcome.Metadata["behaviorProfile"]);
@@ -114,12 +110,12 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
         var service = CreateService(behaviorOptions);
 
         var plan = await service.PrepareAsync(
-            new HumanizedActionRequest(Array.Empty<string>(), null, null, "user", "plan-1", "default"),
+            new HumanizedActionRequest(Array.Empty<string>(), "", "", "user", "plan-1", "default"),
             HumanizedActionKind.NavigateExplore,
             CancellationToken.None);
 
         Assert.Equal("default", plan.BehaviorProfile);
-        Assert.Equal("", plan.ResolvedKeyword); // NavigateExplore 涓嶉渶瑕佸叧閿瘝
+        Assert.Equal("", plan.ResolvedKeyword); // NavigateExplore 不需要关键词
         Assert.Equal("", plan.SelectedKeyword);
         Assert.NotEmpty(plan.Script.Actions);
         Assert.Contains("script.actionCount", plan.Metadata.Keys);
@@ -155,7 +151,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
     {
         public Task<string> ResolveAsync(IReadOnlyList<string> keywords, string? portraitId, IDictionary<string, string> metadata, CancellationToken cancellationToken)
         {
-            var candidate = keywords.FirstOrDefault(k => !string.IsNullOrWhiteSpace(k)) ?? "榛樿";
+            var candidate = keywords.FirstOrDefault(k => !string.IsNullOrWhiteSpace(k)) ?? "默认";
             return Task.FromResult(candidate);
         }
     }
@@ -170,9 +166,9 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
         private readonly BrowserOpenResult _result;
         private readonly BrowserPageContext _context;
 
-        public StubBrowserAutomationService(IPage page, FingerprintContext fingerprint, NetworkSessionContext network)
+        public StubBrowserAutomationService(IPage page, FingerprintProfile fingerprint, NetworkSessionContext network)
         {
-            _result = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, null, true, true, null);
+            _result = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, "", true, true, null);
             _context = new BrowserPageContext(_result, fingerprint, network, page);
         }
 
@@ -211,4 +207,5 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
         }
     }
 }
+
 

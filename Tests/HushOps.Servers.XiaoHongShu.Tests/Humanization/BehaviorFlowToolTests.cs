@@ -47,7 +47,7 @@ public sealed class BehaviorFlowToolTests
         var tool = new BehaviorFlowTool(service, NullLogger<BehaviorFlowTool>.Instance, options);
 
         var result = await tool.KeywordBrowseAsync(
-            new BehaviorFlowRequest(new[] { "露营", "徒步" }, null, "user", "default"),
+            new BehaviorFlowRequest(new[] { "露营", "徒步" }, "", "user", "default"),
             CancellationToken.None);
 
         Assert.True(result.Success);
@@ -77,7 +77,7 @@ public sealed class BehaviorFlowToolTests
         var tool = new BehaviorFlowTool(service, NullLogger<BehaviorFlowTool>.Instance, options);
 
         var result = await tool.KeywordBrowseAsync(
-            new BehaviorFlowRequest(new[] { "露营" }, null, "user", "default"),
+            new BehaviorFlowRequest(new[] { "露营" }, "", "user", "default"),
             CancellationToken.None);
 
         Assert.False(result.Success);
@@ -108,7 +108,7 @@ public sealed class BehaviorFlowToolTests
         var tool = new BehaviorFlowTool(service, NullLogger<BehaviorFlowTool>.Instance, options);
 
         var result = await tool.KeywordBrowseAsync(
-            new BehaviorFlowRequest(new[] { "露营" }, null, "user", "default"),
+            new BehaviorFlowRequest(new[] { "露营" }, "", "user", "default"),
             CancellationToken.None);
 
         Assert.True(result.Success);
@@ -129,7 +129,7 @@ public sealed class BehaviorFlowToolTests
         var tool = new BehaviorFlowTool(service, NullLogger<BehaviorFlowTool>.Instance, options);
 
         var result = await tool.KeywordBrowseAsync(
-            new BehaviorFlowRequest(new[] { "露营" }, null, "user", "default"),
+            new BehaviorFlowRequest(new[] { "露营" }, "", "user", "default"),
             CancellationToken.None);
 
         Assert.True(result.Success);

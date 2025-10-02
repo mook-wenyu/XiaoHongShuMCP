@@ -105,5 +105,5 @@ public sealed class BrowserTool
 }
 
 public sealed record BrowserOpenToolRequest(
-    [property: Description("用户浏览器配置路径，若为空则自动探测 | User profile path; auto-detected when empty")] string? ProfilePath = null,
-    [property: Description("浏览器键：user 代表用户配置，其他值作为独立配置目录名 | Browser key: 'user' for the user profile, other values act as isolated profile folder names")] string? ProfileKey = null);
+    [property: Description("用户浏览器配置路径，若为空则自动探测 | User profile path; auto-detected when empty")] string ProfilePath = "",
+    [property: Description("浏览器键：user 代表用户配置，其他值作为独立配置目录名 | Browser key: 'user' for the user profile, other values act as isolated profile folder names")] string ProfileKey = "");

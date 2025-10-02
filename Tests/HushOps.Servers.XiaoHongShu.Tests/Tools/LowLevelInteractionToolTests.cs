@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using HushOps.Servers.XiaoHongShu.Infrastructure.ToolExecution;
 using HushOps.Servers.XiaoHongShu.Services.Browser;
-using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
+using HushOps.FingerprintBrowser.Core;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Humanization.Interactions;
 using HushOps.Servers.XiaoHongShu.Tools;
@@ -74,8 +74,8 @@ public sealed class LowLevelInteractionToolTests
             NullLogger<LowLevelInteractionTool>.Instance);
 
         var request = new LowLevelActionRequest(
-            BrowserKey: null,
-            BehaviorProfile: null,
+            BrowserKey: "",
+            BehaviorProfile: "",
             ActionType: HumanizedActionType.Wheel,
             Target: null,
             Parameters: null,
@@ -138,19 +138,15 @@ public sealed class LowLevelInteractionToolTests
                 AutoOpened: false,
                 SessionMetadata: null);
 
-            var stubFingerprint = new FingerprintContext(
-                Hash: "stub-hash",
+            var stubFingerprint = new FingerprintProfile(
+                ProfileKey: "stub",
+                ProfileType: ProfileType.User,
                 UserAgent: "stub-ua",
-                Timezone: "UTC",
-                Language: "zh-CN",
+                Platform: "Win32",
                 ViewportWidth: 1920,
                 ViewportHeight: 1080,
-                DeviceScaleFactor: 1.0,
-                IsMobile: false,
-                HasTouch: false,
-                CanvasNoise: false,
-                WebglMask: false,
-                ExtraHeaders: new Dictionary<string, string>(),
+                Locale: "zh-CN",
+                TimezoneId: "UTC",
                 HardwareConcurrency: 8,
                 Vendor: "Google Inc.",
                 WebglVendor: "Intel Inc.",
@@ -160,11 +156,11 @@ public sealed class LowLevelInteractionToolTests
 
             var stubNetwork = new NetworkSessionContext(
                 ProxyId: "stub-proxy",
-                ExitIp: null,
+                ExitIp: "",
                 AverageLatencyMs: 100.0,
                 FailureRate: 0.0,
                 BandwidthSimulated: false,
-                ProxyAddress: null,
+                ProxyAddress: "",
                 DelayMinMs: 50,
                 DelayMaxMs: 100,
                 MaxRetryAttempts: 3,
@@ -224,3 +220,5 @@ public sealed class LowLevelInteractionToolTests
         }
     }
 }
+
+

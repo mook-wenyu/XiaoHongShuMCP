@@ -35,8 +35,8 @@ public sealed class InteractionStepTool
 
     [McpServerTool(Name = "xhs_navigate_explore"), Description("导航到发现页（点击导航栏发现按钮） | Navigate to explore page (discover feed)")]
     public async Task<OperationResult<InteractionStepResult>> NavigateExploreAsync(
-        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string? browserKey = null,
-        [Description("行为档案键，默认 default | Behavior profile key")] string? behaviorProfile = null,
+        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string browserKey = "",
+        [Description("行为档案键，默认 default | Behavior profile key")] string behaviorProfile = "",
         [Description("取消执行的令牌 | Cancellation token")] CancellationToken cancellationToken = default)
     {
         var request = new HumanizedActionRequest(
@@ -63,8 +63,8 @@ public sealed class InteractionStepTool
     [McpServerTool(Name = "xhs_search_keyword"), Description("在搜索框输入关键词并搜索 | Search for keyword in search box")]
     public async Task<OperationResult<InteractionStepResult>> SearchKeywordAsync(
         [Description("搜索关键词 | Search keyword")] string keyword,
-        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string? browserKey = null,
-        [Description("行为档案键，默认 default | Behavior profile key")] string? behaviorProfile = null,
+        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string browserKey = "",
+        [Description("行为档案键，默认 default | Behavior profile key")] string behaviorProfile = "",
         [Description("取消执行的令牌 | Cancellation token")] CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
@@ -93,8 +93,8 @@ public sealed class InteractionStepTool
     [McpServerTool(Name = "xhs_select_note"), Description("根据关键词数组选择笔记（命中任意关键词即成功） | Select note by keyword array matching")]
     public async Task<OperationResult<InteractionStepResult>> SelectNoteAsync(
         [Description("关键词数组，命中任意关键词即选中 | Keyword array for note matching")] string[] keywords,
-        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string? browserKey = null,
-        [Description("行为档案键，默认 default | Behavior profile key")] string? behaviorProfile = null,
+        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string browserKey = "",
+        [Description("行为档案键，默认 default | Behavior profile key")] string behaviorProfile = "",
         [Description("取消执行的令牌 | Cancellation token")] CancellationToken cancellationToken = default)
     {
         if (keywords == null || keywords.Length == 0)
@@ -126,8 +126,8 @@ public sealed class InteractionStepTool
 
     [McpServerTool(Name = "xhs_like_current"), Description("点赞当前打开的笔记 | Like the currently open note")]
     public async Task<OperationResult<InteractionStepResult>> LikeCurrentNoteAsync(
-        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string? browserKey = null,
-        [Description("行为档案键，默认 default | Behavior profile key")] string? behaviorProfile = null,
+        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string browserKey = "",
+        [Description("行为档案键，默认 default | Behavior profile key")] string behaviorProfile = "",
         [Description("取消执行的令牌 | Cancellation token")] CancellationToken cancellationToken = default)
     {
         var request = new HumanizedActionRequest(
@@ -153,8 +153,8 @@ public sealed class InteractionStepTool
 
     [McpServerTool(Name = "xhs_favorite_current"), Description("收藏当前打开的笔记 | Favorite the currently open note")]
     public async Task<OperationResult<InteractionStepResult>> FavoriteCurrentNoteAsync(
-        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string? browserKey = null,
-        [Description("行为档案键，默认 default | Behavior profile key")] string? behaviorProfile = null,
+        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string browserKey = "",
+        [Description("行为档案键，默认 default | Behavior profile key")] string behaviorProfile = "",
         [Description("取消执行的令牌 | Cancellation token")] CancellationToken cancellationToken = default)
     {
         var request = new HumanizedActionRequest(
@@ -181,8 +181,8 @@ public sealed class InteractionStepTool
     [McpServerTool(Name = "xhs_comment_current"), Description("评论当前打开的笔记 | Comment on the currently open note")]
     public async Task<OperationResult<InteractionStepResult>> CommentCurrentNoteAsync(
         [Description("评论文本 | Comment text")] string commentText,
-        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string? browserKey = null,
-        [Description("行为档案键，默认 default | Behavior profile key")] string? behaviorProfile = null,
+        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string browserKey = "",
+        [Description("行为档案键，默认 default | Behavior profile key")] string behaviorProfile = "",
         [Description("取消执行的令牌 | Cancellation token")] CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commentText);
@@ -211,8 +211,8 @@ public sealed class InteractionStepTool
 
     [McpServerTool(Name = "xhs_scroll_browse"), Description("拟人化滚动浏览当前页面 | Humanized scroll browsing on current page")]
     public async Task<OperationResult<InteractionStepResult>> ScrollBrowseAsync(
-        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string? browserKey = null,
-        [Description("行为档案键，默认 default | Behavior profile key")] string? behaviorProfile = null,
+        [Description("浏览器键，user 表示用户配置 | Browser key: 'user' for user profile")] string browserKey = "",
+        [Description("行为档案键，默认 default | Behavior profile key")] string behaviorProfile = "",
         [Description("取消执行的令牌 | Cancellation token")] CancellationToken cancellationToken = default)
     {
         var request = new HumanizedActionRequest(

@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using HushOps.Servers.XiaoHongShu.Configuration;
+using HushOps.FingerprintBrowser.Installation;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Playwright;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;

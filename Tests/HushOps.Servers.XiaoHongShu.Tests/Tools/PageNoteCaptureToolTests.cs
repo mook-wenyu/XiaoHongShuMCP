@@ -34,7 +34,7 @@ public sealed class PageNoteCaptureToolTests
         // Arrange
         var service = new FakePageNoteCaptureService(shouldSucceed: true);
         var tool = new PageNoteCaptureTool(service, NullLogger<PageNoteCaptureTool>.Instance);
-        var request = new PageNoteCaptureToolRequest(TargetCount: 0, BrowserKey: null);
+        var request = new PageNoteCaptureToolRequest(TargetCount: 0, BrowserKey: "");
 
         // Act
         var result = await tool.CaptureAsync(request, CancellationToken.None);

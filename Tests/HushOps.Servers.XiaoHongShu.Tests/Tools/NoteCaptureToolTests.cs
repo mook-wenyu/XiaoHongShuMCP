@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using HushOps.Servers.XiaoHongShu.Configuration;
 using HushOps.Servers.XiaoHongShu.Infrastructure.ToolExecution;
 using HushOps.Servers.XiaoHongShu.Services.Browser;
-using HushOps.Servers.XiaoHongShu.Services.Browser.Fingerprint;
+using HushOps.FingerprintBrowser.Core;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Humanization;
 using HushOps.Servers.XiaoHongShu.Services.Humanization.Interactions;
@@ -24,7 +24,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
     private IPlaywright _playwright = null!;
     private IBrowser _browser = null!;
     private IPage _page = null!;
-    private FingerprintContext _fingerprint = null!;
+    private FingerprintProfile _fingerprint = null!;
     private NetworkSessionContext _network = null!;
 
     public async Task InitializeAsync()
@@ -35,19 +35,15 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
         var context = await _browser.NewContextAsync();
         _page = await context.NewPageAsync();
 
-        _fingerprint = new FingerprintContext(
-            Hash: "hash",
+        _fingerprint = new FingerprintProfile(
+            ProfileKey: "user",
+            ProfileType: ProfileType.User,
             UserAgent: await _page.EvaluateAsync<string>("() => navigator.userAgent"),
-            Timezone: "Asia/Shanghai",
-            Language: "zh-CN",
+            Platform: "Win32",
             ViewportWidth: 1280,
             ViewportHeight: 720,
-            DeviceScaleFactor: 1.0,
-            IsMobile: false,
-            HasTouch: false,
-            CanvasNoise: false,
-            WebglMask: false,
-            ExtraHeaders: new Dictionary<string, string>(),
+            Locale: "zh-CN",
+            TimezoneId: "Asia/Shanghai",
             HardwareConcurrency: 8,
             Vendor: "Google Inc.",
             WebglVendor: "Intel Inc.",
@@ -55,7 +51,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
             CanvasSeed: 0.5,
             WebglSeed: 0.5);
 
-        _network = new NetworkSessionContext("proxy", null, 0, 0, false, null, 0, 0, 0, 0, 0);
+        _network = new NetworkSessionContext("proxy", "", 0, 0, false, "", 0, 0, 0, 0, 0);
     }
 
     public async Task DisposeAsync()
@@ -76,7 +72,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
     {
         var tool = CreateTool(out var humanizedService, navigationShouldFail: false);
 
-        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "user", "default");
+        var request = new NoteCaptureToolRequest(new[] { "¶Ӫ" }, "", 5, "user", "default");
 
         var result = await tool.CaptureAsync(request, CancellationToken.None);
 
@@ -93,7 +89,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
     {
         var tool = CreateTool(out var humanizedService, navigationShouldFail: true);
 
-        var request = new NoteCaptureToolRequest(new[] { "露营" }, null, 5, "user", "default");
+        var request = new NoteCaptureToolRequest(new[] { "¶Ӫ" }, "", 5, "user", "default");
 
         var result = await tool.CaptureAsync(request, CancellationToken.None);
 
@@ -132,7 +128,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
                 new NoteRecord("id", "title", "author", "url", new Dictionary<string, string>(), new Dictionary<string, string>(), new Dictionary<string, string>())
             };
 
-            return Task.FromResult(new NoteCaptureResult(notes, "./note.csv", null, TimeSpan.FromMilliseconds(50), new Dictionary<string, string>()));
+            return Task.FromResult(new NoteCaptureResult(notes, "./note.csv", "", TimeSpan.FromMilliseconds(50), new Dictionary<string, string>()));
         }
     }
 
@@ -145,7 +141,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
     private sealed class StubKeywordProvider : IDefaultKeywordProvider
     {
         public Task<string?> GetDefaultAsync(CancellationToken cancellationToken)
-            => Task.FromResult<string?>("露营");
+            => Task.FromResult<string?>("¶Ӫ");
     }
 
     private sealed class StubBrowserAutomationService : IBrowserAutomationService
@@ -153,9 +149,9 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
         private readonly BrowserOpenResult _result;
         private readonly BrowserPageContext _context;
 
-        public StubBrowserAutomationService(IPage page, FingerprintContext fingerprint, NetworkSessionContext network)
+        public StubBrowserAutomationService(IPage page, FingerprintProfile fingerprint, NetworkSessionContext network)
         {
-            _result = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, null, true, true, null);
+            _result = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, "", true, true, null);
             _context = new BrowserPageContext(_result, fingerprint, network, page);
         }
 
@@ -197,7 +193,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
                 metadata[$"plan.actions.{i}"] = actions[i];
                 metadata[$"humanized.plan.actions.{i}"] = actions[i];
             }
-            var profile = new BrowserOpenResult(BrowserProfileKind.User, request.BrowserKey, "/tmp/user", false, false, null, true, true, null);
+            var profile = new BrowserOpenResult(BrowserProfileKind.User, request.BrowserKey, "/tmp/user", false, false, "", true, true, null);
             var resolved = request.Keywords.FirstOrDefault() ?? string.Empty;
             return Task.FromResult(HumanizedActionPlan.Create(kind, request, resolved, profile, new HumanBehaviorProfileOptions(), script, metadata));
         }
@@ -249,6 +245,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
         }
     }
 }
+
 
 
 

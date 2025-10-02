@@ -16,7 +16,7 @@ public sealed class KeywordResolverTests
         var resolver = new KeywordResolver(new NullPortraitStore(), new StubKeywordProvider("默认"), NullLogger<KeywordResolver>.Instance);
         var metadata = new Dictionary<string, string>();
 
-        var result = await resolver.ResolveAsync(new[] { "露营" }, null, metadata, CancellationToken.None);
+        var result = await resolver.ResolveAsync(new[] { "露营" }, "", metadata, CancellationToken.None);
 
         Assert.Equal("露营", result);
         Assert.Equal("露营", metadata["selectedKeyword"]);
@@ -30,7 +30,7 @@ public sealed class KeywordResolverTests
         var resolver = new KeywordResolver(new NullPortraitStore(), new StubKeywordProvider("默认"), NullLogger<KeywordResolver>.Instance);
         var metadata = new Dictionary<string, string>();
 
-        var result = await resolver.ResolveAsync(new List<string>(), null, metadata, CancellationToken.None);
+        var result = await resolver.ResolveAsync(new List<string>(), "", metadata, CancellationToken.None);
 
         Assert.Equal("默认", result);
         Assert.Equal("默认", metadata["selectedKeyword"]);
