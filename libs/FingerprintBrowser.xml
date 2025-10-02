@@ -1,0 +1,408 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>FingerprintBrowser</name>
+    </assembly>
+    <members>
+        <member name="T:HushOps.FingerprintBrowser.AntiDetect.CanvasNoiseScript">
+            <summary>
+            Canvas 指纹噪声脚本（使用固定种子确保一致性）
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.AntiDetect.CanvasNoiseScript.Build(HushOps.FingerprintBrowser.Core.FingerprintProfile)">
+            <summary>
+            构建 Canvas 噪声脚本
+            </summary>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.AntiDetect.WebdriverHideScript">
+            <summary>
+            Webdriver 反检测脚本（13点优化）
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.AntiDetect.WebdriverHideScript.Build(HushOps.FingerprintBrowser.Core.FingerprintProfile)">
+            <summary>
+            构建 Webdriver 隐藏脚本（注入到页面初始化阶段）
+            </summary>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.AntiDetect.WebglMaskScript">
+            <summary>
+            WebGL 指纹伪装脚本（使用固定种子确保一致性）
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.AntiDetect.WebglMaskScript.Build(HushOps.FingerprintBrowser.Core.FingerprintProfile)">
+            <summary>
+            构建 WebGL 伪装脚本
+            </summary>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.Core.BrowserConnectionMode">
+            <summary>
+            用户浏览器连接模式
+            </summary>
+        </member>
+        <member name="F:HushOps.FingerprintBrowser.Core.BrowserConnectionMode.ConnectOverCdp">
+            <summary>
+            CDP 连接模式（连接到已运行的浏览器实例，完全实时同步）
+            </summary>
+        </member>
+        <member name="F:HushOps.FingerprintBrowser.Core.BrowserConnectionMode.Launch">
+            <summary>
+            启动模式（LaunchPersistentContext，使用独立 profile-directory）
+            </summary>
+        </member>
+        <member name="F:HushOps.FingerprintBrowser.Core.BrowserConnectionMode.Copy">
+            <summary>
+            复制模式（复制用户数据到独立目录，最后备用方案）
+            </summary>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.Core.FingerprintProfile">
+            <summary>
+            指纹配置数据
+            </summary>
+            <param name="ProfileKey">配置键（"user" 或自定义名称）</param>
+            <param name="ProfileType">配置类型</param>
+            <param name="UserAgent">User-Agent 字符串</param>
+            <param name="Platform">平台标识（Win32/MacIntel/Linux x86_64）</param>
+            <param name="ViewportWidth">视口宽度</param>
+            <param name="ViewportHeight">视口高度</param>
+            <param name="Locale">语言代码（zh-CN/en-US）</param>
+            <param name="TimezoneId">时区 ID（Asia/Shanghai/America/New_York）</param>
+            <param name="HardwareConcurrency">CPU 核心数（navigator.hardwareConcurrency）</param>
+            <param name="Vendor">浏览器供应商（navigator.vendor）</param>
+            <param name="WebglVendor">WebGL 供应商（Intel Inc./NVIDIA Corporation/AMD）</param>
+            <param name="WebglRenderer">WebGL 渲染器字符串</param>
+            <param name="CanvasSeed">Canvas 噪声种子（用于稳定 Canvas 指纹）</param>
+            <param name="WebglSeed">WebGL 噪声种子（用于稳定 WebGL 指纹）</param>
+            <param name="BrowserPath">浏览器路径（User 模式使用，Synthetic 模式为 null）</param>
+            <param name="UserDataDir">用户数据目录（User 模式使用，Synthetic 模式为 null）</param>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Core.FingerprintProfile.#ctor(System.String,HushOps.FingerprintBrowser.Core.ProfileType,System.String,System.String,System.Int32,System.Int32,System.String,System.String,System.Int32,System.String,System.String,System.String,System.Double,System.Double,System.String,System.String)">
+            <summary>
+            指纹配置数据
+            </summary>
+            <param name="ProfileKey">配置键（"user" 或自定义名称）</param>
+            <param name="ProfileType">配置类型</param>
+            <param name="UserAgent">User-Agent 字符串</param>
+            <param name="Platform">平台标识（Win32/MacIntel/Linux x86_64）</param>
+            <param name="ViewportWidth">视口宽度</param>
+            <param name="ViewportHeight">视口高度</param>
+            <param name="Locale">语言代码（zh-CN/en-US）</param>
+            <param name="TimezoneId">时区 ID（Asia/Shanghai/America/New_York）</param>
+            <param name="HardwareConcurrency">CPU 核心数（navigator.hardwareConcurrency）</param>
+            <param name="Vendor">浏览器供应商（navigator.vendor）</param>
+            <param name="WebglVendor">WebGL 供应商（Intel Inc./NVIDIA Corporation/AMD）</param>
+            <param name="WebglRenderer">WebGL 渲染器字符串</param>
+            <param name="CanvasSeed">Canvas 噪声种子（用于稳定 Canvas 指纹）</param>
+            <param name="WebglSeed">WebGL 噪声种子（用于稳定 WebGL 指纹）</param>
+            <param name="BrowserPath">浏览器路径（User 模式使用，Synthetic 模式为 null）</param>
+            <param name="UserDataDir">用户数据目录（User 模式使用，Synthetic 模式为 null）</param>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.ProfileKey">
+            <summary>配置键（"user" 或自定义名称）</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.ProfileType">
+            <summary>配置类型</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.UserAgent">
+            <summary>User-Agent 字符串</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.Platform">
+            <summary>平台标识（Win32/MacIntel/Linux x86_64）</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.ViewportWidth">
+            <summary>视口宽度</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.ViewportHeight">
+            <summary>视口高度</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.Locale">
+            <summary>语言代码（zh-CN/en-US）</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.TimezoneId">
+            <summary>时区 ID（Asia/Shanghai/America/New_York）</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.HardwareConcurrency">
+            <summary>CPU 核心数（navigator.hardwareConcurrency）</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.Vendor">
+            <summary>浏览器供应商（navigator.vendor）</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.WebglVendor">
+            <summary>WebGL 供应商（Intel Inc./NVIDIA Corporation/AMD）</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.WebglRenderer">
+            <summary>WebGL 渲染器字符串</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.CanvasSeed">
+            <summary>Canvas 噪声种子（用于稳定 Canvas 指纹）</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.WebglSeed">
+            <summary>WebGL 噪声种子（用于稳定 WebGL 指纹）</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.BrowserPath">
+            <summary>浏览器路径（User 模式使用，Synthetic 模式为 null）</summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Core.FingerprintProfile.UserDataDir">
+            <summary>用户数据目录（User 模式使用，Synthetic 模式为 null）</summary>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.Core.IFingerprintBrowser">
+            <summary>
+            指纹浏览器核心接口
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Core.IFingerprintBrowser.CreateContextAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            创建浏览器上下文
+            </summary>
+            <param name="profileKey">配置键（"user" 表示用户真实浏览器，其他值表示合成指纹）</param>
+            <param name="cancellationToken">取消令牌</param>
+            <returns>浏览器上下文和连接模式</returns>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Core.IFingerprintBrowser.GetProfileAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            获取指纹配置
+            </summary>
+            <param name="profileKey">配置键</param>
+            <param name="cancellationToken">取消令牌</param>
+            <returns>指纹配置数据</returns>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Core.IFingerprintBrowser.DisposeAsync">
+            <summary>
+            释放资源（关闭所有浏览器上下文）
+            </summary>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.Core.ProfileType">
+            <summary>
+            浏览器配置类型
+            </summary>
+        </member>
+        <member name="F:HushOps.FingerprintBrowser.Core.ProfileType.User">
+            <summary>
+            用户真实浏览器（复用系统 Chrome/Edge 配置，实时同步）
+            </summary>
+        </member>
+        <member name="F:HushOps.FingerprintBrowser.Core.ProfileType.Synthetic">
+            <summary>
+            合成指纹配置（基于 profileKey 哈希生成固定指纹，用于反检测）
+            </summary>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationException">
+            <summary>
+            中文：Playwright 浏览器安装相关的异常类型，用于附加指引信息。
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationException.#ctor(System.String)">
+            <summary>
+            中文：使用错误消息初始化异常实例。
+            </summary>
+            <param name="message">描述错误的消息</param>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationException.#ctor(System.String,System.Exception)">
+            <summary>
+            中文：使用错误消息和内部异常初始化异常实例。
+            </summary>
+            <param name="message">描述错误的消息</param>
+            <param name="innerException">导致当前异常的内部异常</param>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationOptions">
+            <summary>
+            中文：Playwright 浏览器安装配置，允许指定缓存目录与附加参数。
+            </summary>
+        </member>
+        <member name="F:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationOptions.SectionName">
+            <summary>
+            中文：配置节名称，用于从配置文件加载此配置。
+            </summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationOptions.BrowsersPath">
+            <summary>
+            中文：Playwright 浏览器缓存目录，若为空则使用默认路径。
+            </summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationOptions.Browsers">
+            <summary>
+            中文：需要安装的浏览器列表（如 chromium、firefox、webkit 等），空集合表示使用 Playwright 默认集合。
+            </summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationOptions.Arguments">
+            <summary>
+            中文：附加的安装参数，例如 --with-deps。
+            </summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationOptions.IgnoreFailures">
+            <summary>
+            中文：是否在安装失败时继续尝试（默认 false，遇到错误直接抛出）。
+            </summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationOptions.DownloadHost">
+            <summary>
+            中文：自定义浏览器下载镜像地址（对应 PLAYWRIGHT_DOWNLOAD_HOST），用于受限网络环境。
+            </summary>
+        </member>
+        <member name="P:HushOps.FingerprintBrowser.Installation.PlaywrightInstallationOptions.SkipIfBrowsersPresent">
+            <summary>
+            中文：若目标浏览器已存在则跳过安装（默认 true）。
+            </summary>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.Installation.PlaywrightInstaller">
+            <summary>
+            中文：负责检测并在必要时自动安装 Playwright 浏览器依赖。
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Installation.PlaywrightInstaller.EnsureInstalledAsync(HushOps.FingerprintBrowser.Installation.PlaywrightInstallationOptions,Microsoft.Extensions.Logging.ILogger,System.Threading.CancellationToken)">
+            <summary>
+            中文：确保 Playwright 浏览器已安装，若未安装则自动执行安装流程。
+            </summary>
+            <param name="options">安装配置选项</param>
+            <param name="logger">日志记录器</param>
+            <param name="cancellationToken">取消令牌</param>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.Playwright.PlaywrightFingerprintBrowser">
+            <summary>
+            Playwright 指纹浏览器实现
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Playwright.PlaywrightFingerprintBrowser.#ctor(Microsoft.Playwright.IPlaywright,Microsoft.Extensions.Logging.ILoggerFactory,System.String)">
+            <summary>
+            构造函数
+            </summary>
+            <param name="playwright">Playwright 实例</param>
+            <param name="loggerFactory">日志工厂</param>
+            <param name="storageBasePath">存储基础路径（可选，默认为 AppData/HushOps/FingerprintBrowser/Profiles）</param>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Playwright.PlaywrightFingerprintBrowser.CreateContextAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            创建浏览器上下文
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Playwright.PlaywrightFingerprintBrowser.GetProfileAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            获取指纹配置
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Playwright.PlaywrightFingerprintBrowser.InjectAntiDetectScriptsAsync(Microsoft.Playwright.IBrowserContext,HushOps.FingerprintBrowser.Core.FingerprintProfile)">
+            <summary>
+            注入反检测脚本
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Playwright.PlaywrightFingerprintBrowser.CreateUserProfile">
+            <summary>
+            创建用户浏览器配置（真实配置）
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Playwright.PlaywrightFingerprintBrowser.DisposeAsync">
+            <summary>
+            释放资源
+            </summary>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.Providers.SyntheticProfileProvider">
+            <summary>
+            合成指纹提供者（基于 profileKey 哈希生成固定指纹）
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.SyntheticProfileProvider.#ctor(Microsoft.Playwright.IPlaywright,Microsoft.Extensions.Logging.ILogger{HushOps.FingerprintBrowser.Providers.SyntheticProfileProvider},System.String)">
+            <summary>
+            构造函数
+            </summary>
+            <param name="playwright">Playwright 实例</param>
+            <param name="logger">日志记录器</param>
+            <param name="storageBasePath">存储基础路径（可选，默认为 AppData/HushOps/FingerprintBrowser/Profiles）</param>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.SyntheticProfileProvider.CreateSyntheticContextAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            创建合成指纹上下文
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.SyntheticProfileProvider.GetOrCreateProfileAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            获取或创建指纹配置
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.SyntheticProfileProvider.GenerateProfile(System.String)">
+            <summary>
+            生成确定性指纹配置（基于 profileKey 哈希）
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.SyntheticProfileProvider.GenerateWebglRenderer(System.String,System.Random)">
+            <summary>
+            生成 WebGL 渲染器字符串
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.SyntheticProfileProvider.SaveProfileAsync(HushOps.FingerprintBrowser.Core.FingerprintProfile,System.Threading.CancellationToken)">
+            <summary>
+            保存指纹配置到 JSON 文件
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.SyntheticProfileProvider.GetProfileDirectory(System.String)">
+            <summary>
+            获取配置目录
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.SyntheticProfileProvider.GetProfileJsonPath(System.String)">
+            <summary>
+            获取配置 JSON 文件路径
+            </summary>
+        </member>
+        <member name="T:HushOps.FingerprintBrowser.Providers.UserBrowserProvider">
+            <summary>
+            用户浏览器提供者（三层回退策略：CDP → Launch → Copy）
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.UserBrowserProvider.#ctor(Microsoft.Playwright.IPlaywright,Microsoft.Extensions.Logging.ILogger{HushOps.FingerprintBrowser.Providers.UserBrowserProvider})">
+            <summary>
+            构造函数
+            </summary>
+            <param name="playwright">Playwright 实例</param>
+            <param name="logger">日志记录器</param>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.UserBrowserProvider.CreateUserContextAsync(System.Threading.CancellationToken)">
+            <summary>
+            创建用户浏览器上下文（三层回退策略）
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.UserBrowserProvider.TryConnectViaCdpAsync(System.Threading.CancellationToken)">
+            <summary>
+            Tier 1: 尝试通过 CDP 连接到已运行的浏览器
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.UserBrowserProvider.TryLaunchWithProfileDirectoryAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Tier 2: 尝试启动浏览器并使用独立 profile-directory
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.UserBrowserProvider.CreateCopyModeContextAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Tier 3: 复制模式（复制用户数据到独立目录）
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.UserBrowserProvider.DetectSystemBrowserUserDataDir">
+            <summary>
+            检测系统浏览器用户数据目录
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.UserBrowserProvider.DetermineChannel(System.String)">
+            <summary>
+            根据用户数据目录判断 Playwright channel
+            </summary>
+        </member>
+        <member name="M:HushOps.FingerprintBrowser.Providers.UserBrowserProvider.CopyUserDataDirectory(System.String,System.String)">
+            <summary>
+            复制用户数据目录（跳过锁定文件）
+            </summary>
+        </member>
+        <member name="T:Microsoft.Extensions.DependencyInjection.FingerprintBrowserServiceCollectionExtensions">
+            <summary>
+            中文：FingerprintBrowser SDK 的依赖注入扩展方法。
+            English: Dependency injection extension methods for FingerprintBrowser SDK.
+            </summary>
+        </member>
+        <member name="M:Microsoft.Extensions.DependencyInjection.FingerprintBrowserServiceCollectionExtensions.AddPlaywrightInstallation(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.Extensions.Configuration.IConfiguration)">
+            <summary>
+            中文：注册 Playwright 安装配置到服务容器。
+            English: Registers Playwright installation configuration to the service container.
+            </summary>
+            <param name="services">服务集合 / Service collection</param>
+            <param name="configuration">配置对象 / Configuration object</param>
+            <returns>服务集合，支持链式调用 / Service collection for chaining</returns>
+        </member>
+    </members>
+</doc>

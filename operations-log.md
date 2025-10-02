@@ -51,3 +51,5 @@
 | 2025-10-02 03:54 | Implement | ���� ProxyAddress ����Ϊ string.Empty ���������ɽű������������ļ� |
 | 2025-10-02 03:56 | Verify | dotnet test HushOps.Servers.XiaoHongShu.Tests.csproj ȫ��ͨ�� |
 | 2025-10-02 04:10 | Implement | README.md updated: added MCP client configs, parameter tables, scenario examples, FAQ |
+| 2025-10-02 12:08 | Implement | 更新 README：移除 FingerprintBrowser 依赖配置章节并追加 libs 预编译 DLL 说明 |
+| 2025-10-02 12:29 | Implement | README.md 重构章节顺序（项目概述→使用教程→开发者文档），合并工具场景内容并保留 Claude Desktop / Claude Code / Codex 配置示例 |
