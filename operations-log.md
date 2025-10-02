@@ -53,3 +53,7 @@
 | 2025-10-02 04:10 | Implement | README.md updated: added MCP client configs, parameter tables, scenario examples, FAQ |
 | 2025-10-02 12:08 | Implement | 更新 README：移除 FingerprintBrowser 依赖配置章节并追加 libs 预编译 DLL 说明 |
 | 2025-10-02 12:29 | Implement | README.md 重构章节顺序（项目概述→使用教程→开发者文档），合并工具场景内容并保留 Claude Desktop / Claude Code / Codex 配置示例 |
+
+| 2025-10-02 13:05 | Implement | 创建 docs/CONTRIBUTING.md 并整理编码规范与测试策略 |
+| 2025-10-02 13:11 | Implement | 创建 docs/configuration.md，提炼 README 配置说明并补充高级场景与验证步骤 |
+| 2025-10-02 13:18 | Implement | 更新 README：删除开发者章节并精简配置系统，新增开发者文档导航 |

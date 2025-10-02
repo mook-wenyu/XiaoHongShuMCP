@@ -624,227 +624,18 @@ dotnet build
 3. 若工具列表为空，确认命令路径、`dotnet` 是否在环境变量中，以及服务器是否已完成 Playwright 安装。（Validate command path, PATH, and Playwright installation state.)
 4. 完成配置后执行 `dotnet run -- --verification-run` 以验证浏览器、代理和指纹模块是否工作正常。（Verification run validates browser/proxy/fingerprint modules.)
 
-## 核心架构
 
-### 服务层次
+## 开发者文档
 
-```
-MCP 工具层 (Tools/)
-  ├─ BrowserTool              # 浏览器会话管理
-  ├─ BehaviorFlowTool         # 行为流程编排（浏览/点赞/收藏/评论/发现页全链路）
-  ├─ InteractionStepTool      # 业务交互步骤执行（8 个高级工具）
-  ├─ LowLevelInteractionTool  # 低级交互动作执行（xhs_ll_execute）
-  └─ NoteCaptureTool          # 笔记批量捕获
+- [贡献指南](./docs/CONTRIBUTING.md)：编码规范、测试策略、贡献流程
+- [配置指南](./docs/configuration.md)：详细配置说明、高级配置场景
+- [架构设计](./CLAUDE.md)：核心架构、服务层次、设计模式
 
-服务层 (Services/)
-  ├─ Browser/
-  │   ├─ BrowserAutomationService          # 页面导航、随机浏览
-  │   ├─ PlaywrightSessionManager          # Playwright 会话管理
-  │   ├─ Fingerprint/ProfileFingerprintManager  # 浏览器指纹管理
-  │   └─ Network/NetworkStrategyManager    # 网络策略（代理、重试、缓解）
-  ├─ Humanization/
-  │   ├─ HumanizedActionService            # 人性化动作编排核心
-  │   ├─ KeywordResolver                   # 关键词解析（候选词→画像→默认）
-  │   ├─ HumanDelayProvider                # 延迟时间生成
-  │   ├─ Behavior/DefaultBehaviorController # 行为控制器（根据档案生成动作序列）
-  │   └─ Interactions/
-  │       ├─ DefaultHumanizedActionScriptBuilder  # 动作脚本构建
-  │       ├─ HumanizedInteractionExecutor         # 执行器（点击/输入/滚动/延迟）
-  │       └─ InteractionLocatorBuilder            # 元素定位器构建
-  └─ Notes/
-      ├─ NoteEngagementService             # 笔记互动（点赞/收藏/评论）
-      ├─ NoteCaptureService                # 笔记数据捕获
-      └─ NoteRepository                    # 笔记数据存储
+## 配置系统
 
-配置层 (Configuration/)
-  ├─ XiaoHongShuOptions              # 默认关键词、画像、人性化节奏
-  ├─ HumanBehaviorOptions            # 行为档案配置（default/cautious/aggressive）
-  ├─ FingerprintOptions              # 浏览器指纹配置
-  ├─ NetworkStrategyOptions          # 网络策略配置
-  ├─ PlaywrightInstallationOptions   # Playwright 安装配置
-  └─ VerificationOptions             # 验证运行配置
+配置来源遵循“代码默认值 → appsettings.json → config/xiao-hong-shu.json → 环境变量（前缀 `HUSHOPS_XHS_SERVER_`）”的优先级，后者会覆盖前者；推荐在仓库中维护基础配置，再用环境变量覆盖部署差异。
 
-基础设施 (Infrastructure/)
-  ├─ ToolExecution/                  # 工具执行结果封装
-  └─ FileSystem/                     # 文件系统抽象
-```
-
-### 关键设计模式
-
-- **依赖注入**：所有服务在 `ServiceCollectionExtensions.AddXiaoHongShuServer()` 中注册为单例
-- **工具发现**：MCP 框架通过 `WithToolsFromAssembly()` 自动扫描 `[McpServerToolType]` 和 `[McpServerTool]` 标记
-- **行为档案**：三种内置档案（默认/谨慎/激进），可通过 `behaviorProfile` 参数切换或自定义
-- **会话缓存**：每个 `profileKey` 对应独立的 Playwright 上下文，避免重复初始化
-- **关键词解析**：优先级为 `请求参数 → 画像标签 → 默认配置`
-
-### 工具架构分层
-
-本项目 MCP 工具分为两个抽象层次：
-
-#### 业务工具层 (Business Tools)
-
-面向常见小红书交互场景，封装完整业务流程：
-
-- `xhs_random_browse`: 基于画像的随机浏览流程
-- `xhs_keyword_browse`: 关键词驱动浏览并按策略互动
-- `xhs_note_capture`: 拟人化逐条采集并导出笔记
-- `xhs_publish_note`: 上传素材并暂存草稿
-- `xhs_navigate_explore`: 导航到发现页
-- `xhs_search_keyword`: 搜索关键词
-- `xhs_select_note`: 选择笔记
-- `xhs_like_current`: 点赞当前笔记
-- `xhs_favorite_current`: 收藏当前笔记
-- `xhs_comment_current`: 评论当前笔记
-- `xhs_scroll_browse`: 拟人化滚动浏览
-
-**特点**：
-- ✅ 简单参数（`browserKey`、`behaviorProfile`）
-- ✅ 自动编排动作序列（内置延迟和拟人化行为）
-- ✅ 适合快速实现常见场景
-
-#### 低级工具层 (Low-Level Tools)
-
-直接操作浏览器交互动作，提供最大灵活性：
-
-- `ll_execute`: 执行单个底层动作（支持 11 种 `HumanizedActionType`）
-  - `Hover`: 鼠标悬停
-  - `Click`: 点击元素
-  - `MoveRandom`: 随机移动鼠标
-  - `Wheel`: 滚轮滚动
-  - `ScrollTo`: 滚动到目标位置
-  - `InputText`: 输入文本
-  - `PressKey`: 按键
-  - `Hotkey`: 组合键
-  - `WaitFor`: 等待元素出现
-  - `Delay`: 延迟等待
-  - `MoveToElement`: 移动到元素
-
-**特点**：
-- 🔧 细粒度控制（手动指定 `ActionLocator`、`HumanizedActionParameters`、`HumanizedActionTiming`）
-- 🎯 适合高级用户和特殊场景
-- ⚠️ 需要更多参数和配置
-
-**推荐实践**：
-- ✅ **优先使用业务工具层**：大多数场景可通过业务工具完成
-- 🔧 **特殊场景使用低级工具**：需要精确控制交互细节时使用 `ll_execute`
-
-## 编码规范
-
-### 开发约定
-
-- **代码风格**：遵循 .NET 默认规则（四空格缩进、PascalCase 公共成员、`_camelCase` 私有字段）
-- **提交信息**：推荐使用 Conventional Commits（如 `refactor(config): ...`）或简洁中文摘要
-- **文档同步**：代码变更必须同步更新文档，参考 [`CLAUDE.md`](./CLAUDE.md) 中的规范
-- **测试先行**：提交前必须通过所有测试，推荐编写单元测试覆盖新功能
-
-### 贡献流程
-
-1. **Fork 并创建分支**
-   ```bash
-   git checkout -b feature/update-docs
-   ```
-
-2. **编写代码和测试**
-   - 按照代码风格规范编写
-   - 补充单元测试（目标覆盖率 70%）
-   - 更新相关文档
-
-3. **本地验证**
-   ```bash
-   # 构建项目
-   dotnet build
-
-   # 运行测试
-   dotnet test
-
-   # 验证运行（可选）
-   dotnet run -- --verification-run
-   ```
-
-4. **提交 Pull Request**
-   - 附上变更摘要
-   - 提供测试结果截图
-   - 关联相关 Issue
-   - 请求熟悉模块的审阅者
-
-### 项目结构说明
-
-```
-HushOps.Servers.XiaoHongShu/
-├── Configuration/           # 配置选项类
-├── Infrastructure/          # 基础设施（文件系统、工具执行封装）
-├── Services/
-│   ├── Browser/            # 浏览器自动化、指纹管理、网络策略
-│   ├── Humanization/       # 人性化动作编排、行为控制、关键词解析
-│   ├── Notes/              # 笔记互动、数据捕获、仓储
-│   └── Logging/            # MCP 日志桥接
-├── Tools/                  # MCP 工具暴露层
-├── storage/                # 本地存储（浏览器配置、笔记数据、导出文件）
-├── Tests/                  # 单元测试和集成测试
-└── docs/                   # 项目文档（架构、设计决策、实现日志）
-```
-
-## 测试策略
-
-### 运行测试
-
-```bash
-# 运行所有测试
-dotnet test Tests/HushOps.Servers.XiaoHongShu.Tests/HushOps.Servers.XiaoHongShu.Tests.csproj
-
-# 运行 Release 模式测试
-dotnet test -c Release
-
-# 运行特定测试
-dotnet test --filter "FullyQualifiedName~HumanizedActionServiceTests"
-```
-
-### 验证运行
-
-验证运行会执行示例浏览器流程并访问状态码端点，用于 CI/CD 或首次部署后的快速验证：
-
-```bash
-dotnet run -- --verification-run
-```
-
-**配置选项**：
-- `verification.statusUrl`：状态码端点 URL（默认 `https://httpbin.org/status/429`）
-- `verification.mockStatusCode`：本地拦截并返回的状态码（可选）
-- 端点不可达时会记录警告，但不会导致程序退出失败
-
-### 质量标准
-
-- **测试覆盖率**：目标 70%
-- **代码风格**：遵循 .NET 默认规则（四空格缩进、PascalCase 公共成员、`_camelCase` 私有字段）
-- **编译警告**：`TreatWarningsAsErrors` 为 true，禁止提交时存在编译警告
-- **可空引用**：启用 `Nullable` 引用类型，所有可空类型必须显式标注
-
-## 其他开发者文档
-
-### 配置系统
-
-### 配置加载优先级
-
-配置按以下优先级加载（后者覆盖前者）：
-1. 代码默认值
-2. `appsettings.json`（可选）
-3. `config/xiao-hong-shu.json`（可选）
-4. 环境变量（前缀 `HUSHOPS_XHS_SERVER_`）
-
-### 配置节说明
-
-| 配置节 | 环境变量前缀 | 描述 |
-|-------|-------------|------|
-| `xhs` | `HUSHOPS_XHS_SERVER_XHS__` | 默认关键词、画像、人性化节奏 |
-| `humanBehavior` | `HUSHOPS_XHS_SERVER_HumanBehavior__` | 行为档案配置 |
-| `fingerprint` | `HUSHOPS_XHS_SERVER_Fingerprint__` | 浏览器指纹配置 |
-| `networkStrategy` | `HUSHOPS_XHS_SERVER_NetworkStrategy__` | 网络策略配置 |
-| `playwrightInstallation` | `HUSHOPS_XHS_SERVER_PlaywrightInstallation__` | Playwright 安装配置 |
-| `verification` | `HUSHOPS_XHS_SERVER_Verification__` | 验证运行配置 |
-
-### 核心配置示例
-
-#### 1. 基础配置（`xhs` 节）
+以下示例给出 `xhs` 节的最小配置，便于快速验证：
 
 ```json
 {
@@ -854,91 +645,14 @@ dotnet run -- --verification-run
       "minDelayMs": 800,
       "maxDelayMs": 2600,
       "jitter": 0.2
-    },
-    "portraits": [
-      {
-        "id": "travel-lover",
-        "tags": ["旅行", "美食", "摄影"],
-        "metadata": {
-          "category": "lifestyle",
-          "region": "asia"
-        }
-      }
-    ]
-  }
-}
-```
-
-#### 2. 行为档案配置（`humanBehavior` 节）
-
-```json
-{
-  "humanBehavior": {
-    "defaultProfile": "default",
-    "profiles": {
-      "default": {
-        "preActionDelay": { "minMs": 250, "maxMs": 600 },
-        "postActionDelay": { "minMs": 220, "maxMs": 520 },
-        "typingInterval": { "minMs": 80, "maxMs": 200 },
-        "scrollDelay": { "minMs": 260, "maxMs": 720 },
-        "maxScrollSegments": 2,
-        "hesitationProbability": 0.12,
-        "clickJitter": { "minPx": 1, "maxPx": 4 },
-        "mouseMoveSteps": { "min": 12, "max": 28 },
-        "mouseVelocity": { "min": 280, "max": 820 },
-        "randomIdleProbability": 0.1,
-        "randomIdleDuration": { "minMs": 420, "maxMs": 960 },
-        "requireProxy": false,
-        "allowAutomationIndicators": false
-      },
-      "cautious": {
-        "preActionDelay": { "minMs": 420, "maxMs": 820 },
-        "postActionDelay": { "minMs": 360, "maxMs": 780 },
-        "hesitationProbability": 0.22,
-        "randomIdleProbability": 0.2
-      },
-      "aggressive": {
-        "preActionDelay": { "minMs": 120, "maxMs": 280 },
-        "postActionDelay": { "minMs": 140, "maxMs": 320 },
-        "hesitationProbability": 0.05,
-        "randomIdleProbability": 0.05
-      }
     }
   }
 }
 ```
 
-**行为档案参数说明**：
-- `preActionDelay`/`postActionDelay`：动作前后延迟范围（毫秒）
-- `typingInterval`：输入字符间隔（毫秒）
-- `scrollDelay`：滚动延迟（毫秒）
-- `maxScrollSegments`：最大滚动分段数
-- `hesitationProbability`：犹豫概率（0-1）
-- `clickJitter`：点击位置抖动像素范围
-- `mouseMoveSteps`：鼠标移动步数范围
-- `mouseVelocity`：鼠标移动速度（像素/秒）
-- `randomIdleProbability`：随机停顿概率
-- `randomIdleDuration`：随机停顿时长范围（毫秒）
-- `requireProxy`：是否强制要求代理
-- `allowAutomationIndicators`：是否允许自动化检测特征
+更多字段说明、环境变量映射与高级配置案例请查阅 [配置指南](./docs/configuration.md)。
 
-#### 3. 环境变量配置示例
-
-```bash
-# Windows
-set HUSHOPS_XHS_SERVER_XHS__DefaultKeyword=旅行攻略
-set HUSHOPS_XHS_SERVER_XHS__Humanized__MinDelayMs=800
-set HUSHOPS_XHS_SERVER_XHS__Humanized__MaxDelayMs=2600
-set HUSHOPS_XHS_SERVER_HumanBehavior__DefaultProfile=cautious
-
-# Linux/macOS
-export HUSHOPS_XHS_SERVER_XHS__DefaultKeyword="旅行攻略"
-export HUSHOPS_XHS_SERVER_XHS__Humanized__MinDelayMs=800
-export HUSHOPS_XHS_SERVER_XHS__Humanized__MaxDelayMs=2600
-export HUSHOPS_XHS_SERVER_HumanBehavior__DefaultProfile=cautious
-```
-
-### 常见问题（FAQ）
+## 常见问题（FAQ）
 
 #### Q1: 工具列表为空怎么办？（Tools list is empty）
 - 确认服务器正在运行：在项目目录执行 `dotnet run -- --tools-list`，终端应返回 JSON 工具列表。
