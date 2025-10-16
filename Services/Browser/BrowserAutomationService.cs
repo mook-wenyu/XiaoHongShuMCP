@@ -61,7 +61,7 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
             throw new InvalidOperationException($"浏览器键 {normalizedKey} 未打开，请先调用 xhs_browser_open。");
         }
 
-        var request = BrowserOpenRequest.UseUserProfile(profilePath, normalizedKey);
+        var request = BrowserOpenRequest.UseUserProfile(profilePath, normalizedKey, Environment.GetEnvironmentVariable("HUSHOPS_PROFILE_DIRECTORY"));
         var opened = await OpenAsync(request, cancellationToken).ConfigureAwait(false);
         if (opened.AutoOpened)
         {
@@ -256,13 +256,19 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
                 throw new InvalidOperationException($"指定的浏览器配置路径不存在：{fullPath}");
             }
 
+            // 可选增强：检测目录是否可能正被浏览器使用（基于锁文件的启发式）
+            if (IsLikelyInUse(fullPath))
+            {
+                throw new InvalidOperationException($"检测到 userDataDir 可能正在被浏览器使用：{fullPath}。为避免数据损坏，请先关闭使用该目录的浏览器实例，或改用 SDK 自建目录（不传 profilePath）。");
+            }
+
             return new BrowserOpenResult(
                 BrowserProfileKind.User,
                 request.ProfileKey,
                 fullPath,
                 false,
                 false,
-                null,
+                request.ProfileDirectoryName,
                 false,
                 false,
                 null);
@@ -272,13 +278,19 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
         {
             if (_fileSystem.Directory.Exists(candidate))
             {
+                // 可选增强：检测目录是否可能正被浏览器使用
+                if (IsLikelyInUse(candidate))
+                {
+                    throw new InvalidOperationException($"检测到 userDataDir 可能正在被浏览器使用：{candidate}。为避免数据损坏，请先关闭使用该目录的浏览器实例，或显式指定其他目录。");
+                }
+
                 return new BrowserOpenResult(
                     BrowserProfileKind.User,
                     request.ProfileKey,
                     candidate,
                     false,
                     true,
-                    null,
+                    request.ProfileDirectoryName,
                     false,
                     false,
                     null);
@@ -415,5 +427,31 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
         {
             yield return Path.GetFullPath(candidate);
         }
+    }
+
+    // 可选增强：基于锁文件时间戳的启发式判断目录是否正在被浏览器使用
+    private bool IsLikelyInUse(string userDataDir)
+    {
+        try
+        {
+            var candidates = new[] { "SingletonLock", "SingletonCookie", "SingletonSocket", "LOCK" };
+            foreach (var name in candidates)
+            {
+                var path = Path.Combine(userDataDir, name);
+                if (File.Exists(path))
+                {
+                    var info = new FileInfo(path);
+                    if (DateTime.UtcNow - info.LastWriteTimeUtc < TimeSpan.FromMinutes(5))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // 忽略任何 IO 读取失败，将其视为未知状态
+        }
+        return false;
     }
 }

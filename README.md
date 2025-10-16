@@ -94,6 +94,25 @@ $env:HUSHOPS_XHS_SERVER_NetworkStrategy__DefaultTemplate = "default"
 - 在所用 MCP 客户端中选择 `xiao-hong-shu` 服务器，连接成功后应展示工具列表。
 - 任选一个工具（如 `browser_open`）发起一次调用，客户端应返回结构化结果并在日志中可见执行过程。
 - 若工具列表为空或调用失败，请检查客户端配置中的 `command` 路径与权限，以及环境变量是否生效。
+
+### 5.1 已登录却显示未登录？（方案 C vs 方案 A）
+- 现象：`browserKey: "user"` 打开后页面仍显示“登录/注册”。
+- 原因：默认“用户模式”在无法附着已运行浏览器时会落到 SDK 自建目录，此目录与系统浏览器的默认配置不同，自然没有你的登录态。
+- 方案 C（实验，优先）：复用系统浏览器 `userDataDir + --profile-directory`
+  - 调用 `browser_open`：
+    ```json
+    { "tool": "browser_open", "arguments": {
+      "profileKey": "user",
+      "profilePath": "%LOCALAPPDATA%/Microsoft/Edge/User Data",
+      "profileDirectory": "Default"
+    }}
+    ```
+  - 注意：不要与系统浏览器并发使用同一 `userDataDir`；若报“目录可能被占用”，请先关闭占用该目录的浏览器实例。
+  - 可选：设置 `HUSHOPS_PROFILE_DIRECTORY=Default` 作为默认目录名。
+- 方案 A（稳妥，后备）：不传路径，使用 SDK 自建目录；首次 `xhs_open_login` 在该目录登录一次，之后长期复用。
+
+> 提示：我们不会导出/脚本读取 Cookie；仅通过浏览器自身的持久化目录自然复用登录态。
+
 ## 6. MCP 工具完整说明
 
 ### 6.1 工具分类
@@ -136,18 +155,20 @@ $env:HUSHOPS_XHS_SERVER_NetworkStrategy__DefaultTemplate = "default"
 - **功能**：打开浏览器会话，支持用户配置和独立配置
 - **参数**：
   - `profileKey`（可选）：浏览器键，`"user"` 表示用户配置，其他值作为独立配置目录名
-  - `profilePath`（可选）：用户浏览器配置路径，仅在 `profileKey="user"` 时有效
+  - `profilePath`（可选）：（实验）系统浏览器的 `userDataDir` 根路径，仅在 `profileKey="user"` 时有效，例如：`%LOCALAPPDATA%/Microsoft/Edge/User Data` 或 `%LOCALAPPDATA%/Google/Chrome/User Data`
+  - `profileDirectory`（可选）：（实验）Chromium 的 `--profile-directory` 名称，默认按顺序推断：环境变量 `HUSHOPS_PROFILE_DIRECTORY` → `Default` → 第一个 `Profile *`
 - **示例**：
 ```json
 {
   "tool": "browser_open",
   "arguments": {
     "profileKey": "user",
-    "profilePath": ""
+    "profilePath": "%LOCALAPPDATA%/Microsoft/Edge/User Data",
+    "profileDirectory": "Default"
   }
 }
 ```
-
+> 说明：当不提供 `profilePath/profileDirectory` 时，系统将使用 SDK 自建的持久化目录；这是更稳健的默认行为。上述参数仅在本机受控环境、明确知悉风险时启用。
 **ll_execute** - 低级拟人化动作执行
 - **功能**：执行单个底层拟人化动作（点击、输入、滚动等）
 - **使用场景**：需要精确控制元素定位、时间参数、动作序列时使用
@@ -607,6 +628,9 @@ claude mcp add-from-claude-desktop
 
 ### 10.1 发布方式
 
+> 自 vNEXT 起，Release 配置已默认启用 Windows x64 单文件（自带运行时、压缩开启、禁用裁剪）。如需跨平台或关闭单文件，可在命令行覆盖 RID/属性。
+
+
 - 框架依赖（FDD，跨平台 DLL）
   - 发布：`dotnet publish -c Release`
 
@@ -615,10 +639,15 @@ claude mcp add-from-claude-desktop
 
 - 自包含（SCD，可选单文件）
   - 发布（示例 Windows 单文件）：`dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true`
+  - 本仓 Release 默认已开启（win-x64）：直接 `dotnet publish -c Release` 即生成单文件于 `bin/Release/net8.0/win-x64/publish/`
 
 > 配置文件：将 `appsettings.json` 放在“可执行文件所在目录”或以该目录为工作目录运行，环境变量前缀为 `HUSHOPS_XHS_SERVER_`。
 
-### 10.2 Playwright 依赖
+### 10.2 目录占用提示（可选增强）
+- 当你传入系统 `userDataDir` 时，若发现锁文件近期活跃（例如 `SingletonLock/SingletonCookie/SingletonSocket/LOCK`），系统会友好报错提示“目录可能被占用”。
+- 处理方式：关闭正在使用该目录的浏览器实例，或改用 SDK 自建目录（方案 A）。
+
+### 10.3 Playwright 依赖
 - 首次运行若未安装浏览器，服务器会自动安装（联网环境）。
 - 受限/离线环境：可在有网机器先完成安装后复制浏览器缓存至目标主机，或设置镜像/缓存路径再安装。
 

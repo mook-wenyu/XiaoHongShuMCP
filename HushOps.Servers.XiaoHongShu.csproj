@@ -35,4 +35,14 @@
     <!-- 移除反射适配器，主线走强类型 IBrowserHost -->
     <Compile Remove="Services/Browser/Playwright/BrowserHostAdapter.cs" />
   </ItemGroup>
+
+  <!-- 发布为单文件（Windows x64，自带运行时，压缩启用；仅 Release 生效） -->
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>false</PublishTrimmed>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
 </Project>

@@ -49,8 +49,8 @@ public sealed record BrowserOpenRequest
     public static BrowserOpenRequest ForIsolated(string profileDirectoryName)
         => UseIsolatedProfile(profileDirectoryName, profileDirectoryName);
 
-    public static BrowserOpenRequest UseUserProfile(string? profilePath, string profileKey)
-        => new BrowserOpenRequest(BrowserProfileKind.User, profileKey, profilePath, null).EnsureValid();
+    public static BrowserOpenRequest UseUserProfile(string? profilePath, string profileKey, string? chromiumProfileDirectory = null)
+        => new BrowserOpenRequest(BrowserProfileKind.User, profileKey, profilePath, chromiumProfileDirectory).EnsureValid();
 
     public static BrowserOpenRequest UseIsolatedProfile(string profileDirectoryName, string profileKey)
         => new BrowserOpenRequest(BrowserProfileKind.Isolated, profileKey, null, profileDirectoryName).EnsureValid();
@@ -68,12 +68,8 @@ public sealed record BrowserOpenRequest
 
         if (Kind == BrowserProfileKind.User)
         {
-            if (normalizedDirectory is not null)
-            {
-                throw new InvalidOperationException("用户浏览器配置不需要 folderName。");
-            }
-
-            return new BrowserOpenRequest(BrowserProfileKind.User, normalizedKey, normalizedPath, null);
+            // 允许在用户浏览器配置下提供 profile-directory 名称（Chromium 的 --profile-directory）
+            return new BrowserOpenRequest(BrowserProfileKind.User, normalizedKey, normalizedPath, normalizedDirectory);
         }
 
         if (normalizedDirectory is null)

@@ -134,9 +134,62 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
                 WebRtcPolicy = profile.WebRtc == WebRtcMode.ForceProxy ? "force-proxy" : "default-route-only"
             };
 
-            context = openResult.Kind == BrowserProfileKind.User
-                ? await _browserHost.GetPersistentContextAsync(openResult.ProfileKey, fp, net, cancellationToken).ConfigureAwait(false)
-                : await _browserHost.NewTemporaryContextAsync(fp, net, cancellationToken).ConfigureAwait(false);
+            if (openResult.Kind == BrowserProfileKind.User && !string.IsNullOrWhiteSpace(openResult.ProfilePath))
+            {
+                // 当用户明确指定了系统 userDataDir 时，使用本地持久化上下文创建，避免依赖 SDK 新重载
+                _logger.LogInformation(
+                    "[Playwright] 使用持久化上下文 (LaunchPersistentContext) profile={Profile} path={Path} dir={Dir}",
+                    openResult.ProfileKey,
+                    openResult.ProfilePath,
+                    openResult.ProfileDirectoryName ?? "<auto>");
+
+                var args = new List<string> { webrtcArg };
+                if (!string.IsNullOrWhiteSpace(openResult.ProfileDirectoryName))
+                {
+                    args.Add($"--profile-directory={openResult.ProfileDirectoryName}");
+                }
+
+                var launchOptions = new BrowserTypeLaunchPersistentContextOptions
+                {
+                    Channel = profile.BrowserChannel, // msedge
+                    Args = args.ToArray(),
+                    UserAgent = profile.UserAgent,
+                    Locale = profile.Locale,
+                    TimezoneId = profile.TimezoneId,
+                    AcceptDownloads = true,
+                    IgnoreHTTPSErrors = true,
+                    Headless = false,
+                    ViewportSize = new ViewportSize { Width = profile.ViewportWidth, Height = profile.ViewportHeight },
+                    DeviceScaleFactor = (float)profile.DeviceScaleFactor,
+                    IsMobile = false,
+                    HasTouch = false
+                };
+
+                var persistentProxy = BuildProxy(proxyEndpoint, networkContext.ProxyUsername, networkContext.ProxyPassword);
+                if (persistentProxy != null)
+                {
+                    launchOptions.Proxy = persistentProxy;
+                }
+
+                try
+                {
+                    context = await playwright.Chromium.LaunchPersistentContextAsync(openResult.ProfilePath, launchOptions).ConfigureAwait(false);
+                }
+                catch (PlaywrightException ex)
+                {
+                    _logger.LogWarning(ex, "[Playwright] {Channel} persistent-channel failed, trying ExecutablePath fallback.", profile.BrowserChannel);
+                    var edgePath = ResolveSystemEdgePath();
+                    if (string.IsNullOrWhiteSpace(edgePath)) throw;
+                    launchOptions.Channel = null;
+                    launchOptions.ExecutablePath = edgePath;
+                    context = await playwright.Chromium.LaunchPersistentContextAsync(openResult.ProfilePath, launchOptions).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                // 使用 SDK 旧重载（不显式覆写 userDataDir）
+                context = await _browserHost.GetPersistentContextAsync(openResult.ProfileKey, fp, net, cancellationToken).ConfigureAwait(false);
+            }
         }
         else
         {

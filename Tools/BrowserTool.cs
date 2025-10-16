@@ -56,15 +56,16 @@ public sealed class BrowserTool
     {
         var normalizedKey = NormalizeProfileKey(request.ProfileKey);
         var normalizedPath = NormalizePath(request.ProfilePath);
+        var normalizedDir = NormalizePath(request.ProfileDirectory);
 
         if (IsUserProfile(normalizedKey))
         {
-            return BrowserOpenRequest.UseUserProfile(normalizedPath, normalizedKey);
+            return BrowserOpenRequest.UseUserProfile(normalizedPath, normalizedKey, normalizedDir);
         }
 
-        if (normalizedPath is not null)
+        if (normalizedPath is not null || normalizedDir is not null)
         {
-            throw new ArgumentException("非 user 模式不允许设置 profilePath。", nameof(request.ProfilePath));
+            throw new ArgumentException("非 user 模式不允许设置 profilePath/profileDirectory。", nameof(request.ProfilePath));
         }
 
         return BrowserOpenRequest.UseIsolatedProfile(normalizedKey, normalizedKey);
@@ -106,4 +107,5 @@ public sealed class BrowserTool
 
 public sealed record BrowserOpenToolRequest(
     [property: Description("用户浏览器配置路径，若为空则自动探测 | User profile path; auto-detected when empty")] string ProfilePath = "",
+    [property: Description("（实验）Chromium 的 profile-directory 名称，如 Default 或 Profile 1 | Experimental: Chromium profile directory name, e.g., 'Default' or 'Profile 1'")] string ProfileDirectory = "",
     [property: Description("浏览器键：user 代表用户配置，其他值作为独立配置目录名 | Browser key: 'user' for the user profile, other values act as isolated profile folder names")] string ProfileKey = "");
