@@ -8,21 +8,28 @@
 - 适用对象：希望在 Claude Desktop / Claude Code / Codex CLI / Cherry Studio 等客户端中自动化浏览、采集、互动与草稿发布的用户与团队。
 
 ## 能做什么（能力一览）
-- 会话管理：打开/复用浏览器配置、登录入口、会话检查
-- 交互步骤：发现页导航、关键词搜索、选择笔记、点赞/收藏/评论、拟人化滚动
-- 数据采集：按关键词或当前页采集笔记，导出 CSV/JSON
-- 内容创作：上传图片、填写标题与正文、保存草稿
-- 低级动作：单步拟人化动作（点击/输入/滚动等）
+
+本服务器提供 **16 个 MCP 工具**，涵盖 5 大功能类别：
+
+- **通用工具**（2个）：浏览器会话管理、低级拟人化动作
+- **登录工具**（2个）：登录入口、会话状态检查
+- **交互步骤工具**（7个）：导航、搜索、选择笔记、点赞/收藏/评论、滚动
+- **流程工具**（2个）：随机浏览、关键词浏览（自动化完整流程）
+- **数据采集工具**（2个）：当前页采集、关键词批量采集
+- **内容创作工具**（1个）：发布笔记草稿
+
+详细说明请参见 [第 6 章：MCP 工具完整说明](#6-mcp-工具完整说明)。
 
 ## 快速导航
 - 2. 首次准备（一次性）
 - 3. 快速开始（在 MCP 客户端中启动）
 - 4. 配置速览（appsettings.json + 环境变量）
 - 5. 启动后的验证（在客户端）
-- 6. 常用场景示例
+- 6. MCP 工具完整说明（16 个工具详解）
+- 7. 故障排查
+- 8. 支持
 - 9. 客户端配置速查（JSON / TOML）
 - 10. 发布与二进制运行（MCP）
-- 7. 故障排查
 
 ## 1. 系统要求
 - 操作系统：Windows / macOS / Linux
@@ -87,32 +94,410 @@ $env:HUSHOPS_XHS_SERVER_NetworkStrategy__DefaultTemplate = "default"
 - 在所用 MCP 客户端中选择 `xiao-hong-shu` 服务器，连接成功后应展示工具列表。
 - 任选一个工具（如 `browser_open`）发起一次调用，客户端应返回结构化结果并在日志中可见执行过程。
 - 若工具列表为空或调用失败，请检查客户端配置中的 `command` 路径与权限，以及环境变量是否生效。
-## 6. 常用场景示例
+## 6. MCP 工具完整说明
 
-> 说明：以下示例为在 MCP 客户端中调用对应工具时的请求体示例。
+### 6.1 工具分类
 
-- 打开浏览器并准备会话：
+本服务器提供 16 个 MCP 工具，按功能分为 5 大类：
 
+#### 通用工具（2个）
+- `browser_open` - 打开/复用浏览器配置
+- `ll_execute` - 低级拟人化动作执行
+
+#### 登录工具（2个）
+- `xhs_open_login` - 打开登录入口
+- `xhs_check_session` - 检查会话状态
+
+#### 交互步骤工具（7个）
+- `xhs_navigate_explore` - 导航到发现页
+- `xhs_search_keyword` - 搜索关键词
+- `xhs_select_note` - 根据关键词选择笔记
+- `xhs_like_current` - 点赞当前笔记
+- `xhs_favorite_current` - 收藏当前笔记
+- `xhs_comment_current` - 评论当前笔记
+- `xhs_scroll_browse` - 拟人化滚动
+
+#### 流程工具（2个）
+- `xhs_random_browse` - 随机浏览（选择+概率点赞/收藏）
+- `xhs_keyword_browse` - 关键词浏览（选择+概率点赞/收藏）
+
+#### 数据采集工具（2个）
+- `xhs_capture_page_notes` - 采集当前页面笔记
+- `xhs_note_capture` - 按关键词批量采集笔记
+
+#### 内容创作工具（1个）
+- `xhs_publish_note` - 发布笔记
+
+### 6.2 工具详细说明
+
+#### 6.2.1 通用工具
+
+**browser_open** - 打开或复用浏览器配置
+- **功能**：打开浏览器会话，支持用户配置和独立配置
+- **参数**：
+  - `profileKey`（可选）：浏览器键，`"user"` 表示用户配置，其他值作为独立配置目录名
+  - `profilePath`（可选）：用户浏览器配置路径，仅在 `profileKey="user"` 时有效
+- **示例**：
 ```json
-{ "tool": "browser_open", "arguments": { "profileKey": "user", "profilePath": "" } }
+{
+  "tool": "browser_open",
+  "arguments": {
+    "profileKey": "user",
+    "profilePath": ""
+  }
+}
 ```
 
-- 进行随机浏览（带画像）：
+**ll_execute** - 低级拟人化动作执行
+- **功能**：执行单个底层拟人化动作（点击、输入、滚动等）
+- **使用场景**：需要精确控制元素定位、时间参数、动作序列时使用
+- **支持的动作类型**：
+  - `Hover` - 鼠标悬停
+  - `Click` - 点击元素
+  - `MoveRandom` - 随机移动鼠标
+  - `Wheel` - 滚轮滚动
+  - `ScrollTo` - 滚动到目标位置
+  - `InputText` - 输入文本（支持拟人化输入间隔）
+  - `PressKey` - 按键
+  - `Wait` - 等待
+- **参数**：
+  - `actionType`：动作类型
+  - `locator`：元素定位器
+  - `parameters`：动作参数（JSON 对象）
+  - `timing`：时间参数（延迟、超时等）
+  - `browserKey`：浏览器键
 
+#### 6.2.2 登录工具
+
+**xhs_open_login** - 打开登录入口并等待人工登录
+- **功能**：导航到小红书首页，等待用户手动登录
+- **参数**：
+  - `browserKey`（可选）：浏览器键，默认 `"user"`
+- **说明**：此工具不处理认证细节，仅打开登录入口
+- **示例**：
 ```json
-{ "tool": "xhs_random_browse", "arguments": { "portraitId": "travel-lover", "browserKey": "user", "behaviorProfile": "default" } }
+{
+  "tool": "xhs_open_login",
+  "arguments": {
+    "browserKey": "user"
+  }
+}
 ```
 
-- 按关键词搜索并进入笔记：
-
+**xhs_check_session** - 检查当前会话是否已登录
+- **功能**：启发式检查页面是否已登录（检测登录/注册按钮）
+- **参数**：
+  - `browserKey`（可选）：浏览器键，默认 `"user"`
+- **返回**：`isLoggedIn`（布尔值）、`url`、`heuristic`（启发式结果）
+- **示例**：
 ```json
-{ "tool": "xhs_search_keyword", "arguments": { "keyword": "旅行攻略", "browserKey": "user", "behaviorProfile": "cautious" } }
+{
+  "tool": "xhs_check_session",
+  "arguments": {
+    "browserKey": "user"
+  }
+}
 ```
 
-- 批量采集当前页面的笔记：
+#### 6.2.3 交互步骤工具
+
+**xhs_navigate_explore** - 导航到发现页
+- **功能**：点击导航栏发现按钮，进入发现页
+- **参数**：
+  - `browserKey`（可选）：浏览器键，默认 `"user"`
+  - `behaviorProfile`（可选）：行为档案键，默认 `"default"`
+- **示例**：
+```json
+{
+  "tool": "xhs_navigate_explore",
+  "arguments": {
+    "browserKey": "user",
+    "behaviorProfile": "default"
+  }
+}
+```
+
+**xhs_search_keyword** - 在搜索框输入关键词并搜索
+- **功能**：在搜索框输入关键词并执行搜索
+- **参数**：
+  - `keyword`（必填）：搜索关键词
+  - `browserKey`（可选）：浏览器键
+  - `behaviorProfile`（可选）：行为档案键
+- **示例**：
+```json
+{
+  "tool": "xhs_search_keyword",
+  "arguments": {
+    "keyword": "旅行攻略",
+    "browserKey": "user",
+    "behaviorProfile": "default"
+  }
+}
+```
+
+**xhs_select_note** - 根据关键词选择笔记
+- **功能**：根据关键词数组选择笔记（命中任意关键词即成功）
+- **参数**：
+  - `keywords`（必填）：关键词数组
+  - `browserKey`（可选）：浏览器键
+  - `behaviorProfile`（可选）：行为档案键
+- **示例**：
+```json
+{
+  "tool": "xhs_select_note",
+  "arguments": {
+    "keywords": ["旅行", "攻略", "美食"],
+    "browserKey": "user"
+  }
+}
+```
+
+**xhs_like_current** - 点赞当前打开的笔记
+- **功能**：点赞当前打开的笔记
+- **参数**：
+  - `browserKey`（可选）：浏览器键
+  - `behaviorProfile`（可选）：行为档案键
+- **示例**：
+```json
+{
+  "tool": "xhs_like_current",
+  "arguments": {
+    "browserKey": "user"
+  }
+}
+```
+
+**xhs_favorite_current** - 收藏当前打开的笔记
+- **功能**：收藏当前打开的笔记
+- **参数**：
+  - `browserKey`（可选）：浏览器键
+  - `behaviorProfile`（可选）：行为档案键
+- **示例**：
+```json
+{
+  "tool": "xhs_favorite_current",
+  "arguments": {
+    "browserKey": "user"
+  }
+}
+```
+
+**xhs_comment_current** - 评论当前打开的笔记
+- **功能**：在当前打开的笔记下发表评论
+- **参数**：
+  - `commentText`（必填）：评论内容
+  - `browserKey`（可选）：浏览器键
+  - `behaviorProfile`（可选）：行为档案键
+- **示例**：
+```json
+{
+  "tool": "xhs_comment_current",
+  "arguments": {
+    "commentText": "写得太好了！",
+    "browserKey": "user"
+  }
+}
+```
+
+**xhs_scroll_browse** - 拟人化滚动浏览
+- **功能**：模拟真人滚动行为，随机滚动距离和延迟
+- **参数**：
+  - `browserKey`（可选）：浏览器键
+  - `behaviorProfile`（可选）：行为档案键
+- **示例**：
+```json
+{
+  "tool": "xhs_scroll_browse",
+  "arguments": {
+    "browserKey": "user"
+  }
+}
+```
+
+#### 6.2.4 流程工具
+
+**xhs_random_browse** - 随机浏览
+- **功能**：根据用户画像或随机选择笔记，打开详情，概率性点赞/收藏
+- **参数**：
+  - `portraitId`（可选）：用户画像 ID
+  - `browserKey`（可选）：浏览器键
+  - `behaviorProfile`（可选）：行为档案键
+- **说明**：自动编排"选择笔记 → 概率点赞 → 概率收藏"完整流程
+- **示例**：
+```json
+{
+  "tool": "xhs_random_browse",
+  "arguments": {
+    "portraitId": "travel-lover",
+    "browserKey": "user",
+    "behaviorProfile": "default"
+  }
+}
+```
+
+**xhs_keyword_browse** - 关键词浏览
+- **功能**：根据关键词数组选择笔记，打开详情，概率性点赞/收藏
+- **参数**：
+  - `keywords`（必填）：关键词数组
+  - `portraitId`（可选）：用户画像 ID
+  - `browserKey`（可选）：浏览器键
+  - `behaviorProfile`（可选）：行为档案键
+- **说明**：自动编排"选择笔记 → 概率点赞 → 概率收藏"完整流程
+- **示例**：
+```json
+{
+  "tool": "xhs_keyword_browse",
+  "arguments": {
+    "keywords": ["旅行", "美食"],
+    "browserKey": "user",
+    "behaviorProfile": "default"
+  }
+}
+```
+
+#### 6.2.5 数据采集工具
+
+**xhs_capture_page_notes** - 采集当前页面笔记
+- **功能**：采集当前页面（发现页/搜索页）的笔记数据
+- **参数**：
+  - `targetCount`（必填）：目标采集数量
+  - `browserKey`（可选）：浏览器键
+- **返回**：CSV 文件路径、采集数量
+- **说明**：通过滚动页面监听 API 响应，采集笔记元数据
+- **示例**：
+```json
+{
+  "tool": "xhs_capture_page_notes",
+  "arguments": {
+    "targetCount": 50,
+    "browserKey": "user"
+  }
+}
+```
+
+**xhs_note_capture** - 按关键词批量采集笔记
+- **功能**：按关键词搜索并批量采集笔记数据
+- **参数**：
+  - `keywords`（必填）：关键词数组
+  - `targetCount`（必填）：目标采集数量
+  - `browserKey`（可选）：浏览器键
+- **返回**：CSV 文件路径、采集数量、所用关键词
+- **说明**：自动导航、搜索、滚动采集完整流程
+- **示例**：
+```json
+{
+  "tool": "xhs_note_capture",
+  "arguments": {
+    "keywords": ["旅行攻略", "美食推荐"],
+    "targetCount": 100,
+    "browserKey": "user"
+  }
+}
+```
+
+#### 6.2.6 内容创作工具
+
+**xhs_publish_note** - 发布笔记
+- **功能**：上传图片、填写标题和正文、保存草稿
+- **参数**：
+  - `imagePaths`（必填）：图片文件路径数组
+  - `title`（必填）：笔记标题
+  - `content`（必填）：笔记正文
+  - `saveAsDraft`（可选）：是否保存为草稿，默认 `true`
+  - `browserKey`（可选）：浏览器键
+- **说明**：自动上传图片、填写表单、保存草稿，不自动发布
+- **示例**：
+```json
+{
+  "tool": "xhs_publish_note",
+  "arguments": {
+    "imagePaths": ["D:/images/photo1.jpg", "D:/images/photo2.jpg"],
+    "title": "我的旅行日记",
+    "content": "今天去了一个很美的地方...",
+    "saveAsDraft": true,
+    "browserKey": "user"
+  }
+}
+```
+
+### 6.3 常用场景示例
+
+#### 场景 1：登录并检查会话
 
 ```json
-{ "tool": "xhs_capture_page_notes", "arguments": { "targetCount": 20, "browserKey": "user" } }
+// 1. 打开浏览器
+{ "tool": "browser_open", "arguments": { "profileKey": "user" } }
+
+// 2. 打开登录页面（手动登录）
+{ "tool": "xhs_open_login", "arguments": { "browserKey": "user" } }
+
+// 3. 检查会话状态
+{ "tool": "xhs_check_session", "arguments": { "browserKey": "user" } }
+```
+
+#### 场景 2：搜索并点赞笔记
+
+```json
+// 1. 搜索关键词
+{ "tool": "xhs_search_keyword", "arguments": { "keyword": "旅行攻略", "browserKey": "user" } }
+
+// 2. 选择笔记
+{ "tool": "xhs_select_note", "arguments": { "keywords": ["旅行", "攻略"], "browserKey": "user" } }
+
+// 3. 点赞
+{ "tool": "xhs_like_current", "arguments": { "browserKey": "user" } }
+
+// 4. 收藏
+{ "tool": "xhs_favorite_current", "arguments": { "browserKey": "user" } }
+```
+
+#### 场景 3：批量采集笔记数据
+
+```json
+// 方式 A：采集当前页面（需先手动导航或搜索）
+{ "tool": "xhs_capture_page_notes", "arguments": { "targetCount": 50, "browserKey": "user" } }
+
+// 方式 B：按关键词自动采集（自动导航+搜索+采集）
+{ "tool": "xhs_note_capture", "arguments": { "keywords": ["美食"], "targetCount": 100, "browserKey": "user" } }
+```
+
+#### 场景 4：发布笔记草稿
+
+```json
+{
+  "tool": "xhs_publish_note",
+  "arguments": {
+    "imagePaths": ["C:/Users/me/Pictures/photo1.jpg"],
+    "title": "我的旅行分享",
+    "content": "今天去了一个很棒的地方，分享给大家...",
+    "saveAsDraft": true,
+    "browserKey": "user"
+  }
+}
+```
+
+#### 场景 5：使用流程工具自动化浏览
+
+```json
+// 随机浏览（根据画像）
+{
+  "tool": "xhs_random_browse",
+  "arguments": {
+    "portraitId": "travel-lover",
+    "browserKey": "user",
+    "behaviorProfile": "default"
+  }
+}
+
+// 关键词浏览
+{
+  "tool": "xhs_keyword_browse",
+  "arguments": {
+    "keywords": ["旅行", "美食"],
+    "browserKey": "user",
+    "behaviorProfile": "cautious"
+  }
+}
 ```
 ## 7. 故障排查
 
