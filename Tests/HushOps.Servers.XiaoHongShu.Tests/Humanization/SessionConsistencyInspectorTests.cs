@@ -66,6 +66,8 @@ public sealed class SessionConsistencyInspectorTests : IAsyncLifetime
             FailureRate: 0.005,
             BandwidthSimulated: false,
             ProxyAddress: "http://127.0.0.1:8080",
+            ProxyUsername: null,
+            ProxyPassword: null,
             DelayMinMs: 100,
             DelayMaxMs: 200,
             MaxRetryAttempts: 3,

@@ -161,6 +161,8 @@ public sealed class LowLevelInteractionToolTests
                 FailureRate: 0.0,
                 BandwidthSimulated: false,
                 ProxyAddress: "",
+                ProxyUsername: null,
+                ProxyPassword: null,
                 DelayMinMs: 50,
                 DelayMaxMs: 100,
                 MaxRetryAttempts: 3,

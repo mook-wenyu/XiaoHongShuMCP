@@ -6,6 +6,7 @@ using HushOps.Servers.XiaoHongShu.Infrastructure.FileSystem;
 using HushOps.Servers.XiaoHongShu.Services.Browser;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Network;
 using HushOps.Servers.XiaoHongShu.Services.Browser.Playwright;
+using HushOps.Servers.XiaoHongShu.Services.Browser.Profile;
 using HushOps.Servers.XiaoHongShu.Services.Humanization;
 using HushOps.Servers.XiaoHongShu.Services.Humanization.Behavior;
 using HushOps.Servers.XiaoHongShu.Services.Humanization.Interactions;
@@ -60,7 +61,17 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddSingleton<INetworkStrategyManager, NetworkStrategyManager>();
+        services.AddSingleton<IProfileManager, ProfileManager>();
+        // 强类型注册 IBrowserHost，减少反射路径
+        services.AddSingleton<IBrowserHost>(sp =>
+        {
+            var playwright = sp.GetRequiredService<Microsoft.Playwright.IPlaywright>();
+            var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<HushOps.FingerprintBrowser.Playwright.BrowserHost>>();
+            return new HushOps.FingerprintBrowser.Playwright.BrowserHost(playwright, logger);
+        });
+
         services.AddSingleton<IPlaywrightSessionManager, PlaywrightSessionManager>();
+
         services.AddSingleton<Diagnostics.VerificationScenarioRunner>();
 
         services.AddSingleton<INoteRepository, NoteRepository>();

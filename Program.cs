@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using HushOps.Servers.XiaoHongShu.Configuration;
-using HushOps.FingerprintBrowser.Installation;
 using HushOps.Servers.XiaoHongShu.Services;
 using HushOps.Servers.XiaoHongShu.Services.Logging;
 using HushOps.Servers.XiaoHongShu.Diagnostics;
@@ -16,7 +15,11 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using System.Threading.Tasks;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = new HostApplicationBuilder(new HostApplicationBuilderSettings
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory
+});
 
 ConfigureConfiguration(builder.Configuration);
 
@@ -89,7 +92,6 @@ static void ConfigureConfiguration(IConfigurationBuilder configuration)
 {
     configuration
         .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-        .AddJsonFile("config/xiao-hong-shu.json", optional: true, reloadOnChange: true)
         .AddEnvironmentVariables(prefix: "HUSHOPS_XHS_SERVER_");
 }
 

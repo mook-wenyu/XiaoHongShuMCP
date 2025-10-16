@@ -33,6 +33,10 @@ public sealed class NetworkTemplateOptions
     public string ProxyPool { get; set; } = "default";
     public string? ProxyAddress { get; set; }
         = null;
+    public string? ProxyUsername { get; set; }
+        = null;
+    public string? ProxyPassword { get; set; }
+        = null;
     public DelayRangeOptions RequestDelay { get; set; } = new(120, 350);
     public int MaxRetryAttempts { get; set; } = 3;
     public int RetryBaseDelayMs { get; set; } = 200;

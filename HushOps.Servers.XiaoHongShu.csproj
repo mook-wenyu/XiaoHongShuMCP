@@ -32,5 +32,7 @@
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
     <None Remove="Tests/**/*.cs" />
+    <!-- 移除反射适配器，主线走强类型 IBrowserHost -->
+    <Compile Remove="Services/Browser/Playwright/BrowserHostAdapter.cs" />
   </ItemGroup>
 </Project>

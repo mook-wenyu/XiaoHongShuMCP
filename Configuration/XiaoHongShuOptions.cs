@@ -12,6 +12,11 @@ public sealed class XiaoHongShuOptions
     public const string SectionName = "xhs";
 
     /// <summary>
+    /// 中文：是否使用无头模式（主要用于自动化测试）。用户持久化会话仍默认有头。
+    /// </summary>
+    public bool Headless { get; init; } = false;
+
+    /// <summary>
     /// 中文：默认关键词，画像缺失或关键字为空时回退。
     /// </summary>
     public string? DefaultKeyword { get; init; }

@@ -34,7 +34,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
 
         await _page.SetContentAsync("""
         <main>
-            <a href="#" role="link">·¢ÏÖ</a>
+            <a href="#" role="link">å‘ç°</a>
         </main>
         """);
 
@@ -64,6 +64,8 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
             FailureRate: 0.01,
             BandwidthSimulated: false,
             ProxyAddress: "http://127.0.0.1:8080",
+            ProxyUsername: null,
+            ProxyPassword: null,
             DelayMinMs: 100,
             DelayMaxMs: 200,
             MaxRetryAttempts: 3,
@@ -97,7 +99,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
 
         Assert.True(outcome.Success);
         Assert.Equal("ok", outcome.Status);
-        Assert.Equal("", outcome.Metadata["resolvedKeyword"]); // NavigateExplore ²»ĞèÒª¹Ø¼ü´Ê
+        Assert.Equal("", outcome.Metadata["resolvedKeyword"]); // NavigateExplore ï¿½ï¿½ï¿½ï¿½Òªï¿½Ø¼ï¿½ï¿½ï¿½
         Assert.Contains("Click", outcome.Metadata["script.actions"]);
         Assert.Equal("True", outcome.Metadata["consistency.uaMatch"]);
         Assert.Equal("default", outcome.Metadata["behaviorProfile"]);
@@ -115,7 +117,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
             CancellationToken.None);
 
         Assert.Equal("default", plan.BehaviorProfile);
-        Assert.Equal("", plan.ResolvedKeyword); // NavigateExplore ²»ĞèÒª¹Ø¼ü´Ê
+        Assert.Equal("", plan.ResolvedKeyword); // NavigateExplore ï¿½ï¿½ï¿½ï¿½Òªï¿½Ø¼ï¿½ï¿½ï¿½
         Assert.Equal("", plan.SelectedKeyword);
         Assert.NotEmpty(plan.Script.Actions);
         Assert.Contains("script.actionCount", plan.Metadata.Keys);
@@ -151,7 +153,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
     {
         public Task<string> ResolveAsync(IReadOnlyList<string> keywords, string? portraitId, IDictionary<string, string> metadata, CancellationToken cancellationToken)
         {
-            var candidate = keywords.FirstOrDefault(k => !string.IsNullOrWhiteSpace(k)) ?? "Ä¬ÈÏ";
+            var candidate = keywords.FirstOrDefault(k => !string.IsNullOrWhiteSpace(k)) ?? "Ä¬ï¿½ï¿½";
             return Task.FromResult(candidate);
         }
     }

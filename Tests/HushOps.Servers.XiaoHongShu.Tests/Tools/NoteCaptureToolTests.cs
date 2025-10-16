@@ -51,7 +51,20 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
             CanvasSeed: 0.5,
             WebglSeed: 0.5);
 
-        _network = new NetworkSessionContext("proxy", "", 0, 0, false, "", 0, 0, 0, 0, 0);
+        _network = new NetworkSessionContext(
+            ProxyId: "proxy",
+            ExitIp: "",
+            AverageLatencyMs: 0,
+            FailureRate: 0,
+            BandwidthSimulated: false,
+            ProxyAddress: "",
+            ProxyUsername: null,
+            ProxyPassword: null,
+            DelayMinMs: 0,
+            DelayMaxMs: 0,
+            MaxRetryAttempts: 0,
+            RetryBaseDelayMs: 0,
+            MitigationCount: 0);
     }
 
     public async Task DisposeAsync()
