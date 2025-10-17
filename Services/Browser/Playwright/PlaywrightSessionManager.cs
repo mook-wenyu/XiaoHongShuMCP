@@ -100,6 +100,14 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
 
     private async Task<PlaywrightSession> CreateSessionAsync(BrowserOpenResult openResult, NetworkSessionContext networkContext, FingerprintProfile fingerprintProfile, CancellationToken cancellationToken)
     {
+        _logger.LogInformation(
+            "[Playwright] CreateSessionAsync 开始 profile={Profile} kind={Kind} mode={Mode} cdpPort={Port} profilePath={Path}",
+            openResult.ProfileKey,
+            openResult.Kind,
+            openResult.ConnectionMode,
+            openResult.CdpPort,
+            openResult.ProfilePath ?? "<null>");
+
         // 使用系统已安装的 Edge（msedge 通道），跳过 Playwright 浏览器下载/安装。
         var playwright = await _playwright.Value.ConfigureAwait(false);
 
@@ -114,6 +122,42 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
         {
             await _profileManager.AssignProxyIfEmptyAsync(profile, networkContext.ProxyAddress!, cancellationToken).ConfigureAwait(false);
             proxyEndpoint = networkContext.ProxyAddress;
+        }
+
+        // CDP 连接逻辑：Auto 模式或显式 ConnectCdp 模式
+        if (openResult.ConnectionMode == BrowserConnectionMode.ConnectCdp || 
+            (openResult.ConnectionMode == BrowserConnectionMode.Auto && openResult.Kind == BrowserProfileKind.User))
+        {
+            // ConnectCdp 模式：仅连接，不允许自动启动（allowAutoLaunch = false）
+            // Auto 模式：允许自动启动（allowAutoLaunch = true）
+            var allowAutoLaunch = openResult.ConnectionMode == BrowserConnectionMode.Auto;
+            
+            var cdpSession = await TryConnectViaCdpAsync(
+                playwright, 
+                openResult, 
+                profile, 
+                networkContext,
+                allowAutoLaunch,
+                cancellationToken).ConfigureAwait(false);
+            
+            if (cdpSession != null)
+            {
+                return cdpSession;
+            }
+
+            // 显式 ConnectCdp 模式下连接失败则抛出异常
+            if (openResult.ConnectionMode == BrowserConnectionMode.ConnectCdp)
+            {
+                throw new InvalidOperationException(
+                    $"CDP 连接失败。请确保浏览器已启动并带上参数：--remote-debugging-port={openResult.CdpPort}\n" +
+                    $"示例命令：msedge.exe --remote-debugging-port={openResult.CdpPort}");
+            }
+
+            // Auto 模式下 CDP 失败，记录警告并回退到 Launch 模式
+            _logger.LogWarning(
+                "[Playwright] CDP 连接失败，回退到 Launch 模式 profile={Profile}",
+                openResult.ProfileKey);
+            // 继续执行下方的 Launch 逻辑
         }
 
         // 构造 WebRTC 策略参数
@@ -171,18 +215,40 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
                     launchOptions.Proxy = persistentProxy;
                 }
 
+                // 优先使用 ExecutablePath（更可靠），Channel 作为 fallback
+                // 基于研究发现：GitHub issue #34797 显示 Channel="msedge" 在某些环境下不稳定
+                var edgePath = ResolveSystemEdgePath();
+                if (!string.IsNullOrWhiteSpace(edgePath))
+                {
+                    _logger.LogInformation(
+                        "[Playwright] 使用 ExecutablePath 优先策略: {Path}",
+                        edgePath);
+                    launchOptions.ExecutablePath = edgePath;
+                    launchOptions.Channel = null;
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "[Playwright] 未找到 Edge 可执行文件，使用 Channel 回退: {Channel}",
+                        profile.BrowserChannel);
+                    // launchOptions.Channel 保持原值
+                }
+
                 try
                 {
                     context = await playwright.Chromium.LaunchPersistentContextAsync(openResult.ProfilePath, launchOptions).ConfigureAwait(false);
+
+                    _logger.LogInformation(
+                        "[Playwright] 持久化上下文启动成功 method={Method}",
+                        string.IsNullOrWhiteSpace(edgePath) ? "Channel" : "ExecutablePath");
                 }
                 catch (PlaywrightException ex)
                 {
-                    _logger.LogWarning(ex, "[Playwright] {Channel} persistent-channel failed, trying ExecutablePath fallback.", profile.BrowserChannel);
-                    var edgePath = ResolveSystemEdgePath();
-                    if (string.IsNullOrWhiteSpace(edgePath)) throw;
-                    launchOptions.Channel = null;
-                    launchOptions.ExecutablePath = edgePath;
-                    context = await playwright.Chromium.LaunchPersistentContextAsync(openResult.ProfilePath, launchOptions).ConfigureAwait(false);
+                    _logger.LogError(ex,
+                        "[Playwright] 持久化上下文启动失败。异常类型: {ExceptionType}, 消息: {Message}",
+                        ex.GetType().Name,
+                        ex.Message);
+                    throw;
                 }
             }
             else
@@ -227,22 +293,41 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
                     launchOptions.Proxy = persistentProxy;
                 }
 
+                // 优先使用 ExecutablePath（更可靠），Channel 作为 fallback
+                // 基于研究发现：GitHub issue #34797 显示 Channel="msedge" 在某些环境下不稳定
+                var edgePath = ResolveSystemEdgePath();
+                if (!string.IsNullOrWhiteSpace(edgePath))
+                {
+                    _logger.LogInformation(
+                        "[Playwright] (_browserHost 为 null) 使用 ExecutablePath 优先策略: {Path}",
+                        edgePath);
+                    launchOptions.ExecutablePath = edgePath;
+                    launchOptions.Channel = null;
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "[Playwright] (_browserHost 为 null) 未找到 Edge 可执行文件，使用 Channel 回退: msedge");
+                    // launchOptions.Channel 保持原值 "msedge"
+                }
+
                 try
                 {
                     context = await playwright.Chromium.LaunchPersistentContextAsync(
                         openResult.ProfilePath,
                         launchOptions).ConfigureAwait(false);
+
+                    _logger.LogInformation(
+                        "[Playwright] 持久化上下文启动成功 method={Method}",
+                        string.IsNullOrWhiteSpace(edgePath) ? "Channel" : "ExecutablePath");
                 }
                 catch (PlaywrightException ex)
                 {
-                    _logger.LogWarning(ex, "[Playwright] msedge persistent-channel failed, trying ExecutablePath fallback.");
-                    var edgePath = ResolveSystemEdgePath();
-                    if (string.IsNullOrWhiteSpace(edgePath)) throw;
-                    launchOptions.Channel = null;
-                    launchOptions.ExecutablePath = edgePath;
-                    context = await playwright.Chromium.LaunchPersistentContextAsync(
-                        openResult.ProfilePath,
-                        launchOptions).ConfigureAwait(false);
+                    _logger.LogError(ex,
+                        "[Playwright] 持久化上下文启动失败。异常类型: {ExceptionType}, 消息: {Message}",
+                        ex.GetType().Name,
+                        ex.Message);
+                    throw;
                 }
             }
             else
@@ -462,12 +547,14 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
         }
     }
 
-    private static string? ResolveSystemEdgePath()
+    private string? ResolveSystemEdgePath()
     {
         try
         {
             if (OperatingSystem.IsWindows())
             {
+                _logger.LogDebug("[Playwright] 开始搜索 Windows 系统 Edge 路径");
+
                 var candidates = new List<string?>
                 {
                     Environment.GetEnvironmentVariable("ProgramFiles"),
@@ -475,12 +562,31 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
                     Environment.GetEnvironmentVariable("LOCALAPPDATA")
                 };
 
+                _logger.LogDebug(
+                    "[Playwright] 候选环境变量: ProgramFiles={PF}, ProgramFiles(x86)={PFx86}, LOCALAPPDATA={Local}",
+                    candidates[0] ?? "<null>",
+                    candidates[1] ?? "<null>",
+                    candidates[2] ?? "<null>");
+
                 foreach (var root in candidates)
                 {
-                    if (string.IsNullOrWhiteSpace(root)) continue;
+                    if (string.IsNullOrWhiteSpace(root))
+                    {
+                        _logger.LogDebug("[Playwright] 跳过空环境变量");
+                        continue;
+                    }
+
                     var probe = System.IO.Path.Combine(root, "Microsoft", "Edge", "Application", "msedge.exe");
-                    if (System.IO.File.Exists(probe)) return probe;
+                    _logger.LogDebug("[Playwright] 检查路径: {Path}", probe);
+
+                    if (System.IO.File.Exists(probe))
+                    {
+                        _logger.LogInformation("[Playwright] 找到 Edge 可执行文件: {Path}", probe);
+                        return probe;
+                    }
                 }
+
+                _logger.LogWarning("[Playwright] 未在任何候选路径中找到 Edge");
             }
             else if (OperatingSystem.IsMacOS())
             {
@@ -500,11 +606,223 @@ public sealed class PlaywrightSessionManager : IPlaywrightSessionManager, IAsync
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // ignore
+            _logger.LogWarning(ex, "[Playwright] ResolveSystemEdgePath 发生异常");
         }
         return null;
+    }
+
+    /// <summary>
+    /// 中文：尝试通过 CDP 连接浏览器，支持"仅连接"或"连接+自动启动"模式。
+    /// English: Tries to connect via CDP, supports "connect-only" or "connect-with-auto-launch" modes.
+    /// </summary>
+    /// <param name="allowAutoLaunch">
+    /// 中文：是否允许在连接失败时自动启动浏览器。
+    /// true = Auto 模式（连接失败后自动启动新浏览器）
+    /// false = ConnectCdp 模式（仅连接，不启动，失败返回 null）
+    /// English: Whether to allow auto-launching browser on connection failure.
+    /// true = Auto mode (auto-launch new browser on failure)
+    /// false = ConnectCdp mode (connect-only, no launch, return null on failure)
+    /// </param>
+    private async Task<PlaywrightSession?> TryConnectViaCdpAsync(
+        IPlaywright playwright,
+        BrowserOpenResult openResult,
+        ProfileRecord profile,
+        NetworkSessionContext networkContext,
+        bool allowAutoLaunch,
+        CancellationToken cancellationToken)
+    {
+        var cdpEndpoint = $"http://localhost:{openResult.CdpPort}";
+        
+        // 第一次尝试：直接连接现有浏览器
+        var session = await TryConnectToCdpAsync(playwright, openResult, profile, networkContext, cdpEndpoint, cancellationToken).ConfigureAwait(false);
+        if (session != null)
+        {
+            _logger.LogInformation(
+                "[Playwright] CDP 连接成功，已复用现有浏览器 profile={Profile} port={Port}",
+                openResult.ProfileKey,
+                openResult.CdpPort);
+            return session;
+        }
+
+        // ConnectCdp 模式：仅连接，不允许自动启动
+        if (!allowAutoLaunch)
+        {
+            _logger.LogWarning(
+                "[Playwright] CDP 连接失败且不允许自动启动 profile={Profile} port={Port}。" +
+                "请手动启动浏览器并带上参数：--remote-debugging-port={Port}",
+                openResult.ProfileKey,
+                openResult.CdpPort,
+                openResult.CdpPort);
+            return null;
+        }
+
+        // Auto 模式：连接失败，尝试自动启动浏览器
+        _logger.LogInformation(
+            "[Playwright] CDP 连接失败，尝试自动启动浏览器 profile={Profile} port={Port}",
+            openResult.ProfileKey,
+            openResult.CdpPort);
+
+        var launched = await TryLaunchBrowserWithCdpAsync(openResult, profile, cancellationToken).ConfigureAwait(false);
+        if (!launched)
+        {
+            _logger.LogWarning(
+                "[Playwright] 无法自动启动浏览器 profile={Profile}",
+                openResult.ProfileKey);
+            return null;
+        }
+
+        // 等待浏览器启动并稳定
+        await Task.Delay(2000, cancellationToken).ConfigureAwait(false);
+
+        // 第二次尝试：连接到刚启动的浏览器
+        session = await TryConnectToCdpAsync(playwright, openResult, profile, networkContext, cdpEndpoint, cancellationToken).ConfigureAwait(false);
+        if (session != null)
+        {
+            _logger.LogInformation(
+                "[Playwright] 自动启动浏览器成功并建立 CDP 连接 profile={Profile}",
+                openResult.ProfileKey);
+            return session;
+        }
+
+        _logger.LogWarning(
+            "[Playwright] 浏览器已启动但 CDP 连接仍失败 profile={Profile}",
+            openResult.ProfileKey);
+        return null;
+    }
+
+    /// <summary>
+    /// 中文：尝试连接到 CDP 端点。
+    /// English: Attempts to connect to CDP endpoint.
+    /// </summary>
+    private async Task<PlaywrightSession?> TryConnectToCdpAsync(
+        IPlaywright playwright,
+        BrowserOpenResult openResult,
+        ProfileRecord profile,
+        NetworkSessionContext networkContext,
+        string cdpEndpoint,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogDebug(
+                "[Playwright] 尝试 CDP 连接 profile={Profile} endpoint={Endpoint}",
+                openResult.ProfileKey,
+                cdpEndpoint);
+
+            var cdpBrowser = await playwright.Chromium.ConnectOverCDPAsync(cdpEndpoint).ConfigureAwait(false);
+            
+            // 获取第一个可用的浏览器上下文（通常是已经打开的用户配置）
+            var cdpContext = cdpBrowser.Contexts.Count > 0 
+                ? cdpBrowser.Contexts[0] 
+                : throw new InvalidOperationException("CDP 连接成功但未找到可用的浏览器上下文，请确保浏览器已打开且有活动页面。");
+
+            _logger.LogInformation(
+                "[Playwright] CDP 连接成功 profile={Profile} contexts={Count}",
+                openResult.ProfileKey,
+                cdpBrowser.Contexts.Count);
+
+            // 应用网络控制和通用请求头
+            await ApplyCommonHeadersAsync(cdpContext, profile.AcceptLanguage).ConfigureAwait(false);
+            await ApplyNetworkControlsAsync(openResult.ProfileKey, cdpContext, networkContext, cancellationToken).ConfigureAwait(false);
+
+            // 获取或创建页面
+            var cdpPage = cdpContext.Pages.Count > 0 
+                ? cdpContext.Pages[0] 
+                : await cdpContext.NewPageAsync().ConfigureAwait(false);
+
+            _logger.LogInformation(
+                "[Playwright] CDP 会话创建成功 profile={Profile} pages={PageCount}",
+                openResult.ProfileKey,
+                cdpContext.Pages.Count);
+
+            return new PlaywrightSession(cdpContext, cdpPage, openResult.ProfileKey);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex,
+                "[Playwright] CDP 连接失败 profile={Profile} endpoint={Endpoint}",
+                openResult.ProfileKey,
+                cdpEndpoint);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 中文：自动启动带远程调试端口的浏览器实例。
+    /// English: Automatically launches browser instance with remote debugging port.
+    /// </summary>
+    private Task<bool> TryLaunchBrowserWithCdpAsync(
+        BrowserOpenResult openResult,
+        ProfileRecord profile,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var browserPath = ResolveSystemEdgePath();
+            if (string.IsNullOrWhiteSpace(browserPath))
+            {
+                _logger.LogWarning("[Playwright] 未找到系统浏览器可执行文件");
+                return Task.FromResult(false);
+            }
+
+            var args = new List<string>
+            {
+                $"--remote-debugging-port={openResult.CdpPort}",
+                "--no-first-run",
+                "--no-default-browser-check"
+            };
+
+            // 如果有用户数据目录，添加相关参数
+            if (!string.IsNullOrWhiteSpace(openResult.ProfilePath))
+            {
+                args.Add($"--user-data-dir=\"{openResult.ProfilePath}\"");
+                
+                // 如果指定了 profile-directory，添加参数
+                if (!string.IsNullOrWhiteSpace(openResult.ProfileDirectoryName))
+                {
+                    args.Add($"--profile-directory=\"{openResult.ProfileDirectoryName}\"");
+                }
+            }
+
+            // 启动到小红书首页
+            args.Add("https://www.xiaohongshu.com/explore");
+
+            var startInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = browserPath,
+                Arguments = string.Join(" ", args),
+                UseShellExecute = true,
+                CreateNoWindow = false
+            };
+
+            _logger.LogInformation(
+                "[Playwright] 启动浏览器 path={Path} port={Port} profile={Profile}",
+                browserPath,
+                openResult.CdpPort,
+                openResult.ProfilePath ?? "<default>");
+
+            var process = System.Diagnostics.Process.Start(startInfo);
+            if (process == null)
+            {
+                _logger.LogWarning("[Playwright] 浏览器进程启动失败");
+                return Task.FromResult(false);
+            }
+
+            _logger.LogInformation(
+                "[Playwright] 浏览器进程已启动 pid={Pid}",
+                process.Id);
+
+            return Task.FromResult(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[Playwright] 启动浏览器时发生异常 profile={Profile}",
+                openResult.ProfileKey);
+            return Task.FromResult(false);
+        }
     }
 
     public async ValueTask DisposeAsync()

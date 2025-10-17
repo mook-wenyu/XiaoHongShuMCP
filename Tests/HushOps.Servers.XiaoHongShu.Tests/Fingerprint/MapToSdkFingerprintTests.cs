@@ -41,7 +41,9 @@ public class MapToSdkFingerprintTests
             ProfileDirectoryName: null,
             AlreadyOpen: false,
             AutoOpened: false,
-            SessionMetadata: null
+            SessionMetadata: null,
+            ConnectionMode: Services.Browser.BrowserConnectionMode.Auto,
+            CdpPort: 9222
         );
 
         // 反射定位私有静态 MapToSdkFingerprint

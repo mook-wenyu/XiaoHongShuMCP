@@ -164,7 +164,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
 
         public StubBrowserAutomationService(IPage page, FingerprintProfile fingerprint, NetworkSessionContext network)
         {
-            _result = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, "", true, true, null);
+            _result = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, "", true, true, null, Services.Browser.BrowserConnectionMode.Auto, 9222);
             _context = new BrowserPageContext(_result, fingerprint, network, page);
         }
 
@@ -206,7 +206,7 @@ public sealed class NoteCaptureToolTests : IAsyncLifetime
                 metadata[$"plan.actions.{i}"] = actions[i];
                 metadata[$"humanized.plan.actions.{i}"] = actions[i];
             }
-            var profile = new BrowserOpenResult(BrowserProfileKind.User, request.BrowserKey, "/tmp/user", false, false, "", true, true, null);
+            var profile = new BrowserOpenResult(BrowserProfileKind.User, request.BrowserKey, "/tmp/user", false, false, "", true, true, null, Services.Browser.BrowserConnectionMode.Auto, 9222);
             var resolved = request.Keywords.FirstOrDefault() ?? string.Empty;
             return Task.FromResult(HumanizedActionPlan.Create(kind, request, resolved, profile, new HumanBehaviorProfileOptions(), script, metadata));
         }

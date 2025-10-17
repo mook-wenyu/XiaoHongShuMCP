@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using HushOps.Servers.XiaoHongShu.Infrastructure.Telemetry;
 using HushOps.Servers.XiaoHongShu.Infrastructure.ToolExecution;
 using HushOps.Servers.XiaoHongShu.Services.Browser;
 using Microsoft.Extensions.Logging;
@@ -15,11 +17,16 @@ public sealed class BrowserTool
 {
     private readonly IBrowserAutomationService _browserService;
     private readonly ILogger<BrowserTool> _logger;
+    private readonly MetricsRecorder _metricsRecorder;
 
-    public BrowserTool(IBrowserAutomationService browserService, ILogger<BrowserTool> logger)
+    public BrowserTool(
+        IBrowserAutomationService browserService,
+        ILogger<BrowserTool> logger,
+        MetricsRecorder metricsRecorder)
     {
         _browserService = browserService ?? throw new ArgumentNullException(nameof(browserService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _metricsRecorder = metricsRecorder ?? throw new ArgumentNullException(nameof(metricsRecorder));
     }
 
     [McpServerTool(Name = "browser_open"), Description("打开或复用浏览器配置 | Open or reuse a browser profile")]
@@ -48,31 +55,24 @@ public sealed class BrowserTool
             },
             (ex, rid) => OperationResult<BrowserOpenResult>.Fail(
                 ServerToolExecutor.MapExceptionCode(ex),
-                ex.Message,
-                BuildErrorMetadata(request, rid, ex)));
+                BuildDetailedErrorMessage(ex),
+                BuildErrorMetadata(request, rid, ex)),
+            _metricsRecorder);
     }
 
     private static BrowserOpenRequest BuildRequest(BrowserOpenToolRequest request)
     {
         var normalizedKey = NormalizeProfileKey(request.ProfileKey);
-        var normalizedPath = NormalizePath(request.ProfilePath);
-        var normalizedDir = NormalizePath(request.ProfileDirectory);
 
         if (IsUserProfile(normalizedKey))
         {
-            return BrowserOpenRequest.UseUserProfile(normalizedPath, normalizedKey, normalizedDir);
+            // user 模式：自动探测系统浏览器，使用 CDP 连接（高性能）
+            return BrowserOpenRequest.UseUserProfile(null, normalizedKey, null);
         }
 
-        if (normalizedPath is not null || normalizedDir is not null)
-        {
-            throw new ArgumentException("非 user 模式不允许设置 profilePath/profileDirectory。", nameof(request.ProfilePath));
-        }
-
-        return BrowserOpenRequest.UseIsolatedProfile(normalizedKey, normalizedKey);
+        // 独立模式：创建隔离配置文件夹
+        return BrowserOpenRequest.ForIsolated(normalizedKey);
     }
-
-    private static string? NormalizePath(string? path)
-        => string.IsNullOrWhiteSpace(path) ? null : path.Trim();
 
     private static string NormalizeProfileKey(string? profileKey)
         => string.IsNullOrWhiteSpace(profileKey) ? BrowserOpenRequest.UserProfileKey : profileKey.Trim();
@@ -103,9 +103,44 @@ public sealed class BrowserTool
             ["requestId"] = requestId ?? string.Empty
         };
     }
+
+    /// <summary>
+    /// 中文：构建详细的错误消息，包含异常类型、消息和内部异常信息。
+    /// English: Builds detailed error message including exception type, message, and inner exception details.
+    /// </summary>
+    private static string BuildDetailedErrorMessage(Exception ex)
+    {
+        var message = $"[{ex.GetType().Name}] {ex.Message}";
+
+        if (ex.InnerException != null)
+        {
+            message += $" | Inner: [{ex.InnerException.GetType().Name}] {ex.InnerException.Message}";
+        }
+
+        // 对于 AggregateException,展示所有内部异常
+        if (ex is AggregateException aggEx)
+        {
+            var innerMessages = string.Join(" | ", aggEx.InnerExceptions.Select(e => $"[{e.GetType().Name}] {e.Message}"));
+            message += $" | Aggregated: {innerMessages}";
+        }
+
+        return message;
+    }
 }
 
+/// <summary>
+/// 中文：浏览器打开工具请求参数。
+/// English: Browser open tool request parameters.
+/// </summary>
+/// <param name="ProfileKey">
+/// 浏览器配置键：
+/// - 留空或 "user"：使用 CDP 连接系统默认浏览器（Chrome/Edge），启动快（~100-200ms），保留登录状态
+/// - 其他值（如 "account1"）：创建独立配置文件夹在 storage/browser-profiles/{ProfileKey}/，完全隔离
+/// 
+/// Browser profile key:
+/// - Empty or "user": Use CDP connection to system default browser (Chrome/Edge), fast startup (~100-200ms), preserves login state
+/// - Other values (e.g., "account1"): Create isolated profile folder at storage/browser-profiles/{ProfileKey}/, complete isolation
+/// </param>
 public sealed record BrowserOpenToolRequest(
-    [property: Description("用户浏览器配置路径，若为空则自动探测 | User profile path; auto-detected when empty")] string ProfilePath = "",
-    [property: Description("（实验）Chromium 的 profile-directory 名称，如 Default 或 Profile 1 | Experimental: Chromium profile directory name, e.g., 'Default' or 'Profile 1'")] string ProfileDirectory = "",
-    [property: Description("浏览器键：user 代表用户配置，其他值作为独立配置目录名 | Browser key: 'user' for the user profile, other values act as isolated profile folder names")] string ProfileKey = "");
+    [property: Description("浏览器配置键：留空或 'user' 使用系统浏览器（CDP 连接），其他值创建独立配置 | Browser profile key: empty or 'user' for system browser (CDP), other values for isolated profiles")] 
+    string ProfileKey = "");

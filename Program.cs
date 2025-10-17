@@ -4,13 +4,19 @@ using System.Linq;
 using System.Reflection;
 using HushOps.Servers.XiaoHongShu.Configuration;
 using HushOps.Servers.XiaoHongShu.Services;
+using HushOps.Servers.XiaoHongShu.Services.Browser;
 using HushOps.Servers.XiaoHongShu.Services.Logging;
+using HushOps.Servers.XiaoHongShu.Services.Resilience;
 using HushOps.Servers.XiaoHongShu.Diagnostics;
+using HushOps.Servers.XiaoHongShu.Infrastructure.Telemetry;
+using HushOps.FingerprintBrowser.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.ObjectPool;
+using Microsoft.Playwright;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using System.Threading.Tasks;
@@ -60,6 +66,36 @@ builder.Services
 builder.Services.AddXiaoHongShuServer(builder.Configuration, builder.Environment);
 builder.Services.AddMcpLoggingBridge();
 
+// 中文：注册弹性管道提供者为单例服务
+// English: Register resilience pipeline provider as singleton service
+builder.Services.AddSingleton<IResiliencePipelineProvider, ResiliencePipelineProvider>();
+
+// 中文：注册浏览器上下文对象池（池大小 10，支持自动扩展和健康检查）
+// English: Register browser context object pool (pool size 10, supports auto-scaling and health checks)
+builder.Services.AddSingleton<ObjectPool<IBrowserContext>>(sp =>
+{
+    var fingerprintBrowser = sp.GetRequiredService<IFingerprintBrowser>();
+    var logger = sp.GetRequiredService<ILogger<BrowserContextPoolPolicy>>();
+    var policy = new BrowserContextPoolPolicy(fingerprintBrowser, logger);
+    var provider = new DefaultObjectPoolProvider
+    {
+        MaximumRetained = 10 // 中文：池中最多保留 10 个上下文 / English: Maximum 10 contexts retained in pool
+    };
+    return provider.Create(policy);
+});
+
+// 中文：注册浏览器上下文连接池服务
+// English: Register browser context connection pool service
+builder.Services.AddSingleton<IBrowserContextPool, BrowserContextPool>();
+
+// 中文：注册 OpenTelemetry 遥测功能（包括跟踪和指标）
+// English: Register OpenTelemetry telemetry capabilities (including tracing and metrics)
+builder.Services.AddTelemetry();
+
+// 中文：注册 MetricsRecorder 单例，用于记录自定义业务指标
+// English: Register MetricsRecorder singleton for recording custom business metrics
+builder.Services.AddSingleton<MetricsRecorder>();
+
 builder.Services
     .AddMcpServer(options =>
     {
@@ -78,6 +114,8 @@ builder.Services
     .WithToolsFromAssembly(typeof(Program).Assembly);
 
 builder.Services.AddHostedService<XiaoHongShuServerHostedService>();
+builder.Services.AddHostedService<PlaywrightBrowserInstallService>();
+builder.Services.AddHostedService<PrometheusMetricsServerHostedService>();
 
 var host = builder.Build();
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using HushOps.FingerprintBrowser.Core;
@@ -61,7 +62,7 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
             throw new InvalidOperationException($"浏览器键 {normalizedKey} 未打开，请先调用 xhs_browser_open。");
         }
 
-        var request = BrowserOpenRequest.UseUserProfile(profilePath, normalizedKey, Environment.GetEnvironmentVariable("HUSHOPS_PROFILE_DIRECTORY"));
+        var request = BrowserOpenRequest.UseUserProfile(profilePath, normalizedKey);
         var opened = await OpenAsync(request, cancellationToken).ConfigureAwait(false);
         if (opened.AutoOpened)
         {
@@ -256,10 +257,12 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
                 throw new InvalidOperationException($"指定的浏览器配置路径不存在：{fullPath}");
             }
 
-            // 可选增强：检测目录是否可能正被浏览器使用（基于锁文件的启发式）
+            // 检测并警告，但不阻止操作（使用 profile-directory 可以共存）
             if (IsLikelyInUse(fullPath))
             {
-                throw new InvalidOperationException($"检测到 userDataDir 可能正在被浏览器使用：{fullPath}。为避免数据损坏，请先关闭使用该目录的浏览器实例，或改用 SDK 自建目录（不传 profilePath）。");
+                _logger.LogWarning(
+                    "[BrowserAutomation] userDataDir 可能正在被浏览器使用：{Path}，请确保使用独立的 profile-directory 以避免冲突",
+                    fullPath);
             }
 
             return new BrowserOpenResult(
@@ -271,18 +274,33 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
                 request.ProfileDirectoryName,
                 false,
                 false,
-                null);
+                null,
+                request.ConnectionMode,
+                request.CdpPort);
         }
 
         foreach (var candidate in EnumerateUserProfileCandidates())
         {
             if (_fileSystem.Directory.Exists(candidate))
             {
-                // 可选增强：检测目录是否可能正被浏览器使用
+                // 检测并警告，但不阻止操作
                 if (IsLikelyInUse(candidate))
                 {
-                    throw new InvalidOperationException($"检测到 userDataDir 可能正在被浏览器使用：{candidate}。为避免数据损坏，请先关闭使用该目录的浏览器实例，或显式指定其他目录。");
+                    _logger.LogWarning(
+                        "[BrowserAutomation] 自动探测的 userDataDir 可能正在被浏览器使用：{Path}，将使用独立的 profile-directory",
+                        candidate);
                 }
+
+                // 使用固定的 profile-directory 实现会话持久化
+                // 避免使用用户日常 profile (Default/Profile 1) 以防止冲突
+                var effectiveDir = string.IsNullOrWhiteSpace(request.ProfileDirectoryName)
+                    ? "HushOpsAutomation"
+                    : request.ProfileDirectoryName.Trim();
+
+                _logger.LogInformation(
+                    "[BrowserAutomation] 自动探测到用户配置：{Path}，使用 profile-directory：{Dir}",
+                    candidate,
+                    effectiveDir);
 
                 return new BrowserOpenResult(
                     BrowserProfileKind.User,
@@ -290,10 +308,12 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
                     candidate,
                     false,
                     true,
-                    request.ProfileDirectoryName,
+                    effectiveDir,
                     false,
                     false,
-                    null);
+                    null,
+                    request.ConnectionMode,
+                    request.CdpPort);
             }
         }
 
@@ -330,7 +350,9 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
             folderName,
             false,
             false,
-            null);
+            null,
+            BrowserConnectionMode.Launch,  // 独立配置强制 Launch 模式
+            request.CdpPort);
     }
 
     private static IEnumerable<string> EnumerateUserProfileCandidates()
@@ -366,8 +388,9 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
 
         var candidates = new[]
         {
-            Path.Combine(localAppData, "Google", "Chrome", "User Data"),
+            // 优先 Edge，与项目“msedge 通道优先”保持一致
             Path.Combine(localAppData, "Microsoft", "Edge", "User Data"),
+            Path.Combine(localAppData, "Google", "Chrome", "User Data"),
             Path.Combine(localAppData, "BraveSoftware", "Brave-Browser", "User Data")
         };
 
@@ -392,8 +415,9 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
 
         var candidates = new[]
         {
-            Path.Combine(home, "Library", "Application Support", "Google", "Chrome"),
+            // 优先 Edge
             Path.Combine(home, "Library", "Application Support", "Microsoft Edge"),
+            Path.Combine(home, "Library", "Application Support", "Google", "Chrome"),
             Path.Combine(home, "Library", "Application Support", "BraveSoftware", "Brave-Browser")
         };
 
@@ -418,9 +442,10 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
 
         var candidates = new[]
         {
+            // 优先 Edge
+            Path.Combine(home, ".config", "microsoft-edge"),
             Path.Combine(home, ".config", "google-chrome"),
-            Path.Combine(home, ".config", "chromium"),
-            Path.Combine(home, ".config", "microsoft-edge")
+            Path.Combine(home, ".config", "chromium")
         };
 
         foreach (var candidate in candidates)
@@ -429,7 +454,7 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
         }
     }
 
-    // 可选增强：基于锁文件时间戳的启发式判断目录是否正在被浏览器使用
+    // 基于锁文件时间戳的启发式判断目录是否正在被浏览器使用
     private bool IsLikelyInUse(string userDataDir)
     {
         try

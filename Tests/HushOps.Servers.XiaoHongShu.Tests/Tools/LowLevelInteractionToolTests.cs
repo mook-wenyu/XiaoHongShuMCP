@@ -136,7 +136,9 @@ public sealed class LowLevelInteractionToolTests
                 ProfileDirectoryName: "stub-dir",
                 AlreadyOpen: false,
                 AutoOpened: false,
-                SessionMetadata: null);
+                SessionMetadata: null,
+                ConnectionMode: Services.Browser.BrowserConnectionMode.Auto,
+                CdpPort: 9222);
 
             var stubFingerprint = new FingerprintProfile(
                 ProfileKey: "stub",

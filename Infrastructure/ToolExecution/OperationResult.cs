@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Threading.Tasks;
+using HushOps.Servers.XiaoHongShu.Infrastructure.Telemetry;
 using Microsoft.Extensions.Logging;
 
 namespace HushOps.Servers.XiaoHongShu.Infrastructure.ToolExecution;
@@ -45,13 +47,14 @@ public static class ServerToolExecutor
         string action,
         string? requestId,
         Func<Task<TResult>> callback,
-        Func<Exception, string?, TResult> onFailure)
+        Func<Exception, string?, TResult> onFailure,
+        MetricsRecorder? metricsRecorder = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(callback);
         ArgumentNullException.ThrowIfNull(onFailure);
 
-        return ExecuteAsync(logger, category, action, requestId, callback, onFailure);
+        return ExecuteAsync(logger, category, action, requestId, callback, onFailure, metricsRecorder);
     }
 
     private static async Task<TResult> ExecuteAsync<TResult>(
@@ -60,24 +63,43 @@ public static class ServerToolExecutor
         string action,
         string? requestId,
         Func<Task<TResult>> callback,
-        Func<Exception, string?, TResult> onFailure)
+        Func<Exception, string?, TResult> onFailure,
+        MetricsRecorder? metricsRecorder)
     {
         var rid = string.IsNullOrWhiteSpace(requestId) ? Guid.NewGuid().ToString("N") : requestId!.Trim();
+        var toolName = $"{category}.{action}";
+        var stopwatch = Stopwatch.StartNew();
+
         try
         {
             logger.LogInformation("[{Category}] {Action} start rid={RequestId}", category, action, rid);
             var result = await callback().ConfigureAwait(false);
-            logger.LogInformation("[{Category}] {Action} success rid={RequestId}", category, action, rid);
+            stopwatch.Stop();
+
+            logger.LogInformation("[{Category}] {Action} success rid={RequestId}, duration={Duration}ms",
+                category, action, rid, stopwatch.Elapsed.TotalMilliseconds);
+
+            // 中文：记录成功执行指标 | English: Record successful execution metrics
+            metricsRecorder?.RecordSuccess(toolName, stopwatch.Elapsed.TotalMilliseconds);
+
             return result;
         }
         catch (OperationCanceledException)
         {
-            logger.LogWarning("[{Category}] {Action} cancelled rid={RequestId}", category, action, rid);
+            stopwatch.Stop();
+            logger.LogWarning("[{Category}] {Action} cancelled rid={RequestId}, duration={Duration}ms",
+                category, action, rid, stopwatch.Elapsed.TotalMilliseconds);
             throw;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "[{Category}] {Action} failed rid={RequestId}", category, action, rid);
+            stopwatch.Stop();
+            logger.LogError(ex, "[{Category}] {Action} failed rid={RequestId}, duration={Duration}ms",
+                category, action, rid, stopwatch.Elapsed.TotalMilliseconds);
+
+            // 中文：记录失败执行指标 | English: Record failed execution metrics
+            metricsRecorder?.RecordFailure(toolName, stopwatch.Elapsed.TotalMilliseconds);
+
             return onFailure(ex, rid);
         }
     }

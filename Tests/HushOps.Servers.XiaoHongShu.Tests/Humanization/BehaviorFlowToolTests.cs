@@ -192,7 +192,9 @@ public sealed class BehaviorFlowToolTests
                 null,
                 true,
                 true,
-                null);
+                null,
+                Services.Browser.BrowserConnectionMode.Auto,
+                9222);
 
             var plan = HumanizedActionPlan.Create(
                 kind,

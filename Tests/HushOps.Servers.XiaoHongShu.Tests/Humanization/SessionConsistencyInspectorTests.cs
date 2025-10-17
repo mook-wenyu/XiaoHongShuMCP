@@ -76,7 +76,7 @@ public sealed class SessionConsistencyInspectorTests : IAsyncLifetime
 
         _fingerprint = fingerprint;
         _network = network;
-        _profile = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, "", true, true, null);
+        _profile = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, "", true, true, null, Services.Browser.BrowserConnectionMode.Auto, 9222);
     }
 
     public async Task DisposeAsync()

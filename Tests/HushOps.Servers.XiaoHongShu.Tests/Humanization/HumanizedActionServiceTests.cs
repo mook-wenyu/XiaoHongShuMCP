@@ -99,7 +99,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
 
         Assert.True(outcome.Success);
         Assert.Equal("ok", outcome.Status);
-        Assert.Equal("", outcome.Metadata["resolvedKeyword"]); // NavigateExplore ����Ҫ�ؼ���
+        Assert.Equal("", outcome.Metadata["resolvedKeyword"]); // NavigateExplore 不需要关键字
         Assert.Contains("Click", outcome.Metadata["script.actions"]);
         Assert.Equal("True", outcome.Metadata["consistency.uaMatch"]);
         Assert.Equal("default", outcome.Metadata["behaviorProfile"]);
@@ -117,7 +117,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
             CancellationToken.None);
 
         Assert.Equal("default", plan.BehaviorProfile);
-        Assert.Equal("", plan.ResolvedKeyword); // NavigateExplore ����Ҫ�ؼ���
+        Assert.Equal("", plan.ResolvedKeyword); // NavigateExplore 不需要关键字
         Assert.Equal("", plan.SelectedKeyword);
         Assert.NotEmpty(plan.Script.Actions);
         Assert.Contains("script.actionCount", plan.Metadata.Keys);
@@ -153,7 +153,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
     {
         public Task<string> ResolveAsync(IReadOnlyList<string> keywords, string? portraitId, IDictionary<string, string> metadata, CancellationToken cancellationToken)
         {
-            var candidate = keywords.FirstOrDefault(k => !string.IsNullOrWhiteSpace(k)) ?? "Ĭ��";
+            var candidate = keywords.FirstOrDefault(k => !string.IsNullOrWhiteSpace(k)) ?? "默认";
             return Task.FromResult(candidate);
         }
     }
@@ -170,7 +170,7 @@ public sealed class HumanizedActionServiceTests : IAsyncLifetime
 
         public StubBrowserAutomationService(IPage page, FingerprintProfile fingerprint, NetworkSessionContext network)
         {
-            _result = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, "", true, true, null);
+            _result = new BrowserOpenResult(BrowserProfileKind.User, "user", "/tmp/user", false, false, "", true, true, null, Services.Browser.BrowserConnectionMode.Auto, 9222);
             _context = new BrowserPageContext(_result, fingerprint, network, page);
         }
 

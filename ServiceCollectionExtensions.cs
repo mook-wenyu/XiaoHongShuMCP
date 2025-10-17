@@ -46,26 +46,27 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISessionConsistencyInspector, SessionConsistencyInspector>();
         services.AddSingleton<IHumanizedActionService, HumanizedActionService>();
 
-        // 注册 FingerprintBrowser SDK
-        services.AddSingleton(sp =>
-        {
-            var playwright = Microsoft.Playwright.Playwright.CreateAsync().GetAwaiter().GetResult();
-            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return playwright;
-        });
+        // 异步初始化 Playwright 引擎（后台预热 + 延迟初始化）
+        services.AddSingleton<PlaywrightInitializationService>();
+        services.AddHostedService(sp => sp.GetRequiredService<PlaywrightInitializationService>());
+
+        // 注册 FingerprintBrowser SDK（使用 PlaywrightInitializationService 实现延迟初始化）
         services.AddSingleton<IFingerprintBrowser>(sp =>
         {
-            var playwright = sp.GetRequiredService<Microsoft.Playwright.IPlaywright>();
+            var initService = sp.GetRequiredService<PlaywrightInitializationService>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return new PlaywrightFingerprintBrowser(playwright, loggerFactory);
+            return new PlaywrightFingerprintBrowser(initService, loggerFactory);
         });
 
         services.AddSingleton<INetworkStrategyManager, NetworkStrategyManager>();
         services.AddSingleton<IProfileManager, ProfileManager>();
-        // 强类型注册 IBrowserHost，减少反射路径
+
+        // 注册 IBrowserHost（需要 PlaywrightInitializationService 提供 IPlaywright）
         services.AddSingleton<IBrowserHost>(sp =>
         {
-            var playwright = sp.GetRequiredService<Microsoft.Playwright.IPlaywright>();
+            var initService = sp.GetRequiredService<PlaywrightInitializationService>();
+            // 同步获取 Playwright 实例（此时应已初始化）
+            var playwright = initService.EnsureInitializedAsync(default).GetAwaiter().GetResult();
             var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<HushOps.FingerprintBrowser.Playwright.BrowserHost>>();
             return new HushOps.FingerprintBrowser.Playwright.BrowserHost(playwright, logger);
         });
