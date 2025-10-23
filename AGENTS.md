@@ -1,38 +1,27 @@
-# Repository Guidelines
+# AGENTS.md（XiaoHongShu 子模块指引）
 
-## 项目结构与模块组织
-- 根目录：`Program.cs`、`ServiceCollectionExtensions.cs`、`HushOps.Servers.XiaoHongShu.csproj`、`HushOps.Servers.XiaoHongShu.sln`。
-- 业务代码：`Services/`、`Tools/`、`Infrastructure/`、`Diagnostics/`、`Configuration/`。
-- 测试：`Tests/`（主测试项目在 `Tests/HushOps.Servers.XiaoHongShu.Tests/`）。
-- 文档与脚本：`docs/`、`Tools/`。依赖 DLL：`libs/`（`FingerprintBrowser.dll`）。
-- 缓存：`storage/playwright-cache/`（不应提交）。
+- 最近更新：2025-10-21
 
-## 构建、测试与本地运行
-- 首次准备（安装浏览器）：Windows 执行 `Tools/install-playwright.ps1`；Linux/macOS 执行 `Tools/install-playwright.sh`。
-- 构建：`dotnet build -c Debug`（或 `Release`）。
-- 运行：`dotnet run --project HushOps.Servers.XiaoHongShu.csproj`。
-- 测试：`dotnet test Tests/HushOps.Servers.XiaoHongShu.Tests/HushOps.Servers.XiaoHongShu.Tests.csproj -l "trx;LogFileName=test-results.trx"`。
-- 发布：`dotnet publish -c Release -o publish`。
+本子模块遵循仓库根目录 `AGENTS.md` 的全部强制指令与流程（§0–§8）。本文件仅用于在本目录范围内做“差异化补充或覆盖”。如无特别声明，以根 `AGENTS.md` 为唯一真源。
 
-## 编码风格与命名规范
-- 语言：C#（.NET 8，开启可空 `nullable`，`TreatWarningsAsErrors=true`）。
-- 缩进与格式：4 空格；提交前运行 `dotnet format`（遵循根目录 `.editorconfig`）。
-- 命名：类型/方法用 PascalCase；局部变量/参数用 camelCase；常量用 UPPER_CASE。
-- 约定：配置类以 `*Options` 结尾（见 `Configuration/`）；工具类以 `*Tool`；服务以 `*Service`。
+## 适用范围与优先级
+- 作用域：`HushOps.Servers.XiaoHongShu/` 及其子目录。
+- 优先级：当本文件条目与根 `AGENTS.md` 冲突时，以本文件中“明确标注覆盖”的条目为准；未覆盖部分全部继承根文档。
 
-## 测试规范
-- 框架：xUnit（`[Fact]` / `[Theory]`）。测试文件以 `*Tests.cs` 结尾，集中于 `Tests/HushOps.Servers.XiaoHongShu.Tests/`。
-- 要求：新增功能需配套单测，覆盖正常路径与至少一个失败分支；与 Playwright 相关的测试需先完成浏览器安装。
-- 产物：TRX 报告默认输出到 `Tests/.../TestResults/`。
+## 当前差异化条目（覆盖/补充）
+- 依赖与运行时：本子模块迁移为 Node.js + TypeScript + Playwright（CDP 连接 RoxyBrowser）。多窗口 = 多上下文（一个账号=一个默认持久化 Context），多页 = 同 Context 多 Page。
+- 环境变量：`ROXY_API_TOKEN`（必填）、`ROXY_API_BASEURL`（可选）或 `ROXY_API_HOST`+`ROXY_API_PORT`（默认 127.0.0.1:50000）、`ROXY_DIR_IDS`（逗号分隔）。
+- MCP 日志规范（覆盖）：MCP stdio 模式下，容器级静默日志（禁止任何 stdout 输出），允许通过 stderr 或文件记录。实现：`new ServiceContainer(config, { loggerSilent: true })`。
+- 最小自检命令：
+  - 安装：`npm install`
+  - 运行示例：`npm run run:example -- --url=https://example.com --limit=2`
+  - 启动 MCP（stdio）：`npm run mcp`
+- 目录说明（摘录）：
+  - 入口（Node）：`src/cli.ts`、`src/mcp/server.ts`
+  - 代码：`src/config/`、`src/clients/`、`src/services/`、`src/runner/`、`src/tasks/`
+- 兼容性：允许不向后兼容重构，原 .NET 代码保留但不作为运行入口。
 
-## 提交与合并请求
-- 提交信息：建议采用 Conventional Commits（示例：`feat: 增加人性化滚动策略`、`fix: 修复登录态丢失`、`test: 增补 NoteCaptureTool 用例`）。
-- PR 要求：
-  - 清晰描述动机、范围与影响，并关联 Issue（如 `#123`）。
-  - 附上关键命令与本地验证结果（构建/测试输出或 TRX 摘要）。
-  - 变更第三方 DLL 请说明来源与版本。
+## 提交/PR 补充要求
+- 若调整浏览器会话策略（独立上下文相关参数），需更新 `docs/browserhost-design.md` 并在 PR 中附“最小复现实验步骤”。
 
-## 安全与配置提示（重要）
-- 禁止提交账号、Cookie、代理与令牌；机密通过环境变量（前缀 `HUSHOPS_XHS_SERVER_`）或 `appsettings.*.json` 注入。
-- 使用 `DOTNET_ENVIRONMENT` 控制环境；开发默认读取 `appsettings.Development.json`。
-- `libs/` 为预编译依赖目录，更新须在 PR 说明。
+（无其他覆盖项时，本文件将保持精简，以避免与根文档内容重复。）

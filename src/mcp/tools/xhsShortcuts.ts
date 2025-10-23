@@ -13,11 +13,23 @@ import { clickHuman, hoverHuman, typeHuman, scrollHuman } from "../../humanizati
 import { ensureDir } from "../../services/artifacts.js";
 import { join } from "node:path";
 import { getParams } from "../utils/params.js";
+import { ok as okRes, fail as failRes } from "../utils/result.js";
+import { XHS_CONF } from "../../config/xhs.js";
 // 已移除 DSL/任务桥接：发布等流程直接由选择器原子动作驱动
 
 const DirId = z.string().default("user"); // Roxy Browser API 窗口标识符
 const WorkspaceId = z.string().optional();
 const Keywords = z.array(z.string()).nonempty();
+
+async function screenshotOnError(page: any, dirId: string, tag: string) {
+  try {
+    const outRoot = join('artifacts', dirId, 'navigation');
+    await ensureDir(outRoot);
+    const path = join(outRoot, `${tag}-${Date.now()}.png`);
+    await page.screenshot({ path, fullPage: true });
+    return path;
+  } catch { return undefined; }
+}
 
 export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywrightConnector, policy: PolicyEnforcer) {
   const manager = new ConnectionManager(connector);
@@ -89,40 +101,106 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
     }
   );
 
-  // 导航到发现页
-  server.registerTool("xhs_navigate_explore", { description: "导航到发现页", inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() } },
+  // 关闭当前笔记模态（原子操作）
+  server.registerTool("xhs_close_modal", { description: "关闭当前页的笔记详情模态窗口（Esc→关闭按钮→遮罩）", inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() } },
     async (input: any) => {
       const { dirId, workspaceId } = BK.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
         const { context } = await manager.get(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
-        // 尝试点击“发现”导航；若不存在则直接访问首页作为兜底
-        try {
-          const loc = await resolveLocatorAsync(page, { text: "发现" } as any);
-          await loc.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-          await clickHuman(page, loc);
-        } catch {
-          await page.goto("https://www.xiaohongshu.com/", { waitUntil: "domcontentloaded" });
-        }
-        return { ok: true, url: page.url() };
+        const { closeModalIfOpen } = await import("../../domain/xhs/navigation.js");
+        const closed = await closeModalIfOpen(page);
+        return { ok: true, closed };
       });
       return { content: [{ type: "text", text: JSON.stringify(res) }] };
     }
   );
 
+  // 导航到小红书探索页（主页）
+  const NavigateHome = z.object({ dirId: DirId, workspaceId: WorkspaceId });
+  server.registerTool('xhs.navigate.home', {
+    description: '导航到小红书探索页（主页入口，包含所有频道导航）',
+    inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() }
+  }, async (input: any) => {
+    const { dirId, workspaceId } = NavigateHome.parse(getParams(input));
+    const res = await policy.use(dirId, async () => {
+      try {
+        const { context } = await manager.get(dirId, { workspaceId });
+        const page = await Pages.ensurePage(context, {});
+        await page.goto('https://www.xiaohongshu.com/explore', {
+          waitUntil: 'domcontentloaded'
+        });
+        return okRes({
+          target: 'home',
+          url: page.url(),
+          description: '已导航到探索页主页'
+        });
+      } catch (e: any) {
+        return failRes({
+          code: 'NAVIGATE_HOME_FAILED',
+          message: String(e?.message || e)
+        });
+      }
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(res) }] };
+  });
+
+  // 导航到小红书发现页（个性化推荐流）
+  const NavigateDiscover = z.object({ dirId: DirId, workspaceId: WorkspaceId });
+  server.registerTool('xhs.navigate.discover', {
+    description: '导航到小红书发现页（个性化推荐流），使用拟人化点击行为并监听 homefeed API',
+    inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() }
+  }, async (input: any) => {
+    const { dirId, workspaceId } = NavigateDiscover.parse(getParams(input));
+    const res = await policy.use(dirId, async () => {
+      let page: any;
+      try {
+        const { context } = await manager.get(dirId, { workspaceId });
+        page = await Pages.ensurePage(context, {});
+        await page.goto('https://www.xiaohongshu.com/explore', {
+          waitUntil: 'domcontentloaded'
+        });
+        const loc = await resolveLocatorAsync(page, { text: '发现' } as any);
+        await loc.waitFor({ state: 'visible', timeout: 5000 });
+        await clickHuman(page, loc);
+        await page.waitForLoadState('domcontentloaded');
+        let firstBatchCount: number | undefined;
+        try {
+          const resp = await page.waitForResponse((r:any) => r.url().includes('/api/sns/web/v1/homefeed'), { timeout: XHS_CONF.feed.waitApiMs });
+          const data: any = await resp.json().catch(() => undefined);
+          firstBatchCount = Array.isArray(data?.data?.items) ? data.data.items.length : undefined;
+        } catch {}
+        return okRes({
+          target: 'discover',
+          url: page.url(),
+          verified: typeof firstBatchCount === 'number',
+          firstBatchCount,
+          description: '已通过模拟点击导航到发现页（推荐流）'
+        });
+      } catch (e: any) {
+        const screenshotPath = page ? await screenshotOnError(page, dirId, 'navigate-discover-error') : undefined;
+        return failRes({
+          code: 'NAVIGATE_DISCOVER_FAILED',
+          message: String(e?.message || e),
+          screenshotPath
+        });
+      }
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(res) }] };
+  });
+
+  // （移除）xhs_dump_html / xhs_detect_page：调试型工具不再通过 MCP 暴露。
   // 搜索关键词
   const Search = z.object({ dirId: DirId, keyword: z.string().min(1), workspaceId: WorkspaceId });
-  server.registerTool("xhs_search_keyword", { description: "在搜索框输入关键词并搜索", inputSchema: { dirId: z.string().optional(), keyword: z.string(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs_search_keyword", { description: "关闭模态→点击搜索栏→输入关键词→点击搜索图标", inputSchema: { dirId: z.string().optional(), keyword: z.string(), workspaceId: z.string().optional() } },
     async (input: any) => {
       const { dirId, keyword, workspaceId } = Search.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
         const { context } = await manager.get(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
-        await page.goto("https://www.xiaohongshu.com/", { waitUntil: "domcontentloaded" });
-        const box = await resolveLocatorAsync(page, { placeholder: "搜索" } as any);
-        await clickHuman(page, box); await typeHuman(box, keyword + "\n", { wpm: 200 });
-        await page.waitForLoadState("domcontentloaded");
-        return { ok: true, url: page.url() };
+        const { searchKeyword } = await import("../../domain/xhs/search.js");
+        const r = await searchKeyword(page, keyword);
+        return r.ok ? okRes({ url: r.url, verified: r.verified === true, matchedCount: r.matchedCount ?? 0 }) : failRes({ code: 'SEARCH_FAILED', message: '定位搜索框或提交失败' });
       });
       return { content: [{ type: "text", text: JSON.stringify(res) }] };
     }
@@ -130,22 +208,39 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
 
   // 根据关键词选择一条笔记
   const SelectNote = z.object({ dirId: DirId, keywords: Keywords, workspaceId: WorkspaceId });
-  server.registerTool("xhs_select_note", { description: "根据关键词选择笔记", inputSchema: { dirId: z.string().optional(), keywords: z.array(z.string()), workspaceId: z.string().optional() } },
+  server.registerTool("xhs_select_note", { description: "根据关键词选择笔记（关闭模态→若不在探索/发现/搜索则进发现→可视区域匹配并滚动重试→点击打开详情）", inputSchema: { dirId: z.string().optional(), keywords: z.array(z.string()), workspaceId: z.string().optional() } },
     async (input: any) => {
       const { dirId, keywords, workspaceId } = SelectNote.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
         const { context } = await manager.get(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
-        // 选择第一个包含任意关键词的卡片
-        const ok = await page.evaluate((keys: string[]) => {
-          const items = Array.from(document.querySelectorAll('a, div')) as HTMLElement[];
-          for (const el of items) {
-            const t = (el.innerText || "").trim();
-            if (t && keys.some(k => t.includes(k))) { (el as HTMLElement).click(); return true; }
-          }
-          return false;
-        }, keywords);
-        return { ok };
+        const { ensureDiscoverPage, closeModalIfOpen, findAndOpenNoteByKeywords, detectPageType, PageType } = await import("../../domain/xhs/navigation.js");
+
+        // 1) 关闭模态
+        await closeModalIfOpen(page);
+        // 2) 留在探索/发现/搜索页；否则进入发现页
+        const type = await detectPageType(page);
+        if (![PageType.ExploreHome, PageType.Discover, PageType.Search].includes(type)) {
+          await ensureDiscoverPage(page);
+        }
+        // 3) 匹配可视区域并滚动重试（不与搜索页联动，不用 API 锚点）
+        const r = await findAndOpenNoteByKeywords(page, keywords, { maxScrolls: 18, scrollStep: 1600, settleMs: 250, useApiAfterScroll: false });
+        if (!r.ok) return failRes({ code: 'NOTE_NOT_FOUND', message: '未在可视范围匹配到关键词' });
+
+        // 4) 进入详情后监听 feed（验证详情数据就绪）
+        let feedVerified = false; let feedItems: number | undefined; let feedType: string | undefined;
+        try {
+          const resp = await page.waitForResponse((rr:any) => rr.url().includes('/api/sns/web/v1/feed'), { timeout: XHS_CONF.feed.waitApiMs });
+          const data: any = await resp.json().catch(() => undefined);
+          const items = Array.isArray(data?.data?.items) ? data.data.items : [];
+          feedItems = items.length;
+          // 尝试解析类型（normal/video）
+          const first = items[0];
+          feedType = first?.note_card?.type || first?.type || undefined;
+          feedVerified = true;
+        } catch {}
+
+        return okRes({ opened: true, url: page.url(), matched: r.matched, feedVerified, feedItems, feedType });
       });
       return { content: [{ type: "text", text: JSON.stringify(res) }] };
     }

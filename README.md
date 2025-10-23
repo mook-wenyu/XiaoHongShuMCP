@@ -1,708 +1,616 @@
-# HushOps XiaoHongShu MCP 服务器 · 用户使用教程
+# HushOps.Servers.XiaoHongShu · Node.js + TypeScript
 
-> 本地 stdio 模式的 Model Context Protocol（MCP）服务器，为小红书提供人性化自动化工具集。你只需安装 .NET 8、准备最小配置并启动服务，即可在支持 MCP 的客户端中直接调用工具。
+## 2025-10-21 变更摘要（Breaking）
+- 删除旧日志 shim：`src/logger.ts`（已移至 `src/deprecated/logger.REMOVED.md` 供迁移说明）
+- 迁移方式：
+  ```ts
+  import { createLogger } from "./src/logging/index.js";
+  const logger = createLogger();
+  ```
+- MCP 日志最佳实践：
+  - MCP 服务器（stdio）禁止向 stdout 输出日志（避免污染协议通道）；
+  - 调试：设置 `MCP_LOG_STDERR=true` 且 `LOG_PRETTY=false`，日志仅写入 stderr；
+  - 生产：默认静默（容器 `loggerSilent: true`）。
 
-## 项目简介
-- 定位：面向桌面端的本地 stdio MCP 服务器，在支持 MCP 的客户端内以“工具”的方式操控小红书相关流程。
-- 价值：零端口暴露、本地可控、拟人化动作链路、可复用浏览器会话、按需配置画像与网络策略。
-- 适用对象：希望在 Claude Desktop / Claude Code / Codex CLI / Cherry Studio 等客户端中自动化浏览、采集、互动与草稿发布的用户与团队。
+## MCP 工具参数兼容说明
+- 统一解析入口（getParams）：`arguments` → `params` → handler 入参本体 → `{}`；
+- 影响文件：`src/mcp/server.ts`、`src/mcp/tools/roxyAdmin.ts`、`src/mcp/tools/actions.ts`；
+- 示例（SDK 客户端）：
+  ```ts
+  // 规范形式（arguments）
+  await client.callTool({ name: 'roxy.windows.list', arguments: { workspaceId: 28255 } })
 
-## 能做什么（能力一览）
+  // 兼容形式（params，历史客户端）
+  await client.callTool({ name: 'roxy.windows.list', arguments: {}, params: { workspaceId: 28255 } } as any)
+  ```
 
-本服务器提供 **16 个 MCP 工具**，涵盖 5 大功能类别：
+## Roxy WorkspaceId 说明
+- API 识别数字 id（如 `28255`）；桌面端前缀 `NJJ0******` 仅 UI 展示；
+- 正确做法：对 API 一律传数字或字符串数字；不要传前缀格式。
 
-- **通用工具**（2个）：浏览器会话管理、低级拟人化动作
-- **登录工具**（2个）：登录入口、会话状态检查
-- **交互步骤工具**（7个）：导航、搜索、选择笔记、点赞/收藏/评论、滚动
-- **流程工具**（2个）：随机浏览、关键词浏览（自动化完整流程）
-- **数据采集工具**（2个）：当前页采集、关键词批量采集
-- **内容创作工具**（1个）：发布笔记草稿
 
-详细说明请参见 [第 6 章：MCP 工具完整说明](#6-mcp-工具完整说明)。
+> 多账号自动化：RoxyBrowser（CDP）+ Playwright + MCP TypeScript SDK。
+> 模型：多窗口 = 多上下文（一个账号=一个 Roxy 窗口/Context），多页 = 同 Context 多 Page。
 
-## 快速导航
-- 2. 首次准备（一次性）
-- 3. 快速开始（在 MCP 客户端中启动）
-- 4. 配置速览（appsettings.json + 环境变量）
-- 5. 启动后的验证（在客户端）
-- 6. MCP 工具完整说明（16 个工具详解）
-- 7. 故障排查
-- 8. 支持
-- 9. 客户端配置速查（JSON / TOML）
-- 10. 发布与二进制运行（MCP）
+### 相关文档
+- `docs/browserhost-design.md`（会话/复用/TTL/观测）
+- `docs/WORKSPACE_ID_ANALYSIS.md`（Workspace ID 规范）
+- `docs/mcp-tools.md`（MCP 工具清单与用例，含 `action.*` 与 `profile` 档位）
+- `docs/examples/*.json`（发布示例）
 
-## 1. 系统要求
-- 操作系统：Windows / macOS / Linux
-- 运行时：.NET 8（Desktop 或 Server Runtime 均可）
-- 磁盘空间：≥ 1 GB（首次安装 Playwright 浏览器缓存）
-- 依赖文件：确认项目根目录存在 `libs/FingerprintBrowser.dll`
+## 快速开始
+- Node ≥ 18，已安装 Chromium（`npm postinstall` 会自动安装）。
+- 创建 `.env`：复制 `.env.example` 并填写下列变量：
+  - `ROXY_API_TOKEN`（必填）
+  - `ROXY_API_BASEURL`（可空；默认 `http://127.0.0.1:50000`；也可用 `ROXY_API_HOST/ROXY_API_PORT` 指定）
+- 安装依赖：`npm install`
+- 环境自检：`npm run check:env`（Zod 校验 + 示例文件检查，可选 `CHECK_ROXY_HEALTH=true` 探活）
+- 测试环境：`npm run test:workspace-id`（验证 RoxyBrowser API 连接和 workspace ID 格式）
+- 列出任务：`npm run dev -- --list-tasks`
+- 示例运行：
+  - 指定账号列表：`--dir-ids=dirA,dirB` 或多次 `--dirId=dirA --dirId=dirB`
+  - 截图：`npm run dev -- --dir-ids=dirA --task=openAndScreenshot --payload={"url":"https://example.com"}`
+  - 发布草稿（基于选择器直驱的 xhs.publish）：`npm run dev -- --dir-ids=dirA --task=xhs.publish --payload=@docs/examples/publish-payload.json`
+  - 本地演示（无需 MCP）：`npm run demo:local -- --dir-ids=dirA --url=https://example.com`
+  - 可选工作区：加 `--workspace-id=YOUR_WORKSPACE`
 
-## 2. 首次准备（一次性）
-- 安装 Playwright 浏览器：
-  - Windows：在项目根目录运行 `Tools/install-playwright.ps1`
-  - Linux / macOS：在项目根目录运行 `Tools/install-playwright.sh`
-- 若你处于受限网络环境，可多运行几次安装脚本或配置代理后再执行。
+⚠️ **重要提示：Workspace ID 格式**
+- RoxyBrowser API 返回的 workspace ID 是**数字类型**（例如 `28255`）
+- 桌面应用显示的带前缀格式（例如 `NJJ0028255`）**仅用于前端展示**
+- 调用 API 时应使用数字 ID，详见 [Workspace ID 分析](docs/WORKSPACE_ID_ANALYSIS.md)
 
-## 3. 快速开始
+## 多账号并发与策略
+- 并发单位为 `dirId`（账号上下文=窗口）。
+- 并发/超时在 `.env` 配置：`MAX_CONCURRENCY`、`TIMEOUT_MS`。
+- 限速/熔断：`POLICY_QPS`、`POLICY_FAILURES`、`POLICY_OPEN_SECONDS`（见下文）。
 
-### 方式 A：在 MCP 客户端中启动（推荐）
-将以下片段加入你的 MCP 客户端配置（以“xiao-hong-shu”作为服务器标识）：
+## 环境变量（.env）
+- `ROXY_API_TOKEN`: Roxy 本地 API 鉴权（Header `token`）。
+- `ROXY_API_BASEURL`（可空，默认 `http://127.0.0.1:50000`）或 `ROXY_API_HOST`+`ROXY_API_PORT`：Roxy 本地 API 地址。
+- `ROXY_DIR_IDS`（可选后备）：未通过 CLI/MCP 显式传参时作为后备来源（逗号分隔）。
+- `MAX_CONCURRENCY`：并发任务数（默认 2）。
+- `TIMEOUT_MS`：单任务超时（默认 60000）。
+- `POLICY_QPS`：近似每秒请求上限（默认 5）。
+- `POLICY_FAILURES`：连续失败熔断阈值（默认 5）。
+- `POLICY_OPEN_SECONDS`：熔断打开时长（秒，默认 15）。
+
+策略档位建议：
+- 低风险：`POLICY_QPS=2 POLICY_FAILURES=3 POLICY_OPEN_SECONDS=30`
+- 平衡型：`POLICY_QPS=5 POLICY_FAILURES=5 POLICY_OPEN_SECONDS=15`
+- 激进型（不推荐）：`POLICY_QPS=10 POLICY_FAILURES=8 POLICY_OPEN_SECONDS=8`
+
+## 任务与步骤 DSL
+- 注册中心：`src/tasks/registry.ts`（任务签名 `(ctx, dirId, args)`）。
+- 内置任务：
+  - `openAndScreenshot`：打开 URL 并截图。
+  - `xhs.checkSession`：弱信号会话检查（Cookies）。
+  - `xhs.noteCapture`：保存 HTML + 截图。
+  - `xhs.publish`：按 `selectorMap` 上传/填写/提交草稿。
+  - （已移除）`xhs.interact`：步骤 DSL 已下线；请直接使用 `action.*` 工具或 `xhsShortcuts`。
+  - （已移除）`xhs.randomBrowse`：内部不再提供随机浏览编排，推荐由外部工作流以 `action.*`/`xhsShortcuts` 组合。
+- 步骤 DSL 已移除；请直接使用 `action.*` 工具或 `xhsShortcuts`；选择器写法见 `docs/selectors-map.md` 与迁移指南 `docs/MIGRATION-SELECTOR-ONLY.md`
+
+### 弹性选择器系统（Resilient Selector System）
+
+本项目实现了企业级的弹性选择器系统，提供三层防护机制确保自动化任务的稳定性和可观测性。
+
+#### 核心特性
+
+**三层防护机制：**
+
+1. **自动重试（Retry with Exponential Backoff）**
+   - 选择器失败后自动重试，使用指数退避策略
+   - 可配置重试次数、基础延迟、最大延迟
+   - 每次重试添加随机 jitter 避免雷鸣群效应
+
+2. **断路器保护（Circuit Breaker）**
+   - 防止连续失败导致系统级联故障
+   - QPS 限流、失败阈值、熔断时长可配置
+   - 开路/半开路/闭路状态自动切换
+
+3. **健康度监控（Health Monitoring）**
+   - 实时跟踪每个选择器的成功率、平均耗时、失败次数
+   - 自动生成健康度报告和优化建议
+   - 支持定时报告和 JSON 导出
+
+#### 快速使用
+
+**基础用法：**
+
+```typescript
+import { resolveLocatorResilient } from "./src/selectors/index.js";
+import type { TargetHints } from "./src/selectors/types.js";
+
+// 定义选择器提示
+const hints: TargetHints = {
+  role: "button",
+  name: "登录",
+  alternatives: [
+    { selector: "#login-btn" },
+    { selector: ".login-button" },
+  ],
+};
+
+// 使用弹性选择器解析
+const locator = await resolveLocatorResilient(page, hints, {
+  selectorId: "login-button",      // 用于健康度跟踪
+  retryAttempts: 3,                 // 重试次数
+  retryBaseMs: 200,                 // 重试基础延迟
+  retryMaxMs: 2000,                 // 重试最大延迟
+  verifyTimeoutMs: 1000,            // 验证超时
+});
+
+// 选择器已验证可见，直接使用
+await locator.click();
+```
+
+**健康度报告：**
+
+```typescript
+import { generateHealthReport, logHealthReport } from "./src/selectors/report.js";
+
+// 生成报告
+const report = generateHealthReport({
+  unhealthyThreshold: 0.7,    // 不健康阈值（成功率 < 70%）
+  minSampleSize: 5,            // 最小样本数
+  includeHealthy: true,        // 包含健康选择器
+});
+
+// 记录到日志
+logHealthReport(report);
+
+// 导出为 JSON
+const json = exportReportAsJson(report);
+```
+
+**报告示例：**
 
 ```json
 {
-  "mcpServers": {
-    "xiao-hong-shu": {
-      "command": "<发布产物路径>/HushOps.Servers.XiaoHongShu",
-      "args": [],
-      "env": { "DOTNET_ENVIRONMENT": "Production" }
+  "timestamp": "2025-10-23T06:00:00.000Z",
+  "totalSelectors": 10,
+  "healthyCount": 8,
+  "unhealthyCount": 2,
+  "averageSuccessRate": 0.85,
+  "unhealthySelectors": [
+    {
+      "selectorId": "nav-discover",
+      "totalCount": 100,
+      "successCount": 60,
+      "failureCount": 40,
+      "successRate": 0.6,
+      "avgDurationMs": 1500
     }
-  }
+  ],
+  "recommendations": [
+    "选择器 \"nav-discover\" 成功率过低（60.0%），建议立即检查选择器定义是否正确",
+    "选择器 \"nav-discover\" 需要优化：成功率 60.0%，平均耗时 1500ms"
+  ]
 }
 ```
 
-保存后重启/热加载你的客户端，即可自动连接该服务器。
+#### 性能基准
 
+- **成功的选择器解析**：< 500ms
+- **带重试的选择器解析**：< 1000ms
+- **健康选择器成功率**：> 90%
+- **可接受选择器成功率**：> 70%
 
-## 4. 配置速览（可选但推荐）
-服务器按如下优先级加载配置：`appsettings.json` → 环境变量（前缀 `HUSHOPS_XHS_SERVER_`）。
+#### 选择器优先级策略
 
-最小示例（保存为 `appsettings.json`，放在可执行文件所在目录或作为工作目录下的配置文件加载）：
+遵循 Playwright 推荐的语义优先级：
 
-```json
-{
-  "xhs": {
-    "DefaultKeyword": "旅行攻略",
-    "Headless": false
+1. **role + name**（最稳定，推荐）- `{ role: "button", name: "登录" }`
+2. **label**（表单字段首选）- `{ label: "用户名" }`
+3. **placeholder**（输入框备选）- `{ placeholder: "搜索小红书" }`
+4. **testId**（自有应用推荐）- `{ testId: "search-button" }`
+5. **CSS selector**（最后选择）- `{ selector: "#search-input" }`
+
+#### 迁移指南
+
+已完成迁移的模块：
+- ✅ `src/domain/xhs/navigation.ts` - 导航和模态窗口处理
+- ✅ `src/domain/xhs/search.ts` - 搜索输入和提交
+
+**详细文档：**
+
+- **最佳实践指南**：[docs/selectors-best-practices.md](docs/selectors-best-practices.md)
+  - 完整使用示例
+  - 选择器命名规范
+  - 重试配置建议
+  - 故障排查指南
+  - 性能优化技巧
+
+- **迁移指南**：[docs/migration-guide.md](docs/migration-guide.md)
+  - 从 `resolveLocatorAsync` 迁移到 `resolveLocatorResilient`
+  - 代码对比示例
+  - 迁移检查清单
+  - FAQ 和常见问题
+
+- **选择器映射规范**：[docs/selectors-map.md](docs/selectors-map.md)
+  - 选择器字段说明
+  - 容器和过滤写法
+
+#### 配置参数
+
+**全局配置（src/config/xhs.ts）：**
+
+```typescript
+export const XHS_CONF = {
+  selector: {
+    probeTimeoutMs: 250,           // 探测超时
+    resolveTimeoutMs: 3000,        // 解析超时
+    healthCheckIntervalMs: 60000,  // 健康检查间隔
   },
-  "HumanBehavior": {
-    "DefaultProfile": "default"
-  },
-  "NetworkStrategy": {
-    "DefaultTemplate": "default"
-  }
-}
-```
-环境变量覆盖示例（PowerShell）：
-
-```powershell
-$env:HUSHOPS_XHS_SERVER_xhs__Headless = "false"
-$env:HUSHOPS_XHS_SERVER_NetworkStrategy__DefaultTemplate = "default"
+} as const;
 ```
 
-## 5. 启动后的验证（在客户端）
+**断路器配置（src/selectors/resilient.ts）：**
 
-- 在所用 MCP 客户端中选择 `xiao-hong-shu` 服务器，连接成功后应展示工具列表。
-- 任选一个工具（如 `browser_open`）发起一次调用，客户端应返回结构化结果并在日志中可见执行过程。
-- 若工具列表为空或调用失败，请检查客户端配置中的 `command` 路径与权限，以及环境变量是否生效。
-
-### 5.1 已登录却显示未登录？（方案 C vs 方案 A）
-- 现象：`browserKey: "user"` 打开后页面仍显示“登录/注册”。
-- 原因：默认“用户模式”在无法附着已运行浏览器时会落到 SDK 自建目录，此目录与系统浏览器的默认配置不同，自然没有你的登录态。
-- 方案 C（实验，优先）：复用系统浏览器 `userDataDir + --profile-directory`
-  - 调用 `browser_open`：
-    ```json
-    { "tool": "browser_open", "arguments": {
-      "profileKey": "user",
-      "profilePath": "%LOCALAPPDATA%/Microsoft/Edge/User Data",
-      "profileDirectory": "Default"
-    }}
-    ```
-  - 注意：不要与系统浏览器并发使用同一 `userDataDir`；若报“目录可能被占用”，请先关闭占用该目录的浏览器实例。
-  - 可选：设置 `HUSHOPS_PROFILE_DIRECTORY=Default` 作为默认目录名。
-- 方案 A（稳妥，后备）：不传路径，使用 SDK 自建目录；首次 `xhs_open_login` 在该目录登录一次，之后长期复用。
-
-> 提示：我们不会导出/脚本读取 Cookie；仅通过浏览器自身的持久化目录自然复用登录态。
-
-## 6. MCP 工具完整说明
-
-### 6.1 工具分类
-
-本服务器提供 16 个 MCP 工具，按功能分为 5 大类：
-
-#### 通用工具（2个）
-- `browser_open` - 打开/复用浏览器配置
-- `ll_execute` - 低级拟人化动作执行
-
-#### 登录工具（2个）
-- `xhs_open_login` - 打开登录入口
-- `xhs_check_session` - 检查会话状态
-
-#### 交互步骤工具（7个）
-- `xhs_navigate_explore` - 导航到发现页
-- `xhs_search_keyword` - 搜索关键词
-- `xhs_select_note` - 根据关键词选择笔记
-- `xhs_like_current` - 点赞当前笔记
-- `xhs_favorite_current` - 收藏当前笔记
-- `xhs_comment_current` - 评论当前笔记
-- `xhs_scroll_browse` - 拟人化滚动
-
-#### 流程工具（2个）
-- `xhs_random_browse` - 随机浏览（选择+概率点赞/收藏）
-- `xhs_keyword_browse` - 关键词浏览（选择+概率点赞/收藏）
-
-#### 数据采集工具（2个）
-- `xhs_capture_page_notes` - 采集当前页面笔记
-- `xhs_note_capture` - 按关键词批量采集笔记
-
-#### 内容创作工具（1个）
-- `xhs_publish_note` - 发布笔记
-
-### 6.2 工具详细说明
-
-#### 6.2.1 通用工具
-
-**browser_open** - 打开或复用浏览器配置
-- **功能**：打开浏览器会话，支持用户配置和独立配置
-- **参数**：
-  - `profileKey`（可选）：浏览器键，`"user"` 表示用户配置，其他值作为独立配置目录名
-  - `profilePath`（可选）：（实验）系统浏览器的 `userDataDir` 根路径，仅在 `profileKey="user"` 时有效，例如：`%LOCALAPPDATA%/Microsoft/Edge/User Data` 或 `%LOCALAPPDATA%/Google/Chrome/User Data`
-  - `profileDirectory`（可选）：（实验）Chromium 的 `--profile-directory` 名称，默认按顺序推断：环境变量 `HUSHOPS_PROFILE_DIRECTORY` → `Default` → 第一个 `Profile *`
-- **示例**：
-```json
-{
-  "tool": "browser_open",
-  "arguments": {
-    "profileKey": "user",
-    "profilePath": "%LOCALAPPDATA%/Microsoft/Edge/User Data",
-    "profileDirectory": "Default"
-  }
-}
-```
-> 说明：当不提供 `profilePath/profileDirectory` 时，系统将使用 SDK 自建的持久化目录；这是更稳健的默认行为。上述参数仅在本机受控环境、明确知悉风险时启用。
-**ll_execute** - 低级拟人化动作执行
-- **功能**：执行单个底层拟人化动作（点击、输入、滚动等）
-- **使用场景**：需要精确控制元素定位、时间参数、动作序列时使用
-- **支持的动作类型**：
-  - `Hover` - 鼠标悬停
-  - `Click` - 点击元素
-  - `MoveRandom` - 随机移动鼠标
-  - `Wheel` - 滚轮滚动
-  - `ScrollTo` - 滚动到目标位置
-  - `InputText` - 输入文本（支持拟人化输入间隔）
-  - `PressKey` - 按键
-  - `Wait` - 等待
-- **参数**：
-  - `actionType`：动作类型
-  - `locator`：元素定位器
-  - `parameters`：动作参数（JSON 对象）
-  - `timing`：时间参数（延迟、超时等）
-  - `browserKey`：浏览器键
-
-#### 6.2.2 登录工具
-
-**xhs_open_login** - 打开登录入口并等待人工登录
-- **功能**：导航到小红书首页，等待用户手动登录
-- **参数**：
-  - `browserKey`（可选）：浏览器键，默认 `"user"`
-- **说明**：此工具不处理认证细节，仅打开登录入口
-- **示例**：
-```json
-{
-  "tool": "xhs_open_login",
-  "arguments": {
-    "browserKey": "user"
-  }
-}
+```typescript
+const policyEnforcer = new PolicyEnforcer({
+  qps: 10,                 // 每秒请求数限制
+  failureThreshold: 3,     // 连续失败阈值
+  openSeconds: 10,         // 熔断时间（秒）
+});
 ```
 
-**xhs_check_session** - 检查当前会话是否已登录
-- **功能**：启发式检查页面是否已登录（检测登录/注册按钮）
-- **参数**：
-  - `browserKey`（可选）：浏览器键，默认 `"user"`
-- **返回**：`isLoggedIn`（布尔值）、`url`、`heuristic`（启发式结果）
-- **示例**：
-```json
-{
-  "tool": "xhs_check_session",
-  "arguments": {
-    "browserKey": "user"
-  }
-}
-```
+#### 测试覆盖
 
-#### 6.2.3 交互步骤工具
+- **单元测试**：44 个测试覆盖核心选择器逻辑
+- **集成测试**：25 个测试覆盖真实场景
+  - 网络延迟处理
+  - 间歇性失败重试
+  - 断路器触发验证
+  - 并发场景处理
+  - 健康度报告生成
+  - 性能基准验证
 
-**xhs_navigate_explore** - 导航到发现页
-- **功能**：点击导航栏发现按钮，进入发现页
-- **参数**：
-  - `browserKey`（可选）：浏览器键，默认 `"user"`
-  - `behaviorProfile`（可选）：行为档案键，默认 `"default"`
-- **示例**：
-```json
-{
-  "tool": "xhs_navigate_explore",
-  "arguments": {
-    "browserKey": "user",
-    "behaviorProfile": "default"
-  }
-}
-```
+**运行测试：**
 
-**xhs_search_keyword** - 在搜索框输入关键词并搜索
-- **功能**：在搜索框输入关键词并执行搜索
-- **参数**：
-  - `keyword`（必填）：搜索关键词
-  - `browserKey`（可选）：浏览器键
-  - `behaviorProfile`（可选）：行为档案键
-- **示例**：
-```json
-{
-  "tool": "xhs_search_keyword",
-  "arguments": {
-    "keyword": "旅行攻略",
-    "browserKey": "user",
-    "behaviorProfile": "default"
-  }
-}
-```
-
-**xhs_select_note** - 根据关键词选择笔记
-- **功能**：根据关键词数组选择笔记（命中任意关键词即成功）
-- **参数**：
-  - `keywords`（必填）：关键词数组
-  - `browserKey`（可选）：浏览器键
-  - `behaviorProfile`（可选）：行为档案键
-- **示例**：
-```json
-{
-  "tool": "xhs_select_note",
-  "arguments": {
-    "keywords": ["旅行", "攻略", "美食"],
-    "browserKey": "user"
-  }
-}
-```
-
-**xhs_like_current** - 点赞当前打开的笔记
-- **功能**：点赞当前打开的笔记
-- **参数**：
-  - `browserKey`（可选）：浏览器键
-  - `behaviorProfile`（可选）：行为档案键
-- **示例**：
-```json
-{
-  "tool": "xhs_like_current",
-  "arguments": {
-    "browserKey": "user"
-  }
-}
-```
-
-**xhs_favorite_current** - 收藏当前打开的笔记
-- **功能**：收藏当前打开的笔记
-- **参数**：
-  - `browserKey`（可选）：浏览器键
-  - `behaviorProfile`（可选）：行为档案键
-- **示例**：
-```json
-{
-  "tool": "xhs_favorite_current",
-  "arguments": {
-    "browserKey": "user"
-  }
-}
-```
-
-**xhs_comment_current** - 评论当前打开的笔记
-- **功能**：在当前打开的笔记下发表评论
-- **参数**：
-  - `commentText`（必填）：评论内容
-  - `browserKey`（可选）：浏览器键
-  - `behaviorProfile`（可选）：行为档案键
-- **示例**：
-```json
-{
-  "tool": "xhs_comment_current",
-  "arguments": {
-    "commentText": "写得太好了！",
-    "browserKey": "user"
-  }
-}
-```
-
-**xhs_scroll_browse** - 拟人化滚动浏览
-- **功能**：模拟真人滚动行为，随机滚动距离和延迟
-- **参数**：
-  - `browserKey`（可选）：浏览器键
-  - `behaviorProfile`（可选）：行为档案键
-- **示例**：
-```json
-{
-  "tool": "xhs_scroll_browse",
-  "arguments": {
-    "browserKey": "user"
-  }
-}
-```
-
-#### 6.2.4 流程工具
-
-**xhs_random_browse** - 随机浏览
-- **功能**：根据用户画像或随机选择笔记，打开详情，概率性点赞/收藏
-- **参数**：
-  - `portraitId`（可选）：用户画像 ID
-  - `browserKey`（可选）：浏览器键
-  - `behaviorProfile`（可选）：行为档案键
-- **说明**：自动编排"选择笔记 → 概率点赞 → 概率收藏"完整流程
-- **示例**：
-```json
-{
-  "tool": "xhs_random_browse",
-  "arguments": {
-    "portraitId": "travel-lover",
-    "browserKey": "user",
-    "behaviorProfile": "default"
-  }
-}
-```
-
-**xhs_keyword_browse** - 关键词浏览
-- **功能**：根据关键词数组选择笔记，打开详情，概率性点赞/收藏
-- **参数**：
-  - `keywords`（必填）：关键词数组
-  - `portraitId`（可选）：用户画像 ID
-  - `browserKey`（可选）：浏览器键
-  - `behaviorProfile`（可选）：行为档案键
-- **说明**：自动编排"选择笔记 → 概率点赞 → 概率收藏"完整流程
-- **示例**：
-```json
-{
-  "tool": "xhs_keyword_browse",
-  "arguments": {
-    "keywords": ["旅行", "美食"],
-    "browserKey": "user",
-    "behaviorProfile": "default"
-  }
-}
-```
-
-#### 6.2.5 数据采集工具
-
-**xhs_capture_page_notes** - 采集当前页面笔记
-- **功能**：采集当前页面（发现页/搜索页）的笔记数据
-- **参数**：
-  - `targetCount`（必填）：目标采集数量
-  - `browserKey`（可选）：浏览器键
-- **返回**：CSV 文件路径、采集数量
-- **说明**：通过滚动页面监听 API 响应，采集笔记元数据
-- **示例**：
-```json
-{
-  "tool": "xhs_capture_page_notes",
-  "arguments": {
-    "targetCount": 50,
-    "browserKey": "user"
-  }
-}
-```
-
-**xhs_note_capture** - 按关键词批量采集笔记
-- **功能**：按关键词搜索并批量采集笔记数据
-- **参数**：
-  - `keywords`（必填）：关键词数组
-  - `targetCount`（必填）：目标采集数量
-  - `browserKey`（可选）：浏览器键
-- **返回**：CSV 文件路径、采集数量、所用关键词
-- **说明**：自动导航、搜索、滚动采集完整流程
-- **示例**：
-```json
-{
-  "tool": "xhs_note_capture",
-  "arguments": {
-    "keywords": ["旅行攻略", "美食推荐"],
-    "targetCount": 100,
-    "browserKey": "user"
-  }
-}
-```
-
-#### 6.2.6 内容创作工具
-
-**xhs_publish_note** - 发布笔记
-- **功能**：上传图片、填写标题和正文、保存草稿
-- **参数**：
-  - `imagePaths`（必填）：图片文件路径数组
-  - `title`（必填）：笔记标题
-  - `content`（必填）：笔记正文
-  - `saveAsDraft`（可选）：是否保存为草稿，默认 `true`
-  - `browserKey`（可选）：浏览器键
-- **说明**：自动上传图片、填写表单、保存草稿，不自动发布
-- **示例**：
-```json
-{
-  "tool": "xhs_publish_note",
-  "arguments": {
-    "imagePaths": ["D:/images/photo1.jpg", "D:/images/photo2.jpg"],
-    "title": "我的旅行日记",
-    "content": "今天去了一个很美的地方...",
-    "saveAsDraft": true,
-    "browserKey": "user"
-  }
-}
-```
-
-### 6.3 常用场景示例
-
-#### 场景 1：登录并检查会话
-
-```json
-// 1. 打开浏览器
-{ "tool": "browser_open", "arguments": { "profileKey": "user" } }
-
-// 2. 打开登录页面（手动登录）
-{ "tool": "xhs_open_login", "arguments": { "browserKey": "user" } }
-
-// 3. 检查会话状态
-{ "tool": "xhs_check_session", "arguments": { "browserKey": "user" } }
-```
-
-#### 场景 2：搜索并点赞笔记
-
-```json
-// 1. 搜索关键词
-{ "tool": "xhs_search_keyword", "arguments": { "keyword": "旅行攻略", "browserKey": "user" } }
-
-// 2. 选择笔记
-{ "tool": "xhs_select_note", "arguments": { "keywords": ["旅行", "攻略"], "browserKey": "user" } }
-
-// 3. 点赞
-{ "tool": "xhs_like_current", "arguments": { "browserKey": "user" } }
-
-// 4. 收藏
-{ "tool": "xhs_favorite_current", "arguments": { "browserKey": "user" } }
-```
-
-#### 场景 3：批量采集笔记数据
-
-```json
-// 方式 A：采集当前页面（需先手动导航或搜索）
-{ "tool": "xhs_capture_page_notes", "arguments": { "targetCount": 50, "browserKey": "user" } }
-
-// 方式 B：按关键词自动采集（自动导航+搜索+采集）
-{ "tool": "xhs_note_capture", "arguments": { "keywords": ["美食"], "targetCount": 100, "browserKey": "user" } }
-```
-
-#### 场景 4：发布笔记草稿
-
-```json
-{
-  "tool": "xhs_publish_note",
-  "arguments": {
-    "imagePaths": ["C:/Users/me/Pictures/photo1.jpg"],
-    "title": "我的旅行分享",
-    "content": "今天去了一个很棒的地方，分享给大家...",
-    "saveAsDraft": true,
-    "browserKey": "user"
-  }
-}
-```
-
-#### 场景 5：使用流程工具自动化浏览
-
-```json
-// 随机浏览（根据画像）
-{
-  "tool": "xhs_random_browse",
-  "arguments": {
-    "portraitId": "travel-lover",
-    "browserKey": "user",
-    "behaviorProfile": "default"
-  }
-}
-
-// 关键词浏览
-{
-  "tool": "xhs_keyword_browse",
-  "arguments": {
-    "keywords": ["旅行", "美食"],
-    "browserKey": "user",
-    "behaviorProfile": "cautious"
-  }
-}
-```
-## 7. 故障排查
-
-- 工具列表为空：
-  - 确认服务器正在运行；
-  - 检查你的 MCP 客户端配置路径与分隔符；
-  - 重新保存或重启客户端以刷新配置。
-
-- Playwright 下载失败或缓慢：
-  - 先配置代理后重试安装脚本；
-  - 多尝试几次，或在非高峰时段安装。
-
-- 会话异常：
-  - 删除或更换 `profileKey` 以创建全新浏览器目录；
-  - 再次执行登录后重试相关工具。
-
-## 8. 支持
-- 问题与建议：可通过本仓库的 Issue 反馈
-- 联系方式：1317578863@qq.com
-
-## 9. 客户端配置速查（JSON / TOML）
-
-> 选择你正在使用的 MCP 客户端，按对应格式（JSON/TOML/UI）添加本服务器；以下示例均以本地 stdio 启动为例。
-
-### 9.1 Codex CLI（TOML）
-
-配置文件位置：用户主目录 `~/.codex/config.toml`
-
-```toml
-[mcp_servers."xiao-hong-shu"]
-command = "<发布产物路径>/HushOps.Servers.XiaoHongShu"
-args = []
-
-# 可选：设置运行环境
-env = { DOTNET_ENVIRONMENT = "Production" }
-
-# 若采用 FDD（DLL）
-# command = "dotnet"
-# args = ["<发布产物路径>/HushOps.Servers.XiaoHongShu.dll"]
-```
-
-验证：在终端执行 `codex mcp list` 应能看到 `xiao-hong-shu`。
-
-> 提示：TOML 键名含连字符需加引号；Windows 可用正斜杠或转义反斜杠。
-
-### 9.2 Claude Desktop（JSON）
-
-配置文件位置（示例）：
-- Windows：`%APPDATA%/Claude/claude_desktop_config.json`
-- macOS：`~/Library/Application Support/Claude/claude_desktop_config.json`
-- Linux：`~/.config/Claude/claude_desktop_config.json`
-
-最小示例：
-```json
-{
-  "mcpServers": {
-    "xiao-hong-shu": {
-      "command": "<发布产物路径>/HushOps.Servers.XiaoHongShu",
-      "args": [],
-      "env": { "DOTNET_ENVIRONMENT": "Production" }
-    }
-  }
-}
-```
-
-### 9.3 Claude Code（JSON / 命令行）
-
-- 方案 A：项目根目录创建 `.mcp.json`
-```json
-{
-  "mcpServers": {
-    "xiao-hong-shu": {
-      "type": "stdio",
-      "command": "<发布产物路径>/HushOps.Servers.XiaoHongShu",
-      "args": [],
-      "env": { "DOTNET_ENVIRONMENT": "Production" }
-    }
-  }
-}
-```
-- 方案 B：命令行添加
 ```bash
-claude mcp add-json xiao-hong-shu '{
-  "type":"stdio",
-  "command":"/opt/app/publish/HushOps.Servers.XiaoHongShu",
-  "args":[],
-  "env":{"DOTNET_ENVIRONMENT":"Production"}
-}'
-```
-- 方案 C：从 Claude Desktop 导入（如已在 Desktop 配置过）
-```bash
-claude mcp add-from-claude-desktop
+npm test                          # 运行所有测试
+npm test -- selectors             # 运行选择器相关测试
+npm test -- integration           # 运行集成测试
 ```
 
-### 9.4 Cherry Studio（图形界面）
+## MCP（stdio）
+- 启动：`npm run mcp`
+- 工具清单与示例：见 `docs/mcp-tools.md`
+- 连接与状态：本服务内建连接管理器，按 `dirId` 复用已打开的浏览器与页面；跨多次工具调用保持页面状态，直至调用 `roxy.closeDir` 或进程退出（收到 SIGINT/SIGTERM 时会尝试优雅清理）。
+- 工具：
+  - `roxy.openDir(dirId, workspaceId?)`
+  - `roxy.closeDir(dirId)`
+  - `roxy.workspaces.list(page_index?, page_size?)`
+  - `roxy.windows.list(workspaceId?, dirIds?, windowName?, sortNums?, os?, projectIds?, windowRemark?, page_index?, page_size?, ...)`
+  - `roxy.window.create(workspaceId, windowName?, os?, osVersion?, coreVersion?, projectId?, windowRemark?, defaultOpenUrl?, proxyInfo?, ...)`
+  - `xhs.session.check(dirId, workspaceId?)`
+  - `page.new(dirId, url?, workspaceId?)` / `page.list(dirId, workspaceId?)` / `page.close(dirId, pageIndex?, workspaceId?)`
+  - `action.navigate(dirId, url, pageIndex?, wait?, workspaceId?)`
+  - `action.click(dirId, target, pageIndex?, workspaceId?)`
+  - `action.type(dirId, target, text, wpm?, pageIndex?, workspaceId?)`
+  - `action.hover(dirId, target, pageIndex?, workspaceId?)`
+  - `action.scroll(dirId, deltaY?, pageIndex?, workspaceId?)`
+  - `action.waitFor(dirId, target?, state?, timeoutMs?, pageIndex?, workspaceId?)`
+  - `action.upload(dirId, target, files[], pageIndex?, workspaceId?)`
+  - `action.extract(dirId, target, prop?, pageIndex?, workspaceId?)`
+  - `action.evaluate(dirId, expression, arg?, pageIndex?, workspaceId?)`
+  - `action.screenshot(dirId, pageIndex?, fullPage?, workspaceId?)`
 
-- 打开 设置 → MCP Servers → Add Server
-- Type 选择 `STDIO`
-- Command：指向发布后的二进制（SCD）；如为 FDD，则 Command 填 `dotnet`，Args 填 `<发布产物路径>/HushOps.Servers.XiaoHongShu.dll`
-- Args：SCD 留空；FDD 填 DLL 路径
-- （可选）Env：新增 `DOTNET_ENVIRONMENT=Production`
-- 保存并在对话页选择该服务器，工具列表应自动展示。
+## 人性化与稳定性
+- `src/humanization/*`：
+  - 鼠标曲线：`moveMouseTo()`
+  - 段落滚动：`scrollHuman()`
+  - 拟人打字：`typeHuman()`
+  - 安全点击：在点击前 `scrollIntoViewIfNeeded() + waitFor({state:'visible'})`，避免元素脱离视口。
+- `action.*`：原子动作失败自动截图（由上层调用决定），并统一返回 `ActionResult`，包含 `error.code/message/screenshotPath`。
 
-## 10. 发布与二进制运行（MCP）
+## 产物与指标
+- 每账号清单：`artifacts/<dirId>/manifest-*.json`
+- 全局指标：`artifacts/metrics-*.json`
+- 选择器健康度（NDJSON）：`artifacts/selector-health.ndjson`（可通过 `SELECTOR_HEALTH_PATH` 自定义；`SELECTOR_HEALTH_DISABLED=true` 可关闭）
 
-> 目标：将服务器发布为离线可分发的产物，并在各 MCP 客户端中通过二进制启动（stdio）。建议默认生产环境：`DOTNET_ENVIRONMENT=Production`。
+## 类型安全与运行时验证
 
-### 10.1 发布方式
+### 类型系统架构
 
-> 自 vNEXT 起，Release 配置已默认启用 Windows x64 单文件（自带运行时、压缩开启、禁用裁剪）。如需跨平台或关闭单文件，可在命令行覆盖 RID/属性。
+本项目采用完整的端到端类型安全设计，确保编译时和运行时的双重保护：
 
+**架构分层：**
+```
+src/types/          - TypeScript 类型定义（编译时检查）
+src/schemas/        - Zod Schema 定义（运行时验证）
+src/clients/        - API 客户端实现（类型安全 + 验证）
+src/contracts/      - 接口契约（依赖倒置）
+```
 
-- 框架依赖（FDD，跨平台 DLL）
-  - 发布：`dotnet publish -c Release`
+**核心原则：**
+1. **单一事实来源** - 类型从 Zod Schema 推断（`z.infer<typeof Schema>`）
+2. **运行时验证** - 所有 API 响应使用 Zod 验证
+3. **空值安全** - 正确处理 nullable 响应
+4. **类型推断** - 利用 TypeScript 类型推断减少重复
 
-- 框架依赖（含宿主，RID 指定）
-  - 发布（示例 Windows）：`dotnet publish -c Release -r win-x64 --self-contained false`
+### 使用示例
 
-- 自包含（SCD，可选单文件）
-  - 发布（示例 Windows 单文件）：`dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true`
-  - 本仓 Release 默认已开启（win-x64）：直接 `dotnet publish -c Release` 即生成单文件于 `bin/Release/net8.0/win-x64/publish/`
+#### 1. 类型安全的 API 调用
 
-> 配置文件：将 `appsettings.json` 放在“可执行文件所在目录”或以该目录为工作目录运行，环境变量前缀为 `HUSHOPS_XHS_SERVER_`。
+```typescript
+import type { IRoxyClient } from "./src/contracts/IRoxyClient.js";
+import type { WorkspaceListResponse, WindowListResponse } from "./src/types/roxy/index.js";
 
-### 10.2 目录占用提示（可选增强）
-- 当你传入系统 `userDataDir` 时，若发现锁文件近期活跃（例如 `SingletonLock/SingletonCookie/SingletonSocket/LOCK`），系统会友好报错提示“目录可能被占用”。
-- 处理方式：关闭正在使用该目录的浏览器实例，或改用 SDK 自建目录（方案 A）。
+// 完整类型推断
+const client: IRoxyClient = container.createRoxyClient();
 
-### 10.3 Playwright 依赖
-- 首次运行若未安装浏览器，服务器会自动安装（联网环境）。
-- 受限/离线环境：可在有网机器先完成安装后复制浏览器缓存至目标主机，或设置镜像/缓存路径再安装。
+// 类型安全的方法调用
+const workspaces: WorkspaceListResponse = await client.workspaces({
+  page_index: 1,
+  page_size: 20
+});
 
-### 10.3 客户端接入（二进制）
+// 类型安全的数据访问
+if (workspaces.data?.rows) {
+  workspaces.data.rows.forEach(workspace => {
+    console.log(`工作区: ${workspace.workspaceName} (ID: ${workspace.id})`);
+  });
+}
 
-- Claude Desktop（JSON）
-```json
-{
-  "mcpServers": {
-    "xiao-hong-shu": {
-      "command": "C:/path/to/publish/HushOps.Servers.XiaoHongShu.exe",
-      "args": [],
-      "env": { "DOTNET_ENVIRONMENT": "Production" }
-    }
+// 处理 nullable 响应
+const windows: WindowListResponse = await client.listWindows({
+  workspaceId: 28255
+});
+
+if (windows.data !== null) {
+  // TypeScript 知道 data 不为 null
+  const count = windows.data.rows.length;
+  console.log(`找到 ${count} 个窗口`);
+} else {
+  console.log("没有窗口数据");
+}
+```
+
+#### 2. Zod 运行时验证
+
+```typescript
+import { WorkspaceListResponseSchema } from "./src/schemas/roxy/index.js";
+
+// 方式 1: 使用 safeParse（推荐）
+const result = WorkspaceListResponseSchema.safeParse(apiResponse);
+
+if (result.success) {
+  // 验证通过，data 已完全类型化
+  const data = result.data;
+  console.log(data.data?.rows);
+} else {
+  // 验证失败，查看详细错误
+  console.error("验证失败:", result.error.format());
+}
+
+// 方式 2: 使用 parse（抛出异常）
+try {
+  const validated = WorkspaceListResponseSchema.parse(apiResponse);
+  // validated 已完全类型化
+} catch (error) {
+  if (error instanceof z.ZodError) {
+    console.error("Schema 验证错误:", error.format());
   }
 }
 ```
-- 若采用 FDD（DLL）：将 `command` 改为 `dotnet`，`args` 改为 `["C:/path/to/publish/HushOps.Servers.XiaoHongShu.dll"]`。
 
-- Claude Code（JSON/CLI）
-```json
-{
-  "mcpServers": {
-    "xiao-hong-shu": {
-      "type": "stdio",
-      "command": "/opt/app/publish/HushOps.Servers.XiaoHongShu",
-      "args": [],
-      "env": { "DOTNET_ENVIRONMENT": "Production" }
-    }
+#### 3. 自定义 Schema 验证
+
+```typescript
+import { z } from "zod";
+import { ApiResponseSchema } from "./src/schemas/roxy/common.js";
+
+// 定义自定义数据 Schema
+const CustomDataSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1),
+  tags: z.array(z.string()).optional(),
+});
+
+// 包装为 API 响应格式
+const CustomResponseSchema = ApiResponseSchema(CustomDataSchema);
+
+// 推断类型
+type CustomResponse = z.infer<typeof CustomResponseSchema>;
+
+// 验证响应
+const response = await fetch("/api/custom");
+const parsed = CustomResponseSchema.safeParse(await response.json());
+```
+
+#### 4. 处理联合类型
+
+```typescript
+// windowSortNum 可以是 string 或 number
+import type { Window } from "./src/types/roxy/window.js";
+
+function processWindow(window: Window) {
+  // TypeScript 知道 windowSortNum 是 string | number | undefined
+  const sortNum = window.windowSortNum;
+
+  if (typeof sortNum === "number") {
+    console.log(`序号: ${sortNum.toFixed(0)}`);
+  } else if (typeof sortNum === "string") {
+    console.log(`序号: ${sortNum}`);
   }
 }
 ```
-或使用命令行：
-```bash
-claude mcp add-json xiao-hong-shu '{
-  "type":"stdio",
-  "command":"/opt/app/publish/HushOps.Servers.XiaoHongShu",
-  "args":[],
-  "env":{"DOTNET_ENVIRONMENT":"Production"}
-}'
-```
-（FDD 时将 `command` 改为 `dotnet` 并在 `args` 中放 DLL 路径。）
 
-- Cherry Studio（图形界面）
-  - Settings → MCP Servers → Add Server
-  - Type: STDIO
-  - Command: 指向发布后的二进制（SCD）或 `dotnet`（FDD）
-  - Args: 为空（SCD）或 `/<path>/HushOps.Servers.XiaoHongShu.dll`（FDD）
-  - Env: `DOTNET_ENVIRONMENT=Production`
+### 迁移指南
 
-- Codex（TOML 示例）
-```toml
-[mcp_servers."xiao-hong-shu"]
-command = "/opt/app/publish/HushOps.Servers.XiaoHongShu"
-args = []
-env = { DOTNET_ENVIRONMENT = "Production" }
+如果你正在从旧版本迁移，请注意以下变更：
+
+#### Breaking Changes
+
+1. **响应类型变更** - 所有 API 方法现在返回具体类型而非 `unknown`：
+   ```typescript
+   // ❌ 旧版本
+   const workspaces: any = await client.workspaces();
+
+   // ✅ 新版本
+   const workspaces: WorkspaceListResponse = await client.workspaces();
+   ```
+
+2. **Nullable 响应** - 某些 API 响应的 data 字段现在可能为 null：
+   ```typescript
+   // ❌ 旧版本（假设 data 总是存在）
+   const windows = await client.listWindows({ workspaceId: 28255 });
+   windows.data.rows.forEach(...); // 可能崩溃
+
+   // ✅ 新版本（安全检查）
+   const windows = await client.listWindows({ workspaceId: 28255 });
+   if (windows.data !== null) {
+     windows.data.rows.forEach(...);
+   }
+   ```
+
+3. **字段名变更** - 窗口列表使用 `rows` 而非 `list`：
+   ```typescript
+   // ❌ 旧版本
+   const windows = await client.listWindows({ workspaceId: 28255 });
+   const list = windows.data.list; // 不再存在
+
+   // ✅ 新版本
+   const windows = await client.listWindows({ workspaceId: 28255 });
+   const list = windows.data?.rows; // 统一使用 rows
+   ```
+
+4. **新增 API 方法** - `randomFingerprint` 方法：
+   ```typescript
+   // 为窗口生成随机指纹
+   await client.randomFingerprint(28255, "dirId123");
+   ```
+
+#### 非破坏性改进
+
+- **ensureOpen** - 现在正确处理 null 响应，自动降级到 open
+- **TypeScript 严格模式** - 项目现在启用完整的严格类型检查
+- **错误处理改进** - ValidationError 包含详细的 Zod 错误信息
+
+### API 参考
+
+#### IRoxyClient 接口
+
+完整的类型安全 API 客户端：
+
+```typescript
+interface IRoxyClient {
+  // 健康检查
+  health(): Promise<{ code?: number; msg?: unknown } | string>;
+
+  // 窗口操作
+  open(dirId: string, args?: string[], workspaceId?: string | number):
+    Promise<ConnectionInfo>;
+  close(dirId: string): Promise<void>;
+  ensureOpen(dirId: string, workspaceId?: string | number, args?: string[]):
+    Promise<ConnectionInfo>;
+
+  // 连接信息
+  connectionInfo(dirIds: string[]): Promise<ConnectionInfoResponse>;
+
+  // 工作空间管理
+  workspaces(params?: WorkspaceListParams): Promise<WorkspaceListResponse>;
+
+  // 窗口管理
+  listWindows(params: WindowListParams): Promise<WindowListResponse>;
+  createWindow(body: WindowCreateRequest): Promise<WindowCreateResponse>;
+  detailWindow(params: WindowDetailParams): Promise<WindowDetailResponse>;
+  randomFingerprint(workspaceId: number | string, dirId: string):
+    Promise<ApiResponse<null>>;
+}
 ```
-（FDD 时设 `command = "dotnet"`，`args = ["/opt/app/publish/HushOps.Servers.XiaoHongShu.dll"]`。）
+
+**参数类型：**
+
+```typescript
+// 工作空间列表参数
+interface WorkspaceListParams {
+  page_index?: number; // >= 1
+  page_size?: number;  // >= 1
+}
+
+// 窗口列表参数
+interface WindowListParams extends PaginatedParams {
+  workspaceId: number | string; // 必需
+  dirIds?: string;               // 逗号分隔
+  windowName?: string;
+  sortNums?: string;
+  os?: string;
+  // ... 更多过滤参数
+}
+```
+
+**响应类型：**
+
+```typescript
+// 统一响应格式
+interface ApiResponse<T> {
+  code: number;    // 0 表示成功
+  msg: string;     // 响应消息
+  data: T;         // 响应数据（可能为 null）
+}
+
+// 分页响应
+interface PaginatedResponse<T> {
+  total: number;   // 总记录数
+  rows: T[];       // 当前页数据
+}
+
+// 连接信息
+interface ConnectionInfo {
+  id: string;      // 窗口 ID
+  ws: string;      // WebSocket 端点
+  http?: string;   // HTTP 端点（可选）
+}
+```
+
+### 最佳实践
+
+1. **始终检查 nullable 字段**
+   ```typescript
+   const windows = await client.listWindows({ workspaceId: 28255 });
+   if (windows.data?.rows) {
+     // 安全访问
+   }
+   ```
+
+2. **使用类型守卫**
+   ```typescript
+   function isValidConnection(conn: ConnectionInfo | null): conn is ConnectionInfo {
+     return conn !== null && !!conn.ws;
+   }
+   ```
+
+3. **利用 Zod transform**
+   ```typescript
+   const schema = z.string().transform(s => parseInt(s, 10));
+   ```
+
+4. **错误处理**
+   ```typescript
+   try {
+     const result = await client.open(dirId);
+   } catch (error) {
+     if (error instanceof ValidationError) {
+       console.error("验证失败:", error.context?.zodError);
+     }
+   }
+   ```
+
+## 架构分层
+- `src/config/`（Zod 校验）→ `src/lib/http.ts`（重试） → `src/clients/roxyClient.ts` → `src/services/`（playwrightConnector/policy/artifacts/metrics）→ `src/runner/` → `src/steps/` → `src/tasks/` → `src/cli.ts` / `src/mcp/server.ts`
+
+## 已知限制
+- 通过 CDP 连接远程浏览器，个别特性（如完整 tracing/video）受限于通道能力。
+- 本项目不提供登录绕过等敏感逻辑，`xhs.checkSession` 仅为弱信号判断。
+
+## C# 对照
+- 见 `docs/csharp-parity.md`（更新于 2025-10-21）。
+- 旧版 .NET 文档：`docs/legacy/README-dotnet.md`。
+
+## 开发脚本
+- Lint：`npm run lint`
+- 格式化：`npm run format` / `npm run format:check`
+- 测试：`npm test`（Vitest）

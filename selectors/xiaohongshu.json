@@ -1,0 +1,27 @@
+{
+  "platform": "xiaohongshu",
+  "version": 1,
+  "selectors": {
+    "search.input": {
+      "prefer": ["role", "label", "placeholder", "testId", "text", "selector"],
+      "candidates": [
+        { "role": "textbox", "placeholder": "搜索" },
+        { "selector": "input[type='search']" },
+        { "testId": "search-input" }
+      ]
+    },
+    "feed.card": {
+      "candidates": [
+        { "selector": "section[class*='note-item'], article[class*='note-card']" },
+        { "role": "article" }
+      ]
+    },
+    "comment.input": {
+      "candidates": [
+        { "placeholder": "评论" },
+        { "selector": "textarea" },
+        { "selector": "[contenteditable='true']" }
+      ]
+    }
+  }
+}
