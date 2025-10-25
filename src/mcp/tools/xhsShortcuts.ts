@@ -15,10 +15,11 @@ import { join } from "node:path";
 import { getParams } from "../utils/params.js";
 import { ok as okRes, fail as failRes } from "../utils/result.js";
 import { XHS_CONF } from "../../config/xhs.js";
+import { ERRORS } from "../../errors.js";
 // 已移除 DSL/任务桥接：发布等流程直接由选择器原子动作驱动
 
-const DirId = z.string().default("user"); // Roxy Browser API 窗口标识符
-const WorkspaceId = z.string().optional();
+// 统一使用全局 Schema：dirId 必填、workspaceId 可选（可取 ROXY_DEFAULT_WORKSPACE_ID）
+import { DirId, WorkspaceId } from "../../schemas/actions.js";
 const Keywords = z.array(z.string()).nonempty();
 
 async function screenshotOnError(page: any, dirId: string, tag: string) {
@@ -34,79 +35,18 @@ async function screenshotOnError(page: any, dirId: string, tag: string) {
 export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywrightConnector, policy: PolicyEnforcer) {
   const manager = new ConnectionManager(connector);
 
-  const OpenParams = z.object({ dirId: DirId, workspaceId: WorkspaceId });
-  server.registerTool("browser_open", { description: "打开或复用浏览器窗口（dirId 为 Roxy 窗口标识符）", inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() } },
-    async (input: any) => {
-      const { dirId, workspaceId } = OpenParams.parse(getParams(input));
-      const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
-        return { ok: true, pages: Pages.listPages(context) };
-      });
-      return { content: [{ type: "text", text: JSON.stringify(res) }] };
-    }
-  );
 
-  const LLE = z.object({
-    dirId: DirId, actionType: z.enum(["Hover","Click","MoveRandom","Wheel","ScrollTo","InputText","PressKey","Wait"]).or(z.string()),
-    locator: z.any().optional(), parameters: z.record(z.any()).optional(), pageIndex: z.number().int().nonnegative().optional(), workspaceId: WorkspaceId
-  });
-  server.registerTool("ll_execute", { description: "执行单个拟人化动作（精细控制）", inputSchema: { dirId: z.string().optional(), actionType: z.string(), locator: z.any(), parameters: z.record(z.any()).optional(), pageIndex: z.number().optional(), workspaceId: z.string().optional() } },
-    async (input: any) => {
-      const { dirId, actionType, locator, parameters, pageIndex, workspaceId } = LLE.parse(getParams(input));
-      const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
-        const page = await Pages.ensurePage(context, { pageIndex });
-        switch (actionType) {
-          case "Hover": { const l = await resolveLocatorAsync(page, locator as any); await hoverHuman(page, l); break; }
-          case "Click": { const l = await resolveLocatorAsync(page, locator as any); await clickHuman(page, l); break; }
-          case "InputText": { const l = await resolveLocatorAsync(page, locator as any); await typeHuman(l, String(parameters?.text ?? ""), { wpm: Number(parameters?.wpm ?? 180) }); break; }
-          case "Wheel": await page.mouse.wheel(0, Number(parameters?.deltaY ?? 800)); break;
-          case "ScrollTo": await page.evaluate(({ x, y }) => window.scrollTo(x ?? 0, y ?? 0), { x: Number(parameters?.x ?? 0), y: Number(parameters?.y ?? 0) }); break;
-          case "MoveRandom": await page.mouse.move(Math.random()*800+100, Math.random()*400+100, { steps: 30 }); break;
-          case "PressKey": await page.keyboard.press(String(parameters?.key ?? "Enter")); break;
-          case "Wait": await page.waitForTimeout(Number(parameters?.ms ?? 1000)); break;
-          default: throw new Error(`未知动作: ${actionType}`);
-        }
-        return { ok: true };
-      });
-      return { content: [{ type: "text", text: JSON.stringify(res) }] };
-    }
-  );
 
-  // 登录入口
+  // 登录与导航
   const BK = z.object({ dirId: DirId, workspaceId: WorkspaceId });
-  server.registerTool("xhs_open_login", { description: "打开小红书首页，等待人工登录", inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() } },
-    async (input: any) => {
-      const { dirId, workspaceId } = BK.parse(getParams(input));
-      const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
-        const page = await Pages.ensurePage(context, {});
-        await page.goto("https://www.xiaohongshu.com/", { waitUntil: "domcontentloaded" });
-        return { ok: true, url: page.url() };
-      });
-      return { content: [{ type: "text", text: JSON.stringify(res) }] };
-    }
-  );
 
-  // 会话检查（别名转发）
-  server.registerTool("xhs_check_session", { description: "检查当前会话是否已登录（弱信号）", inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() } },
-    async (input: any) => {
-      const { dirId, workspaceId } = BK.parse(getParams(input));
-      const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
-        const { checkSession } = await import("../../domain/xhs/session.js");
-        return checkSession(context);
-      });
-      return { content: [{ type: "text", text: JSON.stringify(res) }] };
-    }
-  );
 
   // 关闭当前笔记模态（原子操作）
-  server.registerTool("xhs_close_modal", { description: "关闭当前页的笔记详情模态窗口（Esc→关闭按钮→遮罩）", inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs_close_modal", { description: "关闭当前页的笔记详情模态窗口（Esc→关闭按钮→遮罩）", inputSchema: { dirId: DirId, workspaceId: WorkspaceId } },
     async (input: any) => {
       const { dirId, workspaceId } = BK.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
         const { closeModalIfOpen } = await import("../../domain/xhs/navigation.js");
         const closed = await closeModalIfOpen(page);
@@ -120,26 +60,33 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
   const NavigateHome = z.object({ dirId: DirId, workspaceId: WorkspaceId });
   server.registerTool('xhs.navigate.home', {
     description: '导航到小红书探索页（主页入口，包含所有频道导航）',
-    inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() }
+    inputSchema: { dirId: DirId, workspaceId: WorkspaceId }
   }, async (input: any) => {
     const { dirId, workspaceId } = NavigateHome.parse(getParams(input));
     const res = await policy.use(dirId, async () => {
+      let page: any;
       try {
-        const { context } = await manager.get(dirId, { workspaceId });
-        const page = await Pages.ensurePage(context, {});
-        await page.goto('https://www.xiaohongshu.com/explore', {
-          waitUntil: 'domcontentloaded'
-        });
-        return okRes({
-          target: 'home',
-          url: page.url(),
-          description: '已导航到探索页主页'
-        });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
+        page = await Pages.ensurePage(context, {});
+        await page.goto('https://www.xiaohongshu.com/explore', { waitUntil: 'domcontentloaded' });
+
+        // 轻量语义校验：尝试找到“发现”等关键可见文本；失败不立即报错，用 URL 作为弱验证
+        let verified = false;
+        try {
+          const loc = await resolveLocatorAsync(page, { text: '发现' } as any);
+          await loc.waitFor({ state: 'visible', timeout: 3000 });
+          verified = true;
+        } catch {}
+        const url = page.url();
+        if (!verified && /\/explore\b/.test(url)) verified = true;
+
+        // 登录/拦截判定（弱信号）
+        const requiresLogin = /(login|passport|account)/i.test(url) ? true : undefined;
+
+        return okRes({ target: 'home', url, verified, requiresLogin });
       } catch (e: any) {
-        return failRes({
-          code: 'NAVIGATE_HOME_FAILED',
-          message: String(e?.message || e)
-        });
+        const screenshotPath = page ? await screenshotOnError(page, dirId, 'navigate-home-error') : undefined;
+        return failRes({ code: ERRORS.NAVIGATE_FAILED, message: String(e?.message || e), screenshotPath });
       }
     });
     return { content: [{ type: 'text', text: JSON.stringify(res) }] };
@@ -149,38 +96,52 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
   const NavigateDiscover = z.object({ dirId: DirId, workspaceId: WorkspaceId });
   server.registerTool('xhs.navigate.discover', {
     description: '导航到小红书发现页（个性化推荐流），使用拟人化点击行为并监听 homefeed API',
-    inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() }
+    inputSchema: { dirId: DirId, workspaceId: WorkspaceId }
   }, async (input: any) => {
     const { dirId, workspaceId } = NavigateDiscover.parse(getParams(input));
     const res = await policy.use(dirId, async () => {
       let page: any;
       try {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         page = await Pages.ensurePage(context, {});
         await page.goto('https://www.xiaohongshu.com/explore', {
           waitUntil: 'domcontentloaded'
         });
-        const loc = await resolveLocatorAsync(page, { text: '发现' } as any);
-        await loc.waitFor({ state: 'visible', timeout: 5000 });
-        await clickHuman(page, loc);
-        await page.waitForLoadState('domcontentloaded');
-        let firstBatchCount: number | undefined;
-        try {
-          const resp = await page.waitForResponse((r:any) => r.url().includes('/api/sns/web/v1/homefeed'), { timeout: XHS_CONF.feed.waitApiMs });
-          const data: any = await resp.json().catch(() => undefined);
-          firstBatchCount = Array.isArray(data?.data?.items) ? data.data.items.length : undefined;
-        } catch {}
+        // 精确定位左侧导航“发现”链接（优先用稳定的 id + anchor），避免文本歧义
+        let target = page.locator('#explore-guide-refresh a.link-wrapper').first();
+        if (!(await target.isVisible().catch(() => false))) {
+          // 其一：在 navigation 区域内以角色定位
+          const navLink = page.getByRole('navigation').getByRole('link', { name: '发现' }).first();
+          if (await navLink.isVisible().catch(() => false)) target = navLink; else {
+            // 其二：以 href 语义与文本过滤定位
+            const byHref = page.locator('a[href*="/explore"]').filter({ hasText: '发现' }).first();
+            if (await byHref.isVisible().catch(() => false)) target = byHref; else {
+              // 兜底：span.channel 文本（点击该元素也可触发父 a）
+              const bySpan = page.locator('span.channel:has-text("发现")').first();
+              if (await bySpan.isVisible().catch(() => false)) target = bySpan;
+            }
+          }
+        }
+        let feedVerified = false; let feedItems: number | undefined; let feedTtfbMs: number | undefined;
+        if (await target.isVisible().catch(() => false)) {
+          const { waitHomefeed } = await import("../../domain/xhs/netwatch.js");
+          const feedW = waitHomefeed(page, XHS_CONF.feed.waitApiMs);
+          await clickHuman(page, target);
+          const r = await feedW.promise.catch(() => ({ ok: false } as any));
+          feedVerified = !!r.ok; feedItems = Array.isArray(r.data?.items) ? r.data?.items.length : undefined; feedTtfbMs = r.ttfbMs;
+        }
         return okRes({
           target: 'discover',
           url: page.url(),
-          verified: typeof firstBatchCount === 'number',
-          firstBatchCount,
-          description: '已通过模拟点击导航到发现页（推荐流）'
+          verified: feedVerified,
+          feedItems,
+          feedTtfbMs,
+          description: '已通过探索页/导航进入推荐流（接口回执软校验）'
         });
       } catch (e: any) {
         const screenshotPath = page ? await screenshotOnError(page, dirId, 'navigate-discover-error') : undefined;
         return failRes({
-          code: 'NAVIGATE_DISCOVER_FAILED',
+          code: ERRORS.NAVIGATE_FAILED,
           message: String(e?.message || e),
           screenshotPath
         });
@@ -192,11 +153,11 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
   // （移除）xhs_dump_html / xhs_detect_page：调试型工具不再通过 MCP 暴露。
   // 搜索关键词
   const Search = z.object({ dirId: DirId, keyword: z.string().min(1), workspaceId: WorkspaceId });
-  server.registerTool("xhs_search_keyword", { description: "关闭模态→点击搜索栏→输入关键词→点击搜索图标", inputSchema: { dirId: z.string().optional(), keyword: z.string(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs_search_keyword", { description: "关闭模态→点击搜索栏→输入关键词→点击搜索图标", inputSchema: { dirId: DirId, keyword: z.string(), workspaceId: WorkspaceId } },
     async (input: any) => {
       const { dirId, keyword, workspaceId } = Search.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
         const { searchKeyword } = await import("../../domain/xhs/search.js");
         const r = await searchKeyword(page, keyword);
@@ -208,11 +169,11 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
 
   // 根据关键词选择一条笔记
   const SelectNote = z.object({ dirId: DirId, keywords: Keywords, workspaceId: WorkspaceId });
-  server.registerTool("xhs_select_note", { description: "根据关键词选择笔记（关闭模态→若不在探索/发现/搜索则进发现→可视区域匹配并滚动重试→点击打开详情）", inputSchema: { dirId: z.string().optional(), keywords: z.array(z.string()), workspaceId: z.string().optional() } },
+  server.registerTool("xhs_select_note", { description: "根据关键词选择笔记（API 为准→DOM 侧证；强制等待详情 feed）", inputSchema: { dirId: DirId, keywords: z.array(z.string()), workspaceId: WorkspaceId } },
     async (input: any) => {
       const { dirId, keywords, workspaceId } = SelectNote.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
         const { ensureDiscoverPage, closeModalIfOpen, findAndOpenNoteByKeywords, detectPageType, PageType } = await import("../../domain/xhs/navigation.js");
 
@@ -223,94 +184,130 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
         if (![PageType.ExploreHome, PageType.Discover, PageType.Search].includes(type)) {
           await ensureDiscoverPage(page);
         }
-        // 3) 匹配可视区域并滚动重试（不与搜索页联动，不用 API 锚点）
-        const r = await findAndOpenNoteByKeywords(page, keywords, { maxScrolls: 18, scrollStep: 1600, settleMs: 250, useApiAfterScroll: false });
+        // 3) 匹配可视区域并滚动重试（API 精确锚点优先；滚动后“智能批次确认”开启）
+        const r = await findAndOpenNoteByKeywords(page, keywords, { maxScrolls: Number(process.env.XHS_SELECT_MAX_SCROLLS || 18), settleMs: 220, useApiAfterScroll: true, preferApiAnchors: true });
         if (!r.ok) return failRes({ code: 'NOTE_NOT_FOUND', message: '未在可视范围匹配到关键词' });
 
-        // 4) 进入详情后监听 feed（验证详情数据就绪）
-        let feedVerified = false; let feedItems: number | undefined; let feedType: string | undefined;
-        try {
-          const resp = await page.waitForResponse((rr:any) => rr.url().includes('/api/sns/web/v1/feed'), { timeout: XHS_CONF.feed.waitApiMs });
-          const data: any = await resp.json().catch(() => undefined);
-          const items = Array.isArray(data?.data?.items) ? data.data.items : [];
-          feedItems = items.length;
-          // 尝试解析类型（normal/video）
-          const first = items[0];
-          feedType = first?.note_card?.type || first?.type || undefined;
-          feedVerified = true;
-        } catch {}
+        // 4) API 为准：强制等待 feed，未验证到则报错（FEED_TIMEOUT）。
+        if (r.feedVerified !== true) {
+          return failRes({ code: ERRORS.FEED_TIMEOUT, message: '详情 feed 未到达或超时' });
+        }
+        // DOM 侧证（可选）：尝试提取 note 元信息，不影响成败
+        let noteId: string | undefined; let noteType: string | undefined;
+        try { noteId = await page.locator('.note-detail-mask[note-id]').first().getAttribute('note-id') || undefined; } catch {}
+        try { noteType = await page.locator('#noteContainer, .note-container').first().getAttribute('data-type') || undefined; } catch {}
 
-        return okRes({ opened: true, url: page.url(), matched: r.matched, feedVerified, feedItems, feedType });
+        return okRes({ opened: true, url: page.url(), matched: r.matched, noteId, noteType, feedVerified: r.feedVerified, feedItems: r.feedItems, feedType: r.feedType, feedTtfbMs: r.feedTtfbMs });
       });
       return { content: [{ type: "text", text: JSON.stringify(res) }] };
     }
   );
 
-  // 点赞/收藏/评论/滚动（当前笔记页）
-  const BKOnly = BK; const Comment = z.object({ dirId: DirId, commentText: z.string().min(1), workspaceId: WorkspaceId });
-  server.registerTool("xhs_like_current", { description: "点赞当前笔记", inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() } },
+  // —— 详情模态操作 —— 
+  const NoteOps = {
+    Like: z.object({ dirId: DirId, workspaceId: WorkspaceId }),
+    Comment: z.object({ dirId: DirId, commentText: z.string().min(1), workspaceId: WorkspaceId }),
+  } as const;
+
+  server.registerTool("xhs.note.like", { description: "在笔记详情模态内执行点赞，返回 newLike=true/false", inputSchema: { dirId: DirId, workspaceId: WorkspaceId } },
     async (input:any) => {
-      const { dirId, workspaceId } = BKOnly.parse(getParams(input));
+      const { dirId, workspaceId } = NoteOps.Like.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
-        // 启发式：优先 aria-label 其后文本兜底
-        const locators = [ { selector: '[aria-label*="赞" i]' }, { text: '赞' } ];
-        for (const l of locators) { try { const target = await resolveLocatorAsync(page, l as any); await clickHuman(page, target); return { ok: true }; } catch {} }
-        return { ok: false };
+        const { likeCurrent } = await import("../../domain/xhs/noteActions.js");
+        return await likeCurrent(page);
       });
-      return { content: [{ type: "text", text: JSON.stringify(res) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(res) }] };
     }
   );
 
-  server.registerTool("xhs_favorite_current", { description: "收藏当前笔记", inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs.note.unlike", { description: "在笔记详情模态内执行取消点赞", inputSchema: { dirId: DirId, workspaceId: WorkspaceId } },
     async (input:any) => {
-      const { dirId, workspaceId } = BKOnly.parse(getParams(input));
+      const { dirId, workspaceId } = NoteOps.Like.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
-        const locators = [ { selector: '[aria-label*="收藏" i]' }, { text: '收藏' } ];
-        for (const l of locators) { try { const target = await resolveLocatorAsync(page, l as any); await clickHuman(page, target); return { ok: true }; } catch {} }
-        return { ok: false };
+        const { unlikeCurrent } = await import("../../domain/xhs/noteActions.js");
+        return await unlikeCurrent(page);
       });
-      return { content: [{ type: "text", text: JSON.stringify(res) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(res) }] };
     }
   );
 
-  server.registerTool("xhs_comment_current", { description: "评论当前笔记", inputSchema: { dirId: z.string().optional(), commentText: z.string(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs.note.collect", { description: "在笔记详情模态内执行收藏", inputSchema: { dirId: DirId, workspaceId: WorkspaceId } },
     async (input:any) => {
-      const { dirId, commentText, workspaceId } = Comment.parse(getParams(input));
+      const { dirId, workspaceId } = NoteOps.Like.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
-        const box = await resolveLocatorAsync(page, { placeholder: '评论' } as any);
-        await clickHuman(page, box); await typeHuman(box, commentText + "\n", { wpm: 180 });
-        return { ok: true };
+        const { collectCurrent } = await import("../../domain/xhs/noteActions.js");
+        return await collectCurrent(page);
       });
-      return { content: [{ type: "text", text: JSON.stringify(res) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(res) }] };
     }
   );
 
-  server.registerTool("xhs_scroll_browse", { description: "拟人化滚动浏览", inputSchema: { dirId: z.string().optional(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs.note.uncollect", { description: "在笔记详情模态内执行取消收藏", inputSchema: { dirId: DirId, workspaceId: WorkspaceId } },
     async (input:any) => {
-      const { dirId, workspaceId } = BK.parse(getParams(input));
+      const { dirId, workspaceId } = NoteOps.Like.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
-        await scrollHuman(page, 2000);
-        return { ok: true };
+        const { uncollectCurrent } = await import("../../domain/xhs/noteActions.js");
+        return await uncollectCurrent(page);
       });
-      return { content: [{ type: "text", text: JSON.stringify(res) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(res) }] };
     }
   );
+
+  server.registerTool("xhs.note.comment", { description: "在笔记详情模态内发表评论（打开输入→输入→发送）", inputSchema: { dirId: DirId, commentText: z.string(), workspaceId: WorkspaceId } },
+    async (input:any) => {
+      const { dirId, commentText, workspaceId } = NoteOps.Comment.parse(getParams(input));
+      const res = await policy.use(dirId, async () => {
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
+        const page = await Pages.ensurePage(context, {});
+        const { commentCurrent } = await import("../../domain/xhs/noteActions.js");
+        return await commentCurrent(page, commentText);
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(res) }] };
+    }
+  );
+
+  server.registerTool("xhs.note.follow", { description: "在笔记详情模态内关注作者", inputSchema: { dirId: DirId, workspaceId: WorkspaceId } },
+    async (input:any) => {
+      const { dirId, workspaceId } = NoteOps.Like.parse(getParams(input));
+      const res = await policy.use(dirId, async () => {
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
+        const page = await Pages.ensurePage(context, {});
+        const { followAuthor } = await import("../../domain/xhs/noteActions.js");
+        return await followAuthor(page);
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(res) }] };
+    }
+  );
+
+  server.registerTool("xhs.note.unfollow", { description: "在笔记详情模态内取消关注作者", inputSchema: { dirId: DirId, workspaceId: WorkspaceId } },
+    async (input:any) => {
+      const { dirId, workspaceId } = NoteOps.Like.parse(getParams(input));
+      const res = await policy.use(dirId, async () => {
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
+        const page = await Pages.ensurePage(context, {});
+        const { unfollowAuthor } = await import("../../domain/xhs/noteActions.js");
+        return await unfollowAuthor(page);
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(res) }] };
+    }
+  );
+
 
   // 随机浏览 / 关键词浏览（流程）
   const Rand = z.object({ dirId: DirId, portraitId: z.string().optional(), behaviorProfile: z.string().optional(), workspaceId: WorkspaceId });
-  server.registerTool("xhs_random_browse", { description: "随机浏览（概率点赞/收藏）", inputSchema: { dirId: z.string().optional(), portraitId: z.string().optional(), behaviorProfile: z.string().optional(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs_random_browse", { description: "随机浏览（概率点赞/收藏）", inputSchema: { dirId: DirId, portraitId: z.string().optional(), behaviorProfile: z.string().optional(), workspaceId: WorkspaceId } },
     async (input:any) => {
       const { dirId, workspaceId } = Rand.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
         await scrollHuman(page, 1200);
         return { ok: true };
@@ -320,11 +317,11 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
   );
 
   const KeyBrowse = z.object({ dirId: DirId, keywords: Keywords, behaviorProfile: z.string().optional(), workspaceId: WorkspaceId });
-  server.registerTool("xhs_keyword_browse", { description: "关键词浏览（概率点赞/收藏）", inputSchema: { dirId: z.string().optional(), keywords: z.array(z.string()), behaviorProfile: z.string().optional(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs_keyword_browse", { description: "关键词浏览（概率点赞/收藏）", inputSchema: { dirId: DirId, keywords: z.array(z.string()), behaviorProfile: z.string().optional(), workspaceId: WorkspaceId } },
     async (input:any) => {
       const { dirId, keywords, workspaceId } = KeyBrowse.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
         await page.goto("https://www.xiaohongshu.com/", { waitUntil: 'domcontentloaded' });
         const box = await resolveLocatorAsync(page, { placeholder: '搜索' } as any);
@@ -339,11 +336,11 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
 
   // 数据采集
   const CapPage = z.object({ dirId: DirId, targetCount: z.number().int().positive(), workspaceId: WorkspaceId });
-  server.registerTool("xhs_capture_page_notes", { description: "采集当前页面笔记（可见范围）", inputSchema: { dirId: z.string().optional(), targetCount: z.number(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs_capture_page_notes", { description: "采集当前页面笔记（可见范围）", inputSchema: { dirId: DirId, targetCount: z.number(), workspaceId: WorkspaceId } },
     async (input:any) => {
       const { dirId, targetCount, workspaceId } = CapPage.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
         const rows = await page.evaluate((limit: number) => {
           const data: any[] = []; const cards = Array.from(document.querySelectorAll('a, article, div')) as HTMLElement[];
@@ -361,11 +358,11 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
   );
 
   const NoteCap = z.object({ dirId: DirId, keywords: Keywords, targetCount: z.number().int().positive(), workspaceId: WorkspaceId });
-  server.registerTool("xhs_note_capture", { description: "按关键词批量采集笔记", inputSchema: { dirId: z.string().optional(), keywords: z.array(z.string()), targetCount: z.number(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs_note_capture", { description: "按关键词批量采集笔记", inputSchema: { dirId: DirId, keywords: z.array(z.string()), targetCount: z.number(), workspaceId: WorkspaceId } },
     async (input:any) => {
       const { dirId, keywords, targetCount, workspaceId } = NoteCap.parse(getParams(input));
       const res = await policy.use(dirId, async () => {
-        const { context } = await manager.get(dirId, { workspaceId });
+        const { context } = await manager.getHealthy(dirId, { workspaceId });
         const page = await Pages.ensurePage(context, {});
         await page.goto('https://www.xiaohongshu.com/', { waitUntil: 'domcontentloaded' });
         const box = await resolveLocatorAsync(page, { placeholder: '搜索' } as any);
@@ -390,7 +387,7 @@ export function registerXhsShortcutsTools(server: McpServer, connector: IPlaywri
 
   // 发布笔记（草稿）
   const Publish = z.object({ dirId: DirId, imagePaths: z.array(z.string()).nonempty(), title: z.string(), content: z.string(), saveAsDraft: z.boolean().optional(), workspaceId: WorkspaceId });
-  server.registerTool("xhs_publish_note", { description: "上传图片、填写标题和正文（默认保存草稿）", inputSchema: { dirId: z.string().optional(), imagePaths: z.array(z.string()), title: z.string(), content: z.string(), saveAsDraft: z.boolean().optional(), workspaceId: z.string().optional() } },
+  server.registerTool("xhs_publish_note", { description: "上传图片、填写标题和正文（默认保存草稿）", inputSchema: { dirId: DirId, imagePaths: z.array(z.string()), title: z.string(), content: z.string(), saveAsDraft: z.boolean().optional(), workspaceId: WorkspaceId } },
     async (input:any) => {
       const { dirId, imagePaths, title, content } = Publish.parse(getParams(input));
       const res = await policy.use(dirId, async () => {

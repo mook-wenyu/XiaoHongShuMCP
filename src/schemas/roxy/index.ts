@@ -36,15 +36,11 @@ export {
 	WindowListResponseSchema,
 	WindowCreateRequestSchema,
 	WindowCreateResponseSchema,
-	WindowDetailParamsSchema,
-	WindowDetailResponseSchema,
 	type Window,
 	type WindowListParams,
 	type WindowListResponse,
 	type WindowCreateRequest,
 	type WindowCreateResponse,
-	type WindowDetailParams,
-	type WindowDetailResponse,
 } from "./window.js";
 
 // 连接相关 Schema 和类型

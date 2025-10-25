@@ -19,8 +19,6 @@ import type {
 	WindowListResponse,
 	WindowCreateRequest,
 	WindowCreateResponse,
-	WindowDetailParams,
-	WindowDetailResponse,
 	ConnectionInfo,
 	ConnectionInfoResponse,
 	ApiResponse,
@@ -80,12 +78,7 @@ export interface IRoxyClient {
 	 */
 	createWindow(body: WindowCreateRequest): Promise<WindowCreateResponse>;
 
-	/**
-	 * 获取窗口详情
-	 * @param params 窗口详情查询参数（workspaceId 和 dirId 都是必需的）
-	 * @returns 窗口详情响应
-	 */
-	detailWindow(params: WindowDetailParams): Promise<WindowDetailResponse>;
+	// detailWindow 已移除：不再暴露窗口详情接口，避免与非关键 API 的耦合
 
 	/**
 	 * 生成窗口随机指纹

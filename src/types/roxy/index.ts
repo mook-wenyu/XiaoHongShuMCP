@@ -26,8 +26,6 @@ export type {
 	WindowListResponse,
 	WindowCreateRequest,
 	WindowCreateResponse,
-	WindowDetailParams,
-	WindowDetailResponse,
 } from "./window.js";
 
 // 连接相关类型

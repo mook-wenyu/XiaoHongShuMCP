@@ -98,17 +98,47 @@ export class ConnectionManager implements IConnectionManager {
 			return existing;
 		}
 
-		this.logger?.debug({ dirId, workspaceId: opts?.workspaceId }, "创建新连接");
-		const { browser, context } = await this.connector.connect(dirId, opts);
+		// 注入默认 workspaceId（来自环境变量 ROXY_DEFAULT_WORKSPACE_ID），减少上层必传参数
+		const defaultWs = process.env.ROXY_DEFAULT_WORKSPACE_ID;
+		// 仅当存在默认 workspaceId 或调用方显式传入时才构造 opts；否则保持 undefined 以满足既有单测期望
+		const effOpts: OpenOptions | undefined = (opts && typeof opts === 'object')
+			? { ...opts }
+			: (defaultWs ? { workspaceId: defaultWs } : undefined);
+		if (effOpts && (effOpts as any).workspaceId === undefined && defaultWs) {
+			(effOpts as any).workspaceId = defaultWs;
+		}
+
+		this.logger?.debug({ dirId, workspaceId: effOpts?.workspaceId }, "创建新连接");
+		const { browser, context } = await this.connector.connect(dirId, effOpts);
 		const mc: ManagedConn = {
 			browser,
 			context,
-			workspaceId: opts?.workspaceId,
+			workspaceId: effOpts?.workspaceId,
 			lastUsed: Date.now(),
 		};
 		this.map.set(dirId, mc);
 		this.logger?.info({ dirId, totalConnections: this.map.size }, "连接已创建");
 		return mc;
+	}
+
+	/**
+	 * 获取健康连接：若现有连接不健康则自动重建
+	 */
+	async getHealthy(dirId: string, opts?: OpenOptions): Promise<ManagedConn> {
+		const existing = this.map.get(dirId);
+		if (existing) {
+			// 轻量健康检查（新建并关闭一页）
+			try {
+				const page = await existing.context.newPage();
+				await page.close();
+				existing.lastUsed = Date.now();
+				return existing;
+			} catch {
+				this.logger?.warn({ dirId }, "连接不健康，准备重建");
+				await this.close(dirId).catch(() => {});
+			}
+		}
+		return this.get(dirId, opts);
 	}
 
 	has(dirId: string) {

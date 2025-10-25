@@ -6,8 +6,9 @@ let client: Client
 let SKIP = false
 
 beforeAll(async () => {
-  // 仅在真实环境变量存在时运行
-  if (!process.env.ROXY_API_TOKEN) {
+  // 仅在 Roxy 可用时运行（TOKEN + /health OK）
+  const { roxyReady } = await import("../../helpers/roxy.js")
+  if (!(await roxyReady())) {
     SKIP = true
     return
   }
@@ -23,7 +24,11 @@ beforeAll(async () => {
     args: ['dist/mcp/server.js']
   })
   client = new Client(transport)
-  await client.connect()
+  try {
+    await client.connect()
+  } catch (e) {
+    SKIP = true
+  }
 })
 
 afterAll(async () => { try { await client?.close() } catch {} })

@@ -55,11 +55,12 @@ async function main() {
 	registerXhsShortcutsTools(server, connector, policy);
 
 	server.registerTool("roxy.openDir", {
-		description: "打开 Roxy 窗口（建立账号上下文=窗口）",
+		description: "打开 Roxy 窗口（dirId 必填；workspaceId 可选，默认取 ROXY_DEFAULT_WORKSPACE_ID；建立账号上下文=窗口）",
 		inputSchema: { dirId: z.string(), workspaceId: z.string().optional() }
 	}, async (input: any) => {
 		const { dirId, workspaceId } = OpenParams.parse(getParams(input));
-		const { context } = await connectionManager.get(dirId, { workspaceId });
+		const ws = workspaceId ?? process.env.ROXY_DEFAULT_WORKSPACE_ID;
+		const { context } = await connectionManager.get(dirId, { workspaceId: ws });
 		return {
 			content: [{
 				type: "text",
@@ -69,7 +70,7 @@ async function main() {
 	});
 
 	server.registerTool("roxy.closeDir", {
-		description: "关闭 Roxy 窗口（dirId）",
+		description: "关闭 Roxy 窗口（dirId 必填）",
 		inputSchema: { dirId: z.string() }
 	}, async (input: any) => {
 		const { dirId } = CloseParams.parse(getParams(input));
@@ -91,8 +92,9 @@ async function main() {
 		inputSchema: { dirId: z.string(), workspaceId: z.string().optional() }
 	}, async (input: any) => {
 		const { dirId, workspaceId } = OpenParams.parse(getParams(input));
+		const ws = workspaceId ?? process.env.ROXY_DEFAULT_WORKSPACE_ID;
 		const { checkSession } = await import("../domain/xhs/session.js");
-		const { context } = await connectionManager.get(dirId, { workspaceId });
+		const { context } = await connectionManager.get(dirId, { workspaceId: ws });
 		const r = await checkSession(context);
 		return { content: [{ type: "text", text: JSON.stringify(r) }] };
 	});

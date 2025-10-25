@@ -38,6 +38,24 @@ export const ConnectionInfoSchema = z.object({
 	http: z.string().optional().describe("HTTP 端点"),
 });
 
+// 宽容解析：兼容不同返回字段（ws_url/websocket/endpoint.ws/cdpWs/cdp_ws）并转为标准形态
+const ConnectionInfoLooseSchema = z
+	.object({
+		id: z.union([z.string(), z.number()]).optional(),
+		ws_url: z.string().min(1).optional(),
+		websocket: z.string().min(1).optional(),
+		endpoint: z.object({ ws: z.string().min(1).optional(), http: z.string().optional() }).optional(),
+		cdpWs: z.string().min(1).optional(),
+		cdp_ws: z.string().min(1).optional(),
+		http: z.string().optional(),
+	})
+	.transform((d) => {
+		const ws = d.ws_url || d.websocket || d.cdpWs || d.cdp_ws || d.endpoint?.ws;
+		const http = d.http || d.endpoint?.http;
+		return { id: (typeof d.id === 'string' ? d.id : (d.id != null ? String(d.id) : undefined)), ws, http };
+	})
+	.refine((x) => typeof x.ws === 'string' && x.ws.length > 0, { message: 'ws missing' });
+
 /**
  * 从 Schema 推断的连接信息类型
  */
@@ -59,7 +77,7 @@ export type OpenResponse = z.infer<typeof OpenResponseSchema>;
 /**
  * 关闭窗口响应 Schema
  */
-export const CloseResponseSchema = ApiResponseSchema(z.null());
+export const CloseResponseSchema = ApiResponseSchema(z.null().optional());
 
 /**
  * 从 Schema 推断的关闭窗口响应类型
@@ -73,7 +91,7 @@ export type CloseResponse = z.infer<typeof CloseResponseSchema>;
  * data 字段可以为 null（当查询的窗口不存在时）
  */
 export const ConnectionInfoResponseSchema = ApiResponseSchema(
-	z.array(ConnectionInfoSchema).nullable()
+	z.array(z.union([ConnectionInfoSchema, ConnectionInfoLooseSchema])).nullable()
 );
 
 /**

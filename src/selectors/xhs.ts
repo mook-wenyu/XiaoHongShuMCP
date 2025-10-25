@@ -45,6 +45,8 @@ export const XhsSelectors = {
   noteAnchor(): TargetHints {
     return {
       alternatives: [
+        // 搜索结果页：/search_result/{noteId}
+        { selector: 'a[href*="/search_result/"]' },
         // 搜索列表：/discovery/item/{noteId}
         { selector: 'a[href*="/discovery/item/"]' },
         // 发现/探索：/explore/{noteId}

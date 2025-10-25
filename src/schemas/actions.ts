@@ -1,7 +1,9 @@
 /* 中文注释：action.* 工具的通用入参 Schema */
 import { z } from "zod"
 
-export const DirId = z.string().default("user")
+// dirId 必须显式提供（不再提供默认值）
+export const DirId = z.string().min(1)
+// workspaceId 依然可选；未提供时由调用方或连接管理器回退至 ROXY_DEFAULT_WORKSPACE_ID
 export const WorkspaceId = z.string().optional()
 export const PageIndex = z.number().int().nonnegative().optional()
 // 兼容 Steps TargetHints 与直接选择器（字符串）

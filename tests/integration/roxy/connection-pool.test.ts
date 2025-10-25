@@ -9,8 +9,9 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-const hasToken = !!process.env.ROXY_API_TOKEN;
-const describeIf = hasToken ? describe : (describe.skip as typeof describe);
+import { roxySupportsOpen } from "../../helpers/roxy.js";
+const ready = await roxySupportsOpen();
+const describeIf = ready ? describe : (describe.skip as typeof describe);
 import { ConfigProvider } from "../../../src/config/ConfigProvider.js";
 import { ServiceContainer } from "../../../src/core/container.js";
 import { ConnectionManager } from "../../../src/services/connectionManager.js";

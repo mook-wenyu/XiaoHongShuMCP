@@ -37,11 +37,12 @@
 		"report:selectors": "tsx scripts/selector-health-report.ts",
 		"bench:human": "tsx scripts/bench-humanization.ts",
 		"smoke:local": "tsx scripts/open-and-screenshot-local.ts",
+		"xhs:note:demo": "tsx scripts/xhs-note-actions-repro.ts",
 		"postinstall": "playwright install chromium"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.20.1",
-		"@sentry/node": "^10.21.0",
+
 		"dotenv": "^16.4.5",
 		"p-queue": "^8.0.1",
 		"pino": "^9.3.2",

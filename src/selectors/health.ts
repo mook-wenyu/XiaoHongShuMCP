@@ -7,6 +7,7 @@ export interface SelectorHealth {
   failureCount: number;
   successRate: number; // 0-1
   avgDurationMs: number;
+  p95DurationMs?: number; // 新增：P95
   lastUsed: Date;
 }
 
@@ -71,6 +72,13 @@ export class SelectorHealthMonitor {
     const avgDurationMs = stats.durations.length > 0
       ? stats.durations.reduce((sum, d) => sum + d, 0) / stats.durations.length
       : 0;
+    // 计算 P95（最近样本，升序取 ceil(0.95*n)-1）
+    let p95: number | undefined = undefined;
+    if (stats.durations.length > 0) {
+      const sorted = [...stats.durations].sort((a, b) => a - b);
+      const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * 0.95) - 1));
+      p95 = sorted[idx];
+    }
 
     return {
       selectorId,
@@ -79,6 +87,7 @@ export class SelectorHealthMonitor {
       failureCount,
       successRate,
       avgDurationMs,
+      p95DurationMs: p95,
       lastUsed: stats.lastUsed,
     };
   }

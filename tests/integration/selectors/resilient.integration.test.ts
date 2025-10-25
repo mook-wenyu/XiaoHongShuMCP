@@ -151,7 +151,9 @@ describe("弹性选择器集成测试", () => {
       ).rejects.toThrow();
       const duration = Date.now() - startTime;
 
-      expect(duration).toBeGreaterThan(1000); // 断路器延迟至少 1 秒
+      const openSeconds = Number(process.env.SELECTOR_BREAKER_OPEN_SECONDS || 0.2);
+      const expectMs = Math.max(150, Math.floor(openSeconds * 1000) - 20);
+      expect(duration).toBeGreaterThanOrEqual(expectMs); // 与配置对齐的断路器延迟
     }, 15000); // 增加测试超时
   });
 

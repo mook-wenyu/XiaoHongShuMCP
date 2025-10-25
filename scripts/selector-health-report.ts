@@ -47,8 +47,8 @@ async function ingestFile(p: string) {
 }
 
 function toCsv(rows: any[]) {
-  const header = ["selectorId","totalCount","successCount","failureCount","successRate","avgDurationMs","lastUsed"];
-  const body = rows.map(r => [r.selectorId, r.totalCount, r.successCount, r.failureCount, r.successRate, r.avgDurationMs, r.lastUsed].join(","));
+  const header = ["selectorId","totalCount","successCount","failureCount","successRate","avgDurationMs","p95DurationMs","lastUsed"];
+  const body = rows.map(r => [r.selectorId, r.totalCount, r.successCount, r.failureCount, r.successRate, r.avgDurationMs, r.p95DurationMs ?? '', r.lastUsed].join(","));
   return [header.join(","), ...body].join("\n");
 }
 

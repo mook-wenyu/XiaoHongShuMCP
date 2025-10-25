@@ -11,6 +11,18 @@ export const XHS_CONF = {
     maxScrolls: Number(process.env.XHS_SCROLL_MAX_SCROLLS || 20),
     step: Number(process.env.XHS_SCROLL_STEP || 1400),
     settleMs: Number(process.env.XHS_SCROLL_SETTLE_MS || 250),
+    // 智能批次确认参数（滚动后）
+    useApiAfterScroll: (String(process.env.XHS_SCROLL_USE_API_AFTER || 'true').toLowerCase() !== 'false'),
+    shortFeedWaitMs: Number(process.env.XHS_SCROLL_SHORT_FEED_WAIT_MS || 1500),
+    shortSearchWaitMs: Number(process.env.XHS_SCROLL_SHORT_SEARCH_WAIT_MS || 1500),
+    microScrollOnNoProgressPx: Number(process.env.XHS_SCROLL_MICRO_ON_NOPROGRESS_PX || 120),
+    noProgressRoundsForBoost: Number(process.env.XHS_SCROLL_NOPROGRESS_ROUNDS || 2),
+    boostScrollMinPx: Number(process.env.XHS_SCROLL_BOOST_MIN_PX || 1200),
+    // 防跳过参数：重叠与保留率
+    overlapAnchors: Number(process.env.XHS_SCROLL_OVERLAP_ANCHORS || 3),
+    overlapRatio: Number(process.env.XHS_SCROLL_OVERLAP_RATIO || 0.25), // 视口重叠比例（0.05–0.6）
+    retentionMin: Number(process.env.XHS_SCROLL_RETENTION_MIN || 0.6),   // 可视卡片保留率阈值（触发回退）
+    backtrackPx: Number(process.env.XHS_SCROLL_BACKTRACK_PX || 0),       // 如为 0 则按视口比例计算
   },
   selector: {
     probeTimeoutMs: Number(process.env.XHS_SELECTOR_PROBE_MS || 250),

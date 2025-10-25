@@ -427,16 +427,7 @@ describe("RoxyClient 服务单元测试", () => {
 			);
 		});
 
-		it("应该获取窗口详情", async () => {
-			mockFetch.mockResolvedValue(createMockResponse({ data: { id: "window-123", name: "Test" } }));
-
-			await roxyClient.detailWindow({ workspaceId: "ws-123", dirId: "test-dir-1" });
-
-			expect(mockFetch).toHaveBeenCalledWith(
-				"https://api.example.com/browser/detail?workspaceId=ws-123&dirId=test-dir-1",
-				expect.any(Object)
-			);
-		});
+		// 已移除：detailWindow 不再对外暴露（减少不必要的 API 依赖）
 	});
 
 	describe("查询字符串构建", () => {

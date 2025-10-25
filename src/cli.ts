@@ -33,7 +33,7 @@ import { runTaskByName, listTasks } from "./tasks/registry.js";
 		const limit = Number(parseArg("limit", process.argv, String(dirIds.length))) || dirIds.length;
 		dirIds = dirIds.slice(0, Math.min(limit, dirIds.length));
 
-		const workspaceId = parseArg("workspace-id", process.argv) || parseArg("workspaceId", process.argv);
+		const workspaceId = parseArg("workspace-id", process.argv) || parseArg("workspaceId", process.argv) || process.env.ROXY_DEFAULT_WORKSPACE_ID;
 
 		// 创建服务
 		const roxy = container.createRoxyClient();

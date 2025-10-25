@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { domainSlugFromUrl } from '../src/selectors/config.js'
+import { domainSlugFromUrl } from '../src/lib/url.js'
 
 describe('domainSlugFromUrl', () => {
   it('extracts second-level domain as slug', () => {
