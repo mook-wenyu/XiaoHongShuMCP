@@ -130,7 +130,6 @@
 | 日志 | LOG_LEVEL/LOG_PRETTY | ✅ | ✅ | - |
 | 日志 | MCP_LOG_STDERR | ✅ | ✅ | - |
 | 快照 | SNAPSHOT_MAX_NODES | ✅ | ✅ | ✅ |
-| 适配器 | OFFICIAL_ADAPTER_REQUIRED | ✅ | ✅ | ✅ |
 | 拟人化 | HUMAN_PROFILE | ✅ | ✅ | ✅ |
 | 拟人化 | HUMAN_TRACE_LOG | ✅ | ✅ | ✅ |
 | 废弃 | ENABLE_ROXY_ADMIN_TOOLS | ✅ | ✅ | ✅ |

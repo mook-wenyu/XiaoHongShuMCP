@@ -23,7 +23,6 @@
 - `ROXY_API_BASEURL` 或 `ROXY_API_HOST` + `ROXY_API_PORT`
 - `ROXY_DEFAULT_WORKSPACE_ID`（可选，用于默认上下文）
 - `SNAPSHOT_MAX_NODES`（页面快照节点上限，默认 800）
-- `OFFICIAL_ADAPTER_REQUIRED`（默认 `true`。官方桥接包不可用时是否终止 MCP 启动）
 - `HUMAN_PROFILE`（`default`/`cautious`/`rapid`），决定鼠标/滚动/输入节律的默认值
 - `HUMAN_TRACE_LOG`（可选，设为 `true` 将拟人化事件落盘到 `artifacts/<dirId>/human-trace.ndjson`）
 
@@ -34,7 +33,6 @@
 - **小红书配置**: `XHS_SCROLL_*`, `XHS_SELECT_MAX_SCROLLS`, `DEFAULT_URL`
 - **日志**: `LOG_LEVEL`, `LOG_PRETTY`, `MCP_LOG_STDERR`
 - **拟人化**: `HUMAN_PROFILE`, `HUMAN_TRACE_LOG`
-- **兼容性**: `OFFICIAL_ADAPTER_REQUIRED`
 
 **废弃变量**：
 - `ENABLE_ROXY_ADMIN_TOOLS`（自 0.2.x 起 `roxy.*` 管理工具默认注册，无需开关）
@@ -79,17 +77,6 @@ npm run build
 2) 启动 MCP Server（stdio）
 ```
 npm run mcp
-```
-提示：若未安装官方 RoxyBrowser Playwright MCP 桥接包（候选如 `@roxybrowser/playwright-mcp`），在 `OFFICIAL_ADAPTER_REQUIRED=true`（默认）时将退出；设为 `false` 可允许服务继续启动，但浏览器相关工具将不可用。可执行：
-
-```
-npm run advisor:official   # 自动给出一键安装命令（按当前包管理器）
-```
-
-在内网/私有源环境，请在 `.npmrc` 配置作用域 registry 后再安装，例如：
-
-```
-@roxybrowser:registry=https://registry.npmjs.org/
 ```
 
 ---
@@ -145,9 +132,12 @@ npm run advisor:official   # 自动给出一键安装命令（按当前包管理
 
 ---
 
-## 适配层（Adapter）策略
-- 优先尝试官方 Playwright MCP 桥接包（多名称候选，动态加载并读取版本）。若可用，走官方上下文 `getContext/openContext`；否则依据 `OFFICIAL_ADAPTER_REQUIRED` 决定是否终止。
-- 能力探针：调用 `server.capabilities` 可查看 `{ adapter:"official", roxyBridge:{loaded,package,version}, adminTools:true }`。
+## RoxyBrowser 集成架构
+- 直接通过 RoxyBrowser REST API 获取 CDP WebSocket 端点
+- 使用 Playwright 官方的 `chromium.connectOverCDP()` 方法连接浏览器
+- 每个 `dirId` 对应一个持久化 BrowserContext（由 RoxyBrowser 管理）
+- RoxyBrowserManager 负责连接管理、Context 缓存和生命周期控制
+- 能力探针：调用 `server.capabilities` 可查看 `{ adapter:"roxyBrowser", version, integration, adminTools }`
 
 ---
 
@@ -179,16 +169,8 @@ npm run advisor:official   # 自动给出一键安装命令（按当前包管理
 ## 变更要点（0.2.x）
 - 仅保留官方命名 `browser.*` / `page.*` 作为唯一标准；移除 roxy.* 浏览别名以降低心智负担。
 - 高权限管理类 `roxy.*` 默认注册（无需环境变量开关）。
-- 官方桥接包不可用时可通过 `OFFICIAL_ADAPTER_REQUIRED=false` 继续（但浏览器相关工具不可用）。
+- 架构升级：移除适配层抽象，直接使用 Playwright CDP 连接 RoxyBrowser。
 - 页面快照节点上限受 `SNAPSHOT_MAX_NODES` 保护。
-
----
-
-## 官方桥接安装指引
-若启动提示官方桥接不可用，可运行：
-```
-npm run advisor:official
-```
 
 ---
 

@@ -2,7 +2,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServiceContainer } from "../../core/container.js";
-import type { IAdapter } from "../../adapter/IAdapter.js";
+import type { RoxyBrowserManager } from "../../services/roxyBrowser.js";
 import { ok } from "../utils/result.js";
 import { err } from "../utils/errors.js";
 import { promises as fs } from "node:fs";
@@ -28,7 +28,7 @@ async function listFiles(root: string): Promise<string[]> {
   return out.sort();
 }
 
-export function registerResourceTools(server: McpServer, container: ServiceContainer, adapter: IAdapter) {
+export function registerResourceTools(server: McpServer, container: ServiceContainer, manager: RoxyBrowserManager) {
   // resources.listArtifacts
   server.registerTool("resources.listArtifacts", {
     description: "列出 artifacts/<dirId> 下的文件（相对路径数组）",
@@ -69,7 +69,7 @@ export function registerResourceTools(server: McpServer, container: ServiceConta
   }, async (input: any) => {
     try {
       const { dirId, pageIndex, workspaceId, maxNodes } = input as any;
-      const { context } = await adapter.getContext(dirId, { workspaceId });
+      const context = await manager.getContext(dirId, { workspaceId });
       const page = await Pages.ensurePage(context, { pageIndex });
       const snap = await page.accessibility.snapshot({ interestingOnly: true }).catch(() => undefined);
       const result = (() => {

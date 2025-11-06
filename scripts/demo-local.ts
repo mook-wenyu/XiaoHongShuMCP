@@ -8,7 +8,6 @@ import { ServiceContainer } from "../src/core/container.js";
 import { parseArg, parseDirIds } from "../src/utils/cliParser.js";
 import { runDirIds } from "../src/runner/multiAccountRunner.js";
 import { runTaskByName } from "../src/tasks/registry.js";
-import { OfficialAdapter } from "../src/adapter/OfficialAdapter.js";
 
 (async () => {
   const provider = ConfigProvider.load();
@@ -23,12 +22,12 @@ import { OfficialAdapter } from "../src/adapter/OfficialAdapter.js";
 
   const payload: any = { url };
   const task = runTaskByName(taskName);
-  const adapter = new OfficialAdapter(container);
+  const manager = container.createRoxyBrowserManager();
   const policy = container.createPolicyEnforcer();
 
   const res = await runDirIds(
     dirIds,
-    { getContext: (id) => adapter.getContext(id) } as any,
+    { getContext: (id) => manager.getContext(id) } as any,
     (ctx, id) => task(ctx, id, payload),
     { concurrency: cfg.MAX_CONCURRENCY, timeoutMs: cfg.TIMEOUT_MS, policy, taskName }
   );

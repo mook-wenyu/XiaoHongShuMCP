@@ -14,7 +14,6 @@
   - **必填**: `ROXY_API_TOKEN`
   - **连接**: `ROXY_API_BASEURL` 或 `ROXY_API_HOST/PORT`
   - **上下文**: `ROXY_DEFAULT_WORKSPACE_ID`, `ROXY_DIR_IDS`
-  - **适配器**: `OFFICIAL_ADAPTER_REQUIRED`（默认 true）
   - **拟人化**: `HUMAN_PROFILE`（default/cautious/rapid）, `HUMAN_TRACE_LOG`
   - **选择器**: `SELECTOR_RETRY_*`, `SELECTOR_BREAKER_*`
   - **快照**: `SNAPSHOT_MAX_NODES`（默认 800）
@@ -49,9 +48,11 @@
 - 拟人化：默认开启（无需传参）；支持贝塞尔曲线、轻过冲、终点微抖动；滚动分段+缓动曲线+微/宏停顿；可通过 `human=false` 或 `human.enabled=false` 关闭，或传入参数细化节律。
 - 选择器：`resolveLocatorResilient` 优先语义（role/name/label/testId/text）→ CSS 兜底；失败/耗时写入 `artifacts/selector-health.ndjson`，`scripts/selector-health-report.ts` 汇总 p95 等。
 
-## 适配层（Adapter）
-- 接口：`src/adapter/IAdapter.ts:1`。
-- 官方：`OfficialAdapter` 动态尝试加载 roxybrowser 官方 Playwright MCP 桥接包（若存在），否则按 `OFFICIAL_ADAPTER_REQUIRED` 决定是否终止（默认终止）。
+## RoxyBrowser 集成架构
+- 核心类：`src/services/roxyBrowser.ts:26` - `RoxyBrowserManager`
+- 实现方式：直接调用 RoxyBrowser REST API 获取 CDP WebSocket 端点，使用 Playwright 的 `chromium.connectOverCDP()` 连接
+- Context 管理：每个 dirId 对应一个持久化 BrowserContext，支持缓存与连接验证
+- 生命周期：由 ServiceContainer 协调，支持优雅关闭与资源清理
 
 ## 测试与验证
 - 单测优先覆盖：纯函数计划层、人机轨迹、选择器与错误路径。

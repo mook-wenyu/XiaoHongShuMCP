@@ -4,7 +4,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServiceContainer } from "../../core/container.js";
-import type { IAdapter } from "../../adapter/IAdapter.js";
+import type { RoxyBrowserManager } from "../../services/roxyBrowser.js";
 import { ok } from "../utils/result.js";
 import { err, mapError } from "../utils/errors.js";
 import { resolveLocatorAsync } from "../../selectors/index.js";
@@ -74,7 +74,7 @@ function buildScrollOptions(human: any | undefined, container: ServiceContainer)
   }
 }
 
-export function registerPageToolsWithPrefix(server: McpServer, container: ServiceContainer, adapter: IAdapter, prefix = "page") {
+export function registerPageToolsWithPrefix(server: McpServer, container: ServiceContainer, manager: RoxyBrowserManager, prefix = "page") {
   const name = (n: string) => `${prefix}.${n}`;
 
   // create
@@ -84,7 +84,7 @@ export function registerPageToolsWithPrefix(server: McpServer, container: Servic
   }, async (input: any) => {
     try {
       const { dirId, url, workspaceId } = input as any;
-      const r = await adapter.createPage(dirId, url, { workspaceId });
+      const r = await manager.createPage(dirId, url, { workspaceId });
       return { content: [{ type: "text", text: JSON.stringify(ok(r)) }] };
     } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify(err("INTERNAL_ERROR", String(e?.message || e))) }] }; }
   });
@@ -96,7 +96,7 @@ export function registerPageToolsWithPrefix(server: McpServer, container: Servic
   }, async (input: any) => {
     try {
       const { dirId, workspaceId } = input as any;
-      const r = await adapter.listPages(dirId, { workspaceId });
+      const r = await manager.listPages(dirId, { workspaceId });
       return { content: [{ type: "text", text: JSON.stringify(ok(r)) }] };
     } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify(err("INTERNAL_ERROR", String(e?.message || e))) }] }; }
   });
@@ -108,7 +108,7 @@ export function registerPageToolsWithPrefix(server: McpServer, container: Servic
   }, async (input: any) => {
     try {
       const { dirId, pageIndex, workspaceId } = input as any;
-      const r = await adapter.closePage(dirId, pageIndex, { workspaceId });
+      const r = await manager.closePage(dirId, pageIndex, { workspaceId });
       return { content: [{ type: "text", text: JSON.stringify(ok(r)) }] };
     } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify(err("INTERNAL_ERROR", String(e?.message || e))) }] }; }
   });
@@ -120,7 +120,7 @@ export function registerPageToolsWithPrefix(server: McpServer, container: Servic
   }, async (input: any) => {
     const { dirId, url, pageIndex, workspaceId } = input as any;
     try {
-      const r = await adapter.navigate(dirId, url, pageIndex, { workspaceId });
+      const r = await manager.navigate(dirId, url, pageIndex, { workspaceId });
       return { content: [{ type: "text", text: JSON.stringify(ok(r)) }] };
     } catch (e: any) {
       return { content: [{ type: "text", text: JSON.stringify(mapError(e, "navigate", { dirId, url })) }] };
@@ -128,7 +128,7 @@ export function registerPageToolsWithPrefix(server: McpServer, container: Servic
   });
 
   async function withPage(dirId: string, pageIndex: number | undefined, workspaceId: string | undefined) {
-    const { context } = await adapter.getContext(dirId, { workspaceId });
+    const context = await manager.getContext(dirId, { workspaceId });
     const page = await Pages.ensurePage(context, { pageIndex });
     return { context, page };
   }
@@ -277,7 +277,7 @@ export function registerPageToolsWithPrefix(server: McpServer, container: Servic
   }, async (input: any) => {
     try {
       const { dirId, pageIndex, workspaceId, fullPage } = input as any;
-      const r = await adapter.screenshot(dirId, pageIndex, fullPage, { workspaceId });
+      const r = await manager.screenshot(dirId, pageIndex, fullPage, { workspaceId });
       const base64 = r.buffer.toString("base64");
       return {
         content: [
@@ -289,6 +289,6 @@ export function registerPageToolsWithPrefix(server: McpServer, container: Servic
   });
 }
 
-export function registerPageTools(server: McpServer, container: ServiceContainer, adapter: IAdapter) {
-  return registerPageToolsWithPrefix(server, container, adapter, "page");
+export function registerPageTools(server: McpServer, container: ServiceContainer, manager: RoxyBrowserManager) {
+  return registerPageToolsWithPrefix(server, container, manager, "page");
 }

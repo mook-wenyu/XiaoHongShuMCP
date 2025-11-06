@@ -1,9 +1,8 @@
-/* MCP 服务器（stdio） - 官方规范工具命名 */
+/* MCP 服务器（stdio） - RoxyBrowser + Playwright 集成 */
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ConfigProvider } from "../config/ConfigProvider.js";
 import { ServiceContainer } from "../core/container.js";
-import { OfficialAdapter } from "../adapter/OfficialAdapter.js";
 import { registerBrowserTools } from "./tools/browser.js";
 import { registerPageTools } from "./tools/page.js";
 import { registerXhsTools } from "./tools/xhs.js";
@@ -21,18 +20,7 @@ async function main() {
   const container = new ServiceContainer(config, { loggerSilent: true });
   const logger = container.createLogger({ module: "mcp" });
 
-  const adapter = new OfficialAdapter(container);
-  try {
-    await (adapter as any).getContext("__probe__", { workspaceId: process.env.ROXY_DEFAULT_WORKSPACE_ID } as any).catch(() => undefined);
-  } catch (e) {
-    const required = (process.env.OFFICIAL_ADAPTER_REQUIRED ?? "true") === "true";
-    if (required) {
-      try { process.stderr.write("官方桥接不可用。安装指引：npm run advisor:official\n"); } catch {}
-      process.exit(1);
-    } else {
-      try { process.stderr.write("官方桥接不可用（已忽略）。安装建议：npm run advisor:official\n"); } catch {}
-    }
-  }
+  const roxyBrowserManager = container.createRoxyBrowserManager();
 
   const onSignal = async () => { try { await container.cleanup(); } catch {}; process.exit(0); };
   process.once("SIGINT", () => { void onSignal(); });
@@ -40,21 +28,19 @@ async function main() {
 
   const server = new McpServer({ name: "xhs-mcp", version: "0.2.0" });
 
-  registerBrowserTools(server, container, adapter);
-  registerPageTools(server, container, adapter);
-  registerXhsTools(server, container, adapter);
-  registerResourceTools(server, container, adapter);
+  registerBrowserTools(server, container, roxyBrowserManager);
+  registerPageTools(server, container, roxyBrowserManager);
+  registerXhsTools(server, container, roxyBrowserManager);
+  registerResourceTools(server, container, roxyBrowserManager);
   // 仅保留官方命名的原子动作（browser./page.）；不再注册 roxy.* 浏览别名
 
   server.registerTool("server.capabilities", { description: "返回适配器与版本信息", inputSchema: {} }, async () => {
-    const caps: any = { adapter: "official" };
-    try {
-      const meta = (adapter as any).officialMeta ?? {};
-      if (meta?.version) caps.version = meta.version;
-      if (meta?.name) caps.package = meta.name;
-      caps.roxyBridge = { loaded: Boolean(meta?.name), package: meta?.name, version: meta?.version };
-    } catch {}
-    caps.adminTools = true;
+    const caps: any = {
+      adapter: "roxyBrowser",
+      version: "0.2.0",
+      integration: "Playwright CDP",
+      adminTools: true
+    };
     return { content: [{ type: "text", text: JSON.stringify(caps) }] };
   });
 
@@ -97,7 +83,7 @@ async function main() {
     { title: "Page Snapshot", description: "返回 a11y 快照与统计", mimeType: "application/json" },
     async (_uri, { dirId, page }) => {
       const pageIndex = Number(page);
-      const { context } = await adapter.getContext(String(dirId ?? ""));
+      const context = await roxyBrowserManager.getContext(String(dirId ?? ""));
       const p = await Pages.ensurePage(context, { pageIndex: isNaN(pageIndex) ? undefined : pageIndex });
       const snap = await p.accessibility.snapshot({ interestingOnly: true }).catch(() => undefined);
       const maxNodes = Math.max(100, Math.min(5000, Number(process.env.SNAPSHOT_MAX_NODES || 800)));

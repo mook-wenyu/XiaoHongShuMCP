@@ -4,7 +4,6 @@ import { ServiceContainer } from "./core/container.js";
 import { parseArg, parseFlag, parsePayload, parseDirIds } from "./utils/cliParser.js";
 import { runDirIds } from "./runner/multiAccountRunner.js";
 import { runTaskByName, listTasks } from "./tasks/registry.js";
-import { OfficialAdapter } from "./adapter/OfficialAdapter.js";
 
 (async () => {
 	// 创建配置和容器
@@ -39,7 +38,7 @@ import { OfficialAdapter } from "./adapter/OfficialAdapter.js";
 		// 创建服务
 		const roxy = container.createRoxyClient();
 		await roxy.health();
-		const adapter = new OfficialAdapter(container);
+		const manager = container.createRoxyBrowserManager();
 		const policy = container.createPolicyEnforcer();
 		const task = runTaskByName(taskName);
 
@@ -63,7 +62,7 @@ import { OfficialAdapter } from "./adapter/OfficialAdapter.js";
 		// 运行任务
 		const res = await runDirIds(
 			dirIds,
-			{ getContext: (id: string) => adapter.getContext(id, workspaceId ? { workspaceId } as any : undefined) } as any,
+			{ getContext: (id: string) => manager.getContext(id, workspaceId ? { workspaceId } as any : undefined) } as any,
 			async (ctx: import("playwright").BrowserContext, id: string) => task(ctx, id, payload),
 			{
 				concurrency: config.MAX_CONCURRENCY,

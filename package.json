@@ -30,7 +30,6 @@
 		"check:env": "tsx scripts/check-env.ts",
 		"check:tools": "npm run build:test && tsx scripts/check-mcp-tools.ts",
 		"preflight": "tsx scripts/preflight.ts",
-		"advisor:official": "tsx scripts/advisor-official-adapter.ts",
 		"test:workspace-id": "tsx scripts/test-workspace-id.ts",
 		"mcp:call:navigate": "tsx scripts/mcp-call.ts --dirId=user",
 		"mcp:call:search": "tsx scripts/mcp-call-search.ts --dirId=user --keyword=美食",
@@ -40,12 +39,10 @@
 		"roxy:create-window": "tsx scripts/create-window.ts",
 		"report:selectors": "tsx scripts/selector-health-report.ts",
 		"bench:human": "tsx scripts/bench-humanization.ts",
-		
 		"postinstall": "playwright install chromium"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.20.1",
-
 		"dotenv": "^16.4.5",
 		"p-queue": "^8.0.1",
 		"pino": "^9.3.2",

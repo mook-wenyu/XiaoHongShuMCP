@@ -10,6 +10,7 @@ import type { IRoxyClient } from "../contracts/IRoxyClient.js";
 import type { ILogger } from "../contracts/ILogger.js";
 import { RoxyClient } from "../clients/roxyClient.js";
 import { PolicyEnforcer, type PolicyOptions } from "../services/policy.js";
+import { RoxyBrowserManager } from "../services/roxyBrowser.js";
 import { createLogger } from "../logging/createLogger.js";
 
 export class ServiceContainer {
@@ -50,6 +51,11 @@ export class ServiceContainer {
 	// 策略执行器（QPS/熔断）（单例）
 	createPolicyEnforcer(): PolicyEnforcer {
 		return this.getSingleton("policyEnforcer", () => new PolicyEnforcer(this.config.policy as PolicyOptions));
+	}
+
+	// RoxyBrowser 管理器（单例）
+	createRoxyBrowserManager(): RoxyBrowserManager {
+		return this.getSingleton("roxyBrowserManager", () => new RoxyBrowserManager(this));
 	}
 
 	// 资源清理：清空单例缓存（单例自身若需要 close/flush，应在未来扩展统一调用）
