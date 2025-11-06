@@ -44,7 +44,9 @@ const ConnectionInfoLooseSchema = z
 		id: z.union([z.string(), z.number()]).optional(),
 		ws_url: z.string().min(1).optional(),
 		websocket: z.string().min(1).optional(),
-		endpoint: z.object({ ws: z.string().min(1).optional(), http: z.string().optional() }).optional(),
+		endpoint: z
+			.object({ ws: z.string().min(1).optional(), http: z.string().optional() })
+			.optional(),
 		cdpWs: z.string().min(1).optional(),
 		cdp_ws: z.string().min(1).optional(),
 		http: z.string().optional(),
@@ -52,7 +54,11 @@ const ConnectionInfoLooseSchema = z
 	.transform((d) => {
 		const ws = d.ws_url || d.websocket || d.cdpWs || d.cdp_ws || d.endpoint?.ws;
 		const http = d.http || d.endpoint?.http;
-		return { id: (typeof d.id === "string" ? d.id : (d.id != null ? String(d.id) : undefined)), ws, http };
+		return {
+			id: typeof d.id === "string" ? d.id : d.id != null ? String(d.id) : undefined,
+			ws,
+			http,
+		};
 	})
 	.refine((x) => typeof x.ws === "string" && x.ws.length > 0, { message: "ws missing" });
 
@@ -91,7 +97,7 @@ export type CloseResponse = z.infer<typeof CloseResponseSchema>;
  * data 字段可以为 null（当查询的窗口不存在时）
  */
 export const ConnectionInfoResponseSchema = ApiResponseSchema(
-	z.array(z.union([ConnectionInfoSchema, ConnectionInfoLooseSchema])).nullable()
+	z.array(z.union([ConnectionInfoSchema, ConnectionInfoLooseSchema])).nullable(),
 );
 
 /**

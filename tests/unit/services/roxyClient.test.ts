@@ -9,7 +9,7 @@ const { mockFetch } = vi.hoisted(() => ({ mockFetch: vi.fn() }));
 
 // Mock undici fetch
 vi.mock("undici", () => ({
-	fetch: mockFetch
+	fetch: mockFetch,
 }));
 
 describe("RoxyClient 服务单元测试", () => {
@@ -17,7 +17,10 @@ describe("RoxyClient 服务单元测试", () => {
 	let mockLogger: ILogger;
 
 	// Helper 函数：创建完整的 Response mock
-	const createMockResponse = (data: any, options: { ok?: boolean; status?: number; contentType?: string } = {}) => ({
+	const createMockResponse = (
+		data: any,
+		options: { ok?: boolean; status?: number; contentType?: string } = {},
+	) => ({
 		ok: options.ok ?? true,
 		status: options.status ?? 200,
 		headers: {
@@ -26,10 +29,10 @@ describe("RoxyClient 服务单元测试", () => {
 					return options.contentType ?? "application/json";
 				}
 				return null;
-			}
+			},
 		},
 		json: () => Promise.resolve(data),
-		text: () => Promise.resolve(typeof data === "string" ? data : JSON.stringify(data))
+		text: () => Promise.resolve(typeof data === "string" ? data : JSON.stringify(data)),
 	});
 
 	beforeEach(() => {
@@ -61,19 +64,24 @@ describe("RoxyClient 服务单元测试", () => {
 				expect.objectContaining({
 					method: "GET",
 					headers: expect.objectContaining({ token: "test-token" }),
-				})
+				}),
 			);
 		});
 
 		it("应该处理健康检查失败", async () => {
 			// 创建限制重试次数的客户端，避免长时间等待
-			const clientWithRetry = new RoxyClient("https://api.example.com", "test-token", mockLogger, 1);
+			const clientWithRetry = new RoxyClient(
+				"https://api.example.com",
+				"test-token",
+				mockLogger,
+				1,
+			);
 			mockFetch.mockRejectedValue(new Error("Network error"));
 
 			await expect(clientWithRetry.health()).rejects.toThrow();
 			expect(mockLogger.error).toHaveBeenCalledWith(
 				expect.objectContaining({ err: expect.any(Error) }),
-				"Roxy 健康检查失败"
+				"Roxy 健康检查失败",
 			);
 		});
 
@@ -111,11 +119,11 @@ describe("RoxyClient 服务单元测试", () => {
 					method: "POST",
 					headers: expect.objectContaining({ token: "test-token" }),
 					body: JSON.stringify({ dirId: "test-dir-1", args: undefined, workspaceId: undefined }),
-				})
+				}),
 			);
 			expect(mockLogger.info).toHaveBeenCalledWith(
 				expect.objectContaining({ dirId: "test-dir-1", ws: mockResponse.data.ws }),
-				"浏览器窗口已打开"
+				"浏览器窗口已打开",
 			);
 		});
 
@@ -140,7 +148,7 @@ describe("RoxyClient 服务单元测试", () => {
 						args: ["--headless"],
 						workspaceId: "ws-123",
 					}),
-				})
+				}),
 			);
 		});
 
@@ -151,12 +159,14 @@ describe("RoxyClient 服务单元测试", () => {
 		});
 
 		it("应该在无 data 字段时使用 dirId 作为 id", async () => {
-			mockFetch.mockResolvedValue(createMockResponse({
+			mockFetch.mockResolvedValue(
+				createMockResponse({
 					data: {
 						ws: "ws://localhost:9222/devtools/browser/abc",
 						http: "http://localhost:9222",
 					},
-				}));
+				}),
+			);
 
 			const result = await roxyClient.open("test-dir-1");
 
@@ -175,16 +185,21 @@ describe("RoxyClient 服务单元测试", () => {
 				expect.objectContaining({
 					method: "POST",
 					body: JSON.stringify({ dirId: "test-dir-1" }),
-				})
+				}),
 			);
 			expect(mockLogger.info).toHaveBeenCalledWith(
 				expect.objectContaining({ dirId: "test-dir-1" }),
-				"浏览器窗口已关闭"
+				"浏览器窗口已关闭",
 			);
 		});
 
 		it("应该处理关闭失败", async () => {
-			const clientWithRetry = new RoxyClient("https://api.example.com", "test-token", mockLogger, 1);
+			const clientWithRetry = new RoxyClient(
+				"https://api.example.com",
+				"test-token",
+				mockLogger,
+				1,
+			);
 			mockFetch.mockRejectedValue(new Error("Close failed"));
 
 			await expect(clientWithRetry.close("test-dir-1")).rejects.toThrow();
@@ -211,7 +226,7 @@ describe("RoxyClient 服务单元测试", () => {
 			expect(result).toEqual(mockResponse);
 			expect(mockFetch).toHaveBeenCalledWith(
 				"https://api.example.com/browser/connection_info?dirIds=test-dir-1",
-				expect.objectContaining({ method: "GET" })
+				expect.objectContaining({ method: "GET" }),
 			);
 		});
 
@@ -222,7 +237,7 @@ describe("RoxyClient 服务单元测试", () => {
 
 			expect(mockFetch).toHaveBeenCalledWith(
 				"https://api.example.com/browser/connection_info?dirIds=dir1%2Cdir2%2Cdir3",
-				expect.any(Object)
+				expect.any(Object),
 			);
 		});
 
@@ -260,7 +275,7 @@ describe("RoxyClient 服务单元测试", () => {
 			});
 			expect(mockLogger.debug).toHaveBeenCalledWith(
 				expect.objectContaining({ dirId: "test-dir-1", ws: mockConnInfo.data[0].ws }),
-				"复用已存在的浏览器窗口"
+				"复用已存在的浏览器窗口",
 			);
 			// 不应该调用 open
 			expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -272,13 +287,15 @@ describe("RoxyClient 服务单元测试", () => {
 					return Promise.resolve(createMockResponse({ data: [] }));
 				}
 				// open
-				return Promise.resolve(createMockResponse({
-					data: {
-						id: "window-123",
-						ws: "ws://localhost:9222/devtools/browser/abc",
-						http: "http://localhost:9222",
-					},
-				}));
+				return Promise.resolve(
+					createMockResponse({
+						data: {
+							id: "window-123",
+							ws: "ws://localhost:9222/devtools/browser/abc",
+							http: "http://localhost:9222",
+						},
+					}),
+				);
 			});
 
 			const result = await roxyClient.ensureOpen("test-dir-1");
@@ -289,20 +306,27 @@ describe("RoxyClient 服务单元测试", () => {
 
 		it("应该在 connectionInfo 失败时尝试打开", async () => {
 			// 创建限制重试次数的客户端，避免长时间等待
-			const clientWithRetry = new RoxyClient("https://api.example.com", "test-token", mockLogger, 1);
+			const clientWithRetry = new RoxyClient(
+				"https://api.example.com",
+				"test-token",
+				mockLogger,
+				1,
+			);
 
 			mockFetch.mockImplementation((url: string) => {
 				if (url.includes("connection_info")) {
 					return Promise.reject(new Error("ConnectionInfo failed"));
 				}
 				// open
-				return Promise.resolve(createMockResponse({
-					data: {
-						id: "window-123",
-						ws: "ws://localhost:9222/devtools/browser/abc",
-						http: "http://localhost:9222",
-					},
-				}));
+				return Promise.resolve(
+					createMockResponse({
+						data: {
+							id: "window-123",
+							ws: "ws://localhost:9222/devtools/browser/abc",
+							http: "http://localhost:9222",
+						},
+					}),
+				);
 			});
 
 			const result = await clientWithRetry.ensureOpen("test-dir-1");
@@ -310,7 +334,7 @@ describe("RoxyClient 服务单元测试", () => {
 			expect(result.ws).toBe("ws://localhost:9222/devtools/browser/abc");
 			expect(mockLogger.debug).toHaveBeenCalledWith(
 				expect.objectContaining({ dirId: "test-dir-1" }),
-				"查询连接信息失败，尝试打开新窗口"
+				"查询连接信息失败，尝试打开新窗口",
 			);
 		});
 
@@ -319,12 +343,14 @@ describe("RoxyClient 服务单元测试", () => {
 				if (url.includes("connection_info")) {
 					return Promise.resolve(createMockResponse({ data: [] }));
 				}
-				return Promise.resolve(createMockResponse({
-					data: {
-						ws: "ws://localhost:9222/devtools/browser/abc",
-						http: "http://localhost:9222",
-					},
-				}));
+				return Promise.resolve(
+					createMockResponse({
+						data: {
+							ws: "ws://localhost:9222/devtools/browser/abc",
+							http: "http://localhost:9222",
+						},
+					}),
+				);
 			});
 
 			await roxyClient.ensureOpen("test-dir-1", "ws-123", ["--headless"]);
@@ -337,7 +363,7 @@ describe("RoxyClient 服务单元测试", () => {
 						args: ["--headless"],
 						workspaceId: "ws-123",
 					}),
-				})
+				}),
 			);
 		});
 	});
@@ -358,7 +384,7 @@ describe("RoxyClient 服务单元测试", () => {
 			expect(result).toEqual(mockResponse);
 			expect(mockFetch).toHaveBeenCalledWith(
 				"https://api.example.com/browser/workspace",
-				expect.any(Object)
+				expect.any(Object),
 			);
 		});
 
@@ -369,7 +395,7 @@ describe("RoxyClient 服务单元测试", () => {
 
 			expect(mockFetch).toHaveBeenCalledWith(
 				"https://api.example.com/browser/workspace?page_index=2&page_size=20",
-				expect.any(Object)
+				expect.any(Object),
 			);
 		});
 	});
@@ -382,7 +408,7 @@ describe("RoxyClient 服务单元测试", () => {
 
 			expect(mockFetch).toHaveBeenCalledWith(
 				"https://api.example.com/browser/list_v3?workspaceId=ws-123",
-				expect.any(Object)
+				expect.any(Object),
 			);
 		});
 
@@ -399,11 +425,11 @@ describe("RoxyClient 服务单元测试", () => {
 
 			expect(mockFetch).toHaveBeenCalledWith(
 				expect.stringContaining("workspaceId=ws-123"),
-				expect.any(Object)
+				expect.any(Object),
 			);
 			expect(mockFetch).toHaveBeenCalledWith(
 				expect.stringContaining("dirIds=dir1%2Cdir2"),
-				expect.any(Object)
+				expect.any(Object),
 			);
 		});
 
@@ -419,7 +445,7 @@ describe("RoxyClient 服务单元测试", () => {
 				expect.objectContaining({
 					method: "POST",
 					body: JSON.stringify(body),
-				})
+				}),
 			);
 		});
 
@@ -434,7 +460,7 @@ describe("RoxyClient 服务单元测试", () => {
 
 			expect(mockFetch).toHaveBeenCalledWith(
 				"https://api.example.com/browser/workspace?page_index=1&page_size=10",
-				expect.any(Object)
+				expect.any(Object),
 			);
 		});
 
@@ -477,17 +503,19 @@ describe("RoxyClient 服务单元测试", () => {
 			// 空数组会生成空字符串，被 qs() 过滤掉，所以没有查询参数
 			expect(mockFetch).toHaveBeenCalledWith(
 				"https://api.example.com/browser/connection_info",
-				expect.any(Object)
+				expect.any(Object),
 			);
 		});
 
 		it("应该处理特殊字符 dirId", async () => {
-			mockFetch.mockResolvedValue(createMockResponse({
-						data: {
-							ws: "ws://localhost:9222/devtools/browser/abc",
-							http: "http://localhost:9222",
-						},
-					}));
+			mockFetch.mockResolvedValue(
+				createMockResponse({
+					data: {
+						ws: "ws://localhost:9222/devtools/browser/abc",
+						http: "http://localhost:9222",
+					},
+				}),
+			);
 
 			const specialDirId = "dir/with:special@chars#123";
 			await roxyClient.open(specialDirId);
@@ -496,7 +524,7 @@ describe("RoxyClient 服务单元测试", () => {
 				"https://api.example.com/browser/open",
 				expect.objectContaining({
 					body: JSON.stringify({ dirId: specialDirId, args: undefined, workspaceId: undefined }),
-				})
+				}),
 			);
 		});
 	});

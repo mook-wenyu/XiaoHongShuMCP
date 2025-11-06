@@ -10,7 +10,7 @@ describe("熔断器错误路径测试", () => {
 		options = {
 			qps: 10,
 			failureThreshold: 3,
-			openSeconds: 1
+			openSeconds: 1,
 		};
 		policy = new PolicyEnforcer(options);
 	});
@@ -74,7 +74,7 @@ describe("熔断器错误路径测试", () => {
 			const key = "recovery-test";
 			const shortBreakPolicy = new PolicyEnforcer({
 				...options,
-				openSeconds: 0.1 // 100ms 熔断时长
+				openSeconds: 0.1, // 100ms 熔断时长
 			});
 
 			// 触发熔断
@@ -88,7 +88,7 @@ describe("熔断器错误路径测试", () => {
 			expect(state?.state).toBe("open");
 
 			// 等待熔断时长（150ms > 100ms）
-			await new Promise(resolve => setTimeout(resolve, 150));
+			await new Promise((resolve) => setTimeout(resolve, 150));
 
 			// 手动触发 acquire 进入半开状态
 			await shortBreakPolicy.acquire(key);
@@ -110,7 +110,7 @@ describe("熔断器错误路径测试", () => {
 			const key = "half-open-test";
 			const quickRecoveryPolicy = new PolicyEnforcer({
 				...options,
-				openSeconds: 0.05 // 50ms
+				openSeconds: 0.05, // 50ms
 			});
 
 			// 触发熔断
@@ -120,7 +120,7 @@ describe("熔断器错误路径测试", () => {
 			}
 
 			// 等待进入半开状态
-			await new Promise(resolve => setTimeout(resolve, 100));
+			await new Promise((resolve) => setTimeout(resolve, 100));
 
 			// 半开状态成功请求
 			await quickRecoveryPolicy.use(key, async () => {
@@ -142,7 +142,7 @@ describe("熔断器错误路径测试", () => {
 			const key = "half-open-fail-test";
 			const policy = new PolicyEnforcer({
 				...options,
-				openSeconds: 0.05 // 50ms
+				openSeconds: 0.05, // 50ms
 			});
 
 			// 触发熔断
@@ -152,7 +152,7 @@ describe("熔断器错误路径测试", () => {
 			}
 
 			// 等待进入半开状态
-			await new Promise(resolve => setTimeout(resolve, 100));
+			await new Promise((resolve) => setTimeout(resolve, 100));
 
 			// 半开状态失败请求
 			try {
@@ -175,7 +175,7 @@ describe("熔断器错误路径测试", () => {
 			const key = "qps-test";
 			const qpsPolicy = new PolicyEnforcer({
 				...options,
-				qps: 2 // 每秒 2 个请求
+				qps: 2, // 每秒 2 个请求
 			});
 
 			// 快速发送 5 个请求
@@ -184,11 +184,11 @@ describe("熔断器错误路径测试", () => {
 				qpsPolicy.acquire(key),
 				qpsPolicy.acquire(key),
 				qpsPolicy.acquire(key),
-				qpsPolicy.acquire(key)
+				qpsPolicy.acquire(key),
 			]);
 
 			// 前 2 个应该成功，后 3 个应该被限流（需要等待）
-			const fulfilled = results.filter(r => r.status === "fulfilled").length;
+			const fulfilled = results.filter((r) => r.status === "fulfilled").length;
 			expect(fulfilled).toBeGreaterThanOrEqual(2);
 		}, 5000);
 
@@ -196,14 +196,14 @@ describe("熔断器错误路径测试", () => {
 			const key = "qps-reset-test";
 			const qpsPolicy = new PolicyEnforcer({
 				...options,
-				qps: 1
+				qps: 1,
 			});
 
 			// 第一秒的请求
 			await qpsPolicy.acquire(key);
 
 			// 等待 1 秒
-			await new Promise(resolve => setTimeout(resolve, 1100));
+			await new Promise((resolve) => setTimeout(resolve, 1100));
 
 			// 第二秒的请求应该成功
 			await expect(qpsPolicy.acquire(key)).resolves.toBeUndefined();
@@ -260,7 +260,7 @@ describe("熔断器错误路径测试", () => {
 		it("应该处理零阈值配置", async () => {
 			const zeroThresholdPolicy = new PolicyEnforcer({
 				...options,
-				failureThreshold: 0
+				failureThreshold: 0,
 			});
 
 			const key = "zero-threshold-test";
@@ -275,7 +275,7 @@ describe("熔断器错误路径测试", () => {
 		it("应该处理超大阈值配置", async () => {
 			const highThresholdPolicy = new PolicyEnforcer({
 				...options,
-				failureThreshold: 1000
+				failureThreshold: 1000,
 			});
 
 			const key = "high-threshold-test";
@@ -292,7 +292,7 @@ describe("熔断器错误路径测试", () => {
 		it("应该处理零 QPS 配置", async () => {
 			const zeroQpsPolicy = new PolicyEnforcer({
 				...options,
-				qps: 0
+				qps: 0,
 			});
 
 			const key = "zero-qps-test";
@@ -305,7 +305,7 @@ describe("熔断器错误路径测试", () => {
 		it("应该处理超短熔断时长", async () => {
 			const shortBreakPolicy = new PolicyEnforcer({
 				...options,
-				openSeconds: 0.001 // 1ms
+				openSeconds: 0.001, // 1ms
 			});
 
 			const key = "short-break-test";
@@ -317,7 +317,7 @@ describe("熔断器错误路径测试", () => {
 			}
 
 			// 等待 10ms（远超熔断时长）
-			await new Promise(resolve => setTimeout(resolve, 10));
+			await new Promise((resolve) => setTimeout(resolve, 10));
 
 			// 应该已经恢复
 			await expect(shortBreakPolicy.use(key, async () => "recovered")).resolves.toBe("recovered");
@@ -330,27 +330,27 @@ describe("熔断器错误路径测试", () => {
 
 			const requests = Array.from({ length: 10 }, (_, i) =>
 				policy.use(key, async () => {
-					await new Promise(resolve => setTimeout(resolve, 10));
+					await new Promise((resolve) => setTimeout(resolve, 10));
 					policy.success(key);
 					return `request-${i}`;
-				})
+				}),
 			);
 
 			const results = await Promise.allSettled(requests);
 
 			// 所有请求应该最终完成（可能因 QPS 限制有延迟）
-			const fulfilled = results.filter(r => r.status === "fulfilled");
+			const fulfilled = results.filter((r) => r.status === "fulfilled");
 			expect(fulfilled.length).toBeGreaterThan(0);
 		}, 10000);
 
 		it("应该隔离不同 key 的并发请求", async () => {
 			const keys = Array.from({ length: 5 }, (_, i) => `key-${i}`);
 
-			const requests = keys.map(key =>
+			const requests = keys.map((key) =>
 				policy.use(key, async () => {
 					policy.success(key);
 					return key;
-				})
+				}),
 			);
 
 			const results = await Promise.all(requests);

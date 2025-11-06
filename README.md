@@ -5,6 +5,7 @@
 ---
 
 ## 能力总览
+
 - 多账号隔离：`dirId` 表示账号窗口；1 个 `dirId` = 1 个持久化 BrowserContext；同 Context 可创建多 Page。
 - 原子化工具（唯一标准命名）：`browser.*`、`page.*`、`xhs.*`、`resources.*`。
 - Roxy 管理工具（保留 roxy 命名空间，仅用于管理）：`roxy.*`（工作区/窗口管理）默认注册，无需开关。
@@ -14,11 +15,13 @@
 ---
 
 ## 环境要求
+
 - Node.js >= 18（建议 22.x）
 - 可用的 RoxyBrowser 本地/远程 API 与有效 `ROXY_API_TOKEN`
 - 首次安装通过 `postinstall` 自动安装 Playwright Chromium
 
 关键环境变量：
+
 - `ROXY_API_TOKEN`（必填）
 - `ROXY_API_BASEURL` 或 `ROXY_API_HOST` + `ROXY_API_PORT`
 - `ROXY_DEFAULT_WORKSPACE_ID`（可选，用于默认上下文）
@@ -27,6 +30,7 @@
 - `HUMAN_TRACE_LOG`（可选，设为 `true` 将拟人化事件落盘到 `artifacts/<dirId>/human-trace.ndjson`）
 
 完整环境变量列表请参考 [.env.example](.env.example)，包括：
+
 - **连接配置**: `ROXY_API_*`, `ROXY_DEFAULT_WORKSPACE_ID`, `ROXY_DIR_IDS`
 - **并发与超时**: `MAX_CONCURRENCY`, `TIMEOUT_MS`
 - **选择器韧性**: `SELECTOR_RETRY_*`, `SELECTOR_BREAKER_*`
@@ -35,34 +39,47 @@
 - **拟人化**: `HUMAN_PROFILE`, `HUMAN_TRACE_LOG`
 
 **废弃变量**：
+
 - `ENABLE_ROXY_ADMIN_TOOLS`（自 0.2.x 起 `roxy.*` 管理工具默认注册，无需开关）
 - `POLICY_*`（已由 `SELECTOR_BREAKER_*` 替代）
 
 ---
 
 ## 安装与最小自检
-1) 安装依赖
+
+1. 安装依赖
+
 ```
 npm install
 ```
-2) 配置环境变量
+
+2. 配置环境变量
+
 ```
 Copy-Item .env.example .env
 # 编辑 .env，填写 ROXY_API_TOKEN，设置 ROXY_API_BASEURL 或 HOST/PORT
 ```
-3) 预检（可选）
+
+3. 预检（可选）
+
 ```
 npm run preflight
 ```
-4) 自检脚本（可选）
+
+4. 自检脚本（可选）
+
 ```
 npm run check:env
 ```
-5) 工具面对照检查（可选）
+
+5. 工具面对照检查（可选）
+
 ```
 npm run check:tools
 ```
-6) 编码巡检（可选，CI 推荐）
+
+6. 编码巡检（可选，CI 推荐）
+
 ```
 npm run check:encoding
 ```
@@ -70,11 +87,15 @@ npm run check:encoding
 ---
 
 ## 启动与集成（stdio MCP）
-1) 构建（或直接 TS 运行）
+
+1. 构建（或直接 TS 运行）
+
 ```
 npm run build
 ```
-2) 启动 MCP Server（stdio）
+
+2. 启动 MCP Server（stdio）
+
 ```
 npm run mcp
 ```
@@ -84,11 +105,13 @@ npm run mcp
 ## MCP 工具清单（唯一标准）
 
 ### 浏览器与页面管理
+
 - `browser_open` / `browser_close` - 打开/关闭浏览器窗口（dirId 映射持久化 Context）
 - `page_create` / `page_list` / `page_close` - 创建/列出/关闭页面
 - `page_navigate` - 导航到指定 URL
 
 ### 页面交互（支持拟人化）
+
 - `page_click` - 点击元素（支持语义定位：role/name/label/text/testId/selector）
 - `page_hover` - 悬停元素
 - `page_scroll` - 滚动页面（支持相对/绝对/元素滚动）
@@ -96,14 +119,17 @@ npm run mcp
 - `page_input_clear` - 清空输入框
 
 ### 页面信息获取
+
 - `page_screenshot` - 截图（返回文本 JSON + image/png 内容项）
 - `page_snapshot` - 可访问性快照（a11y 树 + url/title + 统计信息）
 
 ### 小红书专用
+
 - `xhs_session_check` - 检查会话状态（基于 cookies 和首页加载）
 - `xhs_navigate_home` - 导航到小红书首页并验证
- 
+
 ### 小红书快捷工具（语义化）
+
 - `xhs.close.modal`（兼容别名 `xhs_close_modal`）- 关闭当前笔记详情模态（Esc→关闭按钮→遮罩）
 - `xhs.navigate.discover` - 导航到“发现”推荐流（含 homefeed 接口软校验）
 - `xhs.search.keyword` - 站内搜索关键词（拟人化输入 + 接口软校验）
@@ -113,6 +139,7 @@ npm run mcp
 - `xhs.comment.post` - 发表评论（拟人化输入 + 接口软校验，需模态已打开）
 
 示例（命令行脚本）：
+
 ```
 # 导航到发现页（stdio MCP）
 npm run mcp -- --tool xhs.navigate.discover --dirId user
@@ -130,23 +157,28 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 ```
 
 ### 资源管理
+
 - `resources_listArtifacts` - 列出 artifacts/<dirId> 下的所有文件
 - `resources_readArtifact` - 读取 artifacts 文件（自动识别图片/文本）
 
 ### 高权限管理工具（默认已注册）
+
 - `roxy.workspaces.list` - 获取工作区列表
 - `roxy.windows.list` - 获取浏览器窗口列表
 - `roxy.window.create` - 创建新浏览器窗口
 
 ### 诊断与监控
+
 - `server_capabilities` - 查看适配器信息（adapter/roxyBridge/adminTools）
 - `server_ping` - 连通性检查与心跳
 
 ### MCP 资源（Resources）
+
 - `xhs://artifacts/{dirId}/index` - 列出指定 dirId 的所有 artifacts 文件
 - `xhs://snapshot/{dirId}/{page}` - 获取指定页面的 a11y 快照
 
 示例（默认开启拟人化；两种方式关闭：`human=false` 或 `human.enabled=false`，可按需细化参数）：
+
 - 打开窗口：`browser_open`，`{"dirId":"user"}`
 - 导航：`page_navigate`，`{"dirId":"user","url":"https://example.com"}`
 - 语义点击（拟人化）：
@@ -159,6 +191,7 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 ---
 
 ## RoxyBrowser 集成架构
+
 - 直接通过 RoxyBrowser REST API 获取 CDP WebSocket 端点
 - 使用 Playwright 官方的 `chromium.connectOverCDP()` 方法连接浏览器
 - 每个 `dirId` 对应一个持久化 BrowserContext（由 RoxyBrowser 管理）
@@ -168,6 +201,7 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 ---
 
 ## 常用脚本
+
 - 检查环境：`npm run check:env`
 - 工具面对照检查：`npm run check:tools`
 - 选择器健康报告：`npm run report:selectors`
@@ -177,6 +211,7 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 ---
 
 ## 测试与质量
+
 - 全量测试：`npm test`
 - 指定用例：`npx vitest run tests/unit/selectors/resilient.test.ts --reporter=verbose`
 - MCP stdout 守卫：`tests/mcp/stdout.guard.test.ts` 确保 stdio 日志仅走 stderr 或文件
@@ -185,6 +220,7 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 ---
 
 ## 设计与限制
+
 - 工具层最小化、稳定化：仅提供原子动作与页面管理，业务流程上移。
 - 多账号隔离：`dirId` 对应持久化 Context；连接与清理由容器协调。
 - 拟人化与韧性：默认开启拟人化；选择器语义优先，失败与时延沉淀 p95 指标；可通过 `human=false` 或 `human.enabled=false` 显式关闭。
@@ -193,7 +229,8 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 ---
 
 ## 变更要点（0.2.x）
-- 仅保留官方命名 `browser.*` / `page.*` 作为唯一标准；移除 roxy.* 浏览别名以降低心智负担。
+
+- 仅保留官方命名 `browser.*` / `page.*` 作为唯一标准；移除 roxy.\* 浏览别名以降低心智负担。
 - 高权限管理类 `roxy.*` 默认注册（无需环境变量开关）。
 - 架构升级：移除适配层抽象，直接使用 Playwright CDP 连接 RoxyBrowser。
 - 页面快照节点上限受 `SNAPSHOT_MAX_NODES` 保护。
@@ -203,6 +240,7 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 ## 人机参数模板（快速参考）
 
 - 档位（使用 `profile` 一键选择节律，亦可与下方细化参数叠加）：
+
 ```
 // 默认节律（平衡型）
 {"human": {"profile": "default"}}
@@ -215,27 +253,32 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 ```
 
 - 点击/悬停（鼠标移动曲线与抖动）
+
 ```
 {"human": {"steps": 24, "randomness": 0.2, "overshoot": true, "overshootAmount": 12, "microJitterPx": 1.2, "microJitterCount": 2}}
 ```
 
 - 滚动（分段滚动与停顿）
+
 ```
 {"human": {"segments": 6, "perSegmentMs": 120, "jitterPx": 20, "microPauseChance": 0.25, "microPauseMinMs": 60, "microPauseMaxMs": 160, "macroPauseEvery": 4, "macroPauseMinMs": 120, "macroPauseMaxMs": 260}}
 ```
 
 - 输入（每分钟字数，逐字延时）
+
 ```
 {"human": {"wpm": 180}}
 ```
 
 - 关闭拟人化（一次调用）
+
 ```
 {"human": false}
 // 或：{"human": {"enabled": false}}
 ```
 
 说明：
+
 - 不传 `enabled` 时，对象形态默认开启拟人化；`human=false` 或 `human.enabled=false` 才会关闭。
 - `profile` 提供预设节律，细化参数可按需叠加覆盖。
 
@@ -247,6 +290,7 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 - 视频早期有效观看：建议随机停留 5–10s（≥5s），必要时在流程层触发播放
 
 外部工作流（MCP 客户端）调用序列示意：
+
 ```
 // 1) 打开或聚焦目标页
 tools/call: page.click { dirId, target: {...}, human: true }
@@ -261,6 +305,7 @@ tools/call: page.scroll { dirId, human: { segments: 4, perSegmentMs: 120 } }
 ```
 
 说明：
+
 - 本服务只提供稳定的原子动作，不内置语义流程（wait/停留）。
 - 外部工作流负责编排等待、重试与业务逻辑；如需更自然的微动作，调用时传入 `human` 即可（默认已开启）。
 

@@ -8,7 +8,7 @@ describe("ValidationError 错误路径测试", () => {
 			const error = new ValidationError("Invalid email format", {
 				field: "email",
 				value: "invalid-email",
-				expected: "valid email address"
+				expected: "valid email address",
 			});
 
 			expect(error).toBeInstanceOf(Error);
@@ -19,7 +19,7 @@ describe("ValidationError 错误路径测试", () => {
 			expect(error.context).toEqual({
 				field: "email",
 				value: "invalid-email",
-				expected: "valid email address"
+				expected: "valid email address",
 			});
 		});
 
@@ -27,7 +27,7 @@ describe("ValidationError 错误路径测试", () => {
 			const error = new ValidationError("Required field missing", {
 				field: "username",
 				value: undefined,
-				constraint: "required"
+				constraint: "required",
 			});
 
 			const json = error.toJSON();
@@ -40,8 +40,8 @@ describe("ValidationError 错误路径测试", () => {
 				context: {
 					field: "username",
 					value: undefined,
-					constraint: "required"
-				}
+					constraint: "required",
+				},
 			});
 			expect(json).toHaveProperty("stack");
 		});
@@ -61,7 +61,7 @@ describe("ValidationError 错误路径测试", () => {
 				field: "description",
 				value: "x".repeat(1000),
 				maxLength: 500,
-				actualLength: 1000
+				actualLength: 1000,
 			});
 
 			expect(error.context?.field).toBe("description");
@@ -74,7 +74,7 @@ describe("ValidationError 错误路径测试", () => {
 				field: "age",
 				value: 150,
 				min: 0,
-				max: 120
+				max: 120,
 			});
 
 			expect(error.context?.value).toBe(150);
@@ -86,7 +86,7 @@ describe("ValidationError 错误路径测试", () => {
 			const error = new ValidationError("Invalid enum value", {
 				field: "status",
 				value: "invalid",
-				allowedValues: ["pending", "active", "inactive"]
+				allowedValues: ["pending", "active", "inactive"],
 			});
 
 			expect(error.context?.value).toBe("invalid");
@@ -97,7 +97,7 @@ describe("ValidationError 错误路径测试", () => {
 			const error = new ValidationError("Required field missing", {
 				field: "email",
 				value: null,
-				constraint: "required"
+				constraint: "required",
 			});
 
 			expect(error.context?.field).toBe("email");
@@ -112,7 +112,7 @@ describe("ValidationError 错误路径测试", () => {
 				field: "count",
 				value: "123",
 				expected: "number",
-				actual: "string"
+				actual: "string",
 			});
 
 			expect(error.context?.expected).toBe("number");
@@ -124,7 +124,7 @@ describe("ValidationError 错误路径测试", () => {
 				field: "user",
 				value: { name: "John" },
 				expectedFields: ["id", "name", "email"],
-				missingFields: ["id", "email"]
+				missingFields: ["id", "email"],
 			});
 
 			expect(error.context?.expectedFields).toEqual(["id", "name", "email"]);
@@ -137,7 +137,7 @@ describe("ValidationError 错误路径测试", () => {
 				value: ["tag1", 123, "tag3"],
 				index: 1,
 				expected: "string",
-				actual: "number"
+				actual: "number",
 			});
 
 			expect(error.context?.index).toBe(1);
@@ -151,7 +151,7 @@ describe("ValidationError 错误路径测试", () => {
 			const error = new ValidationError("Invalid email format", {
 				field: "email",
 				value: "not-an-email",
-				pattern: "/^[^@]+@[^@]+\\.[^@]+$/"
+				pattern: "/^[^@]+@[^@]+\\.[^@]+$/",
 			});
 
 			expect(error.context?.value).toBe("not-an-email");
@@ -162,7 +162,7 @@ describe("ValidationError 错误路径测试", () => {
 			const error = new ValidationError("Invalid URL", {
 				field: "website",
 				value: "not-a-url",
-				expected: "valid URL starting with http:// or https://"
+				expected: "valid URL starting with http:// or https://",
 			});
 
 			expect(error.context?.value).toBe("not-a-url");
@@ -172,7 +172,7 @@ describe("ValidationError 错误路径测试", () => {
 			const error = new ValidationError("Invalid date format", {
 				field: "birthdate",
 				value: "2023-13-45",
-				expected: "ISO 8601 date format (YYYY-MM-DD)"
+				expected: "ISO 8601 date format (YYYY-MM-DD)",
 			});
 
 			expect(error.context?.value).toBe("2023-13-45");
@@ -184,7 +184,7 @@ describe("ValidationError 错误路径测试", () => {
 			const errors = [
 				new ValidationError("Invalid email", { field: "email" }),
 				new ValidationError("Password too short", { field: "password" }),
-				new ValidationError("Age out of range", { field: "age" })
+				new ValidationError("Age out of range", { field: "age" }),
 			];
 
 			expect(errors).toHaveLength(3);
@@ -198,7 +198,7 @@ describe("ValidationError 错误路径测试", () => {
 				field: "user.address.zipCode",
 				value: "12345",
 				expected: "5-digit string",
-				path: ["user", "address", "zipCode"]
+				path: ["user", "address", "zipCode"],
 			});
 
 			expect(error.context?.field).toBe("user.address.zipCode");
@@ -210,7 +210,7 @@ describe("ValidationError 错误路径测试", () => {
 				field: "shippingAddress",
 				value: null,
 				condition: "requireShipping === true",
-				reason: "Shipping address required when requireShipping is true"
+				reason: "Shipping address required when requireShipping is true",
 			});
 
 			expect(error.context?.condition).toBe("requireShipping === true");
@@ -222,7 +222,7 @@ describe("ValidationError 错误路径测试", () => {
 		it("应该支持中文错误消息", () => {
 			const error = new ValidationError("电子邮件格式无效", {
 				field: "email",
-				value: "无效邮箱"
+				value: "无效邮箱",
 			});
 
 			expect(error.message).toBe("电子邮件格式无效");
@@ -231,10 +231,10 @@ describe("ValidationError 错误路径测试", () => {
 		it("应该支持错误消息模板", () => {
 			const field = "password";
 			const minLength = 8;
-			const error = new ValidationError(
-				`字段 '${field}' 的长度必须至少为 ${minLength} 个字符`,
-				{ field, minLength }
-			);
+			const error = new ValidationError(`字段 '${field}' 的长度必须至少为 ${minLength} 个字符`, {
+				field,
+				minLength,
+			});
 
 			expect(error.message).toBe("字段 'password' 的长度必须至少为 8 个字符");
 		});
@@ -266,11 +266,11 @@ describe("ValidationError 错误路径测试", () => {
 		it("应该处理 undefined 和 null 值", () => {
 			const error1 = new ValidationError("Undefined value", {
 				field: "test",
-				value: undefined
+				value: undefined,
 			});
 			const error2 = new ValidationError("Null value", {
 				field: "test",
-				value: null
+				value: null,
 			});
 
 			expect(error1.context?.value).toBeUndefined();
@@ -282,7 +282,7 @@ describe("ValidationError 错误路径测试", () => {
 				field: "test",
 				nan: NaN,
 				infinity: Infinity,
-				negInfinity: -Infinity
+				negInfinity: -Infinity,
 			});
 
 			const json = error.toJSON();

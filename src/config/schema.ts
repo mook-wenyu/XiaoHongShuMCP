@@ -6,12 +6,27 @@ const BaseEnv = z.object({
 	ROXY_API_HOST: z.string().optional(),
 	ROXY_API_PORT: z.string().optional(),
 	ROXY_API_TOKEN: z.string().min(1, "缺少 ROXY_API_TOKEN"),
-	MAX_CONCURRENCY: z.string().default("2").transform((s) => Math.max(1, Number(s) || 1)),
-	TIMEOUT_MS: z.string().default("60000").transform((s) => Math.max(1000, Number(s) || 60000)),
+	MAX_CONCURRENCY: z
+		.string()
+		.default("2")
+		.transform((s) => Math.max(1, Number(s) || 1)),
+	TIMEOUT_MS: z
+		.string()
+		.default("60000")
+		.transform((s) => Math.max(1000, Number(s) || 60000)),
 	DEFAULT_URL: z.string().url().default("https://example.com"),
-	POLICY_QPS: z.string().default("5").transform((s) => Math.max(1, Number(s) || 5)),
-	POLICY_FAILURES: z.string().default("5").transform((s) => Math.max(1, Number(s) || 5)),
-	POLICY_OPEN_SECONDS: z.string().default("15").transform((s) => Math.max(1, Number(s) || 15)),
+	POLICY_QPS: z
+		.string()
+		.default("5")
+		.transform((s) => Math.max(1, Number(s) || 5)),
+	POLICY_FAILURES: z
+		.string()
+		.default("5")
+		.transform((s) => Math.max(1, Number(s) || 5)),
+	POLICY_OPEN_SECONDS: z
+		.string()
+		.default("15")
+		.transform((s) => Math.max(1, Number(s) || 15)),
 	HUMAN_PROFILE: z
 		.string()
 		.default("default")

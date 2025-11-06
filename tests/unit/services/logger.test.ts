@@ -90,7 +90,7 @@ describe("PinoLogger 服务单元测试", () => {
 						stack: expect.stringContaining("Error: 测试错误"),
 					},
 				}),
-				"发生错误"
+				"发生错误",
 			);
 		});
 
@@ -109,13 +109,16 @@ describe("PinoLogger 服务单元测试", () => {
 						stack: expect.stringContaining("Error: 测试错误"),
 					},
 				}),
-				"发生错误"
+				"发生错误",
 			);
 		});
 
 		it("应该处理自定义错误类型", () => {
 			class CustomError extends Error {
-				constructor(message: string, public code: string) {
+				constructor(
+					message: string,
+					public code: string,
+				) {
 					super(message);
 					this.name = "CustomError";
 				}
@@ -132,7 +135,7 @@ describe("PinoLogger 服务单元测试", () => {
 						stack: expect.any(String),
 					},
 				}),
-				"自定义错误发生"
+				"自定义错误发生",
 			);
 		});
 
@@ -150,7 +153,7 @@ describe("PinoLogger 服务单元测试", () => {
 						stack: undefined,
 					},
 				}),
-				"错误"
+				"错误",
 			);
 		});
 	});
@@ -315,7 +318,7 @@ describe("PinoLogger 服务单元测试", () => {
 
 			expect(mockPino.info).toHaveBeenCalledWith(
 				expect.objectContaining({ key: undefined, value: "test" }),
-				"包含 undefined"
+				"包含 undefined",
 			);
 		});
 
@@ -325,7 +328,7 @@ describe("PinoLogger 服务单元测试", () => {
 
 			expect(mockPino.info).toHaveBeenCalledWith(
 				expect.objectContaining({ key: null, value: "test" }),
-				"包含 null"
+				"包含 null",
 			);
 		});
 
@@ -340,7 +343,10 @@ describe("PinoLogger 服务单元测试", () => {
 	describe("实际使用场景", () => {
 		it("应该记录 HTTP 请求", () => {
 			const requestLogger = logger.child({ requestId: "req-123" });
-			requestLogger.info({ method: "GET", url: "/api/users", status: 200, duration: 150 }, "HTTP 请求");
+			requestLogger.info(
+				{ method: "GET", url: "/api/users", status: 200, duration: 150 },
+				"HTTP 请求",
+			);
 
 			expect(mockPino.child).toHaveBeenCalledWith({ requestId: "req-123" });
 		});
@@ -350,7 +356,7 @@ describe("PinoLogger 服务单元测试", () => {
 
 			expect(mockPino.debug).toHaveBeenCalledWith(
 				expect.objectContaining({ query: "SELECT * FROM users", duration: 25 }),
-				"数据库查询"
+				"数据库查询",
 			);
 		});
 
@@ -370,7 +376,7 @@ describe("PinoLogger 服务单元测试", () => {
 					attempt: 2,
 					maxAttempts: 3,
 				}),
-				"重试中"
+				"重试中",
 			);
 		});
 
@@ -382,7 +388,7 @@ describe("PinoLogger 服务单元测试", () => {
 					duration: 5000,
 					avgLatency: 5,
 				},
-				"批处理完成"
+				"批处理完成",
 			);
 
 			expect(mockPino.info).toHaveBeenCalledWith(
@@ -392,7 +398,7 @@ describe("PinoLogger 服务单元测试", () => {
 					duration: 5000,
 					avgLatency: 5,
 				}),
-				"批处理完成"
+				"批处理完成",
 			);
 		});
 	});
@@ -400,7 +406,7 @@ describe("PinoLogger 服务单元测试", () => {
 	describe("并发场景", () => {
 		it("应该支持并发日志记录", () => {
 			const promises = Array.from({ length: 100 }, (_, i) =>
-				logger.info({ index: i }, `并发消息 ${i}`)
+				logger.info({ index: i }, `并发消息 ${i}`),
 			);
 
 			Promise.all(promises);
@@ -419,7 +425,9 @@ describe("PinoLogger 服务单元测试", () => {
 
 			(mockPino.child as any).mockReturnValue(mockChildPino);
 
-			const childLoggers = Array.from({ length: 10 }, (_, i) => logger.child({ requestId: `req-${i}` }));
+			const childLoggers = Array.from({ length: 10 }, (_, i) =>
+				logger.child({ requestId: `req-${i}` }),
+			);
 
 			childLoggers.forEach((childLogger, i) => {
 				childLogger.info(`请求 ${i} 完成`);

@@ -4,13 +4,9 @@ module.exports = {
 	parser: "@typescript-eslint/parser",
 	parserOptions: { sourceType: "module", ecmaVersion: "latest" },
 	plugins: ["@typescript-eslint"],
-	extends: [
-		"eslint:recommended",
-		"plugin:@typescript-eslint/recommended",
-		"prettier"
-	],
+	extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended", "prettier"],
 	rules: {
 		quotes: ["error", "double"],
-		"@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }]
-	}
+		"@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+	},
 };

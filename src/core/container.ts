@@ -17,7 +17,10 @@ export class ServiceContainer {
 	private singletons = new Map<string, unknown>();
 	private options: { loggerSilent?: boolean };
 
-	constructor(private config: AppConfig, options?: { loggerSilent?: boolean }) {
+	constructor(
+		private config: AppConfig,
+		options?: { loggerSilent?: boolean },
+	) {
 		this.options = options ?? {};
 	}
 
@@ -30,13 +33,18 @@ export class ServiceContainer {
 	createRoxyClient(): IRoxyClient {
 		return this.getSingleton("roxyClient", () => {
 			const { baseURL, token } = this.config.roxy;
-			const logger = this.createLogger({ module: "roxyClient", useSilent: this.options.loggerSilent === true });
+			const logger = this.createLogger({
+				module: "roxyClient",
+				useSilent: this.options.loggerSilent === true,
+			});
 			return new RoxyClient(baseURL, token, logger);
 		}) as unknown as IRoxyClient;
 	}
 
 	// 日志（支持静默/转 stderr）
-	createLogger(bindings?: Record<string, unknown> & { useSilent?: boolean; toStderr?: boolean }): ILogger {
+	createLogger(
+		bindings?: Record<string, unknown> & { useSilent?: boolean; toStderr?: boolean },
+	): ILogger {
 		const useSilent = bindings?.useSilent === true || this.options.loggerSilent === true;
 		if (useSilent) {
 			const silent = createLogger({ useSilent: true });
@@ -44,13 +52,18 @@ export class ServiceContainer {
 			delete (b as any).useSilent;
 			return Object.keys(b).length > 0 ? silent.child(b) : silent;
 		}
-		const base = this.getSingleton("logger", () => createLogger({ toStderr: process.env.MCP_LOG_STDERR === "true" })) as ILogger;
+		const base = this.getSingleton("logger", () =>
+			createLogger({ toStderr: process.env.MCP_LOG_STDERR === "true" }),
+		) as ILogger;
 		return bindings ? base.child(bindings) : base;
 	}
 
 	// 策略执行器（QPS/熔断）（单例）
 	createPolicyEnforcer(): PolicyEnforcer {
-		return this.getSingleton("policyEnforcer", () => new PolicyEnforcer(this.config.policy as PolicyOptions));
+		return this.getSingleton(
+			"policyEnforcer",
+			() => new PolicyEnforcer(this.config.policy as PolicyOptions),
+		);
 	}
 
 	// RoxyBrowser 管理器（单例）

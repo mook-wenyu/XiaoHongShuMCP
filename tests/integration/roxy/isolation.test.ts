@@ -63,7 +63,7 @@ describeIf("数据隔离验证测试", () => {
 				const context = browser.contexts()[0];
 				const page = await context.newPage();
 				return { dirId, browser, context, page };
-			})
+			}),
 		);
 
 		// 为每个账号设置不同的 Cookie
@@ -131,15 +131,18 @@ describeIf("数据隔离验证测试", () => {
 			await page.goto("https://example.com");
 
 			// 设置唯一的 LocalStorage
-			await page.evaluate((data) => {
-				localStorage.setItem("account_id", data.accountId);
-				localStorage.setItem("user_name", data.userName);
-				localStorage.setItem("session_token", data.sessionToken);
-			}, {
-				accountId: `account_${i + 1}`,
-				userName: `user_${i + 1}`,
-				sessionToken: `token_${dirId}`,
-			});
+			await page.evaluate(
+				(data) => {
+					localStorage.setItem("account_id", data.accountId);
+					localStorage.setItem("user_name", data.userName);
+					localStorage.setItem("session_token", data.sessionToken);
+				},
+				{
+					accountId: `account_${i + 1}`,
+					userName: `user_${i + 1}`,
+					sessionToken: `token_${dirId}`,
+				},
+			);
 
 			console.log(`  ✓ 账号 ${i + 1}: 设置 LocalStorage`);
 			await page.close();
@@ -163,9 +166,7 @@ describeIf("数据隔离验证测试", () => {
 			expect(storageData.userName).toBe(`user_${i + 1}`);
 			expect(storageData.sessionToken).toBe(`token_${dirId}`);
 
-			console.log(
-				`  ✅ 账号 ${i + 1}: LocalStorage 隔离验证通过 (${JSON.stringify(storageData)})`
-			);
+			console.log(`  ✅ 账号 ${i + 1}: LocalStorage 隔离验证通过 (${JSON.stringify(storageData)})`);
 
 			await page.close();
 		}
@@ -188,13 +189,16 @@ describeIf("数据隔离验证测试", () => {
 			const page = await context.newPage();
 			await page.goto("https://example.com");
 
-			await page.evaluate((data) => {
-				sessionStorage.setItem("temp_session", data.sessionId);
-				sessionStorage.setItem("temp_token", data.token);
-			}, {
-				sessionId: `session_${i + 1}`,
-				token: `temp_${dirId}`,
-			});
+			await page.evaluate(
+				(data) => {
+					sessionStorage.setItem("temp_session", data.sessionId);
+					sessionStorage.setItem("temp_token", data.token);
+				},
+				{
+					sessionId: `session_${i + 1}`,
+					token: `temp_${dirId}`,
+				},
+			);
 
 			console.log(`  ✓ 账号 ${i + 1}: 设置 SessionStorage`);
 			await page.close();
@@ -253,7 +257,7 @@ describeIf("数据隔离验证测试", () => {
 
 				await page.close();
 				return { dirId, accountIndex: i + 1, data };
-			})
+			}),
 		);
 
 		// 验证每个账号的数据都是独立的
@@ -263,9 +267,7 @@ describeIf("数据隔离验证测试", () => {
 			expect(result.data.localStorage.userName).toBe(`user_${i + 1}`);
 			expect(result.data.sessionStorage.sessionId).toBe(`session_${i + 1}`);
 
-			console.log(
-				`  ✅ 账号 ${result.accountIndex}: 所有数据隔离正常 (${result.dirId})`
-			);
+			console.log(`  ✅ 账号 ${result.accountIndex}: 所有数据隔离正常 (${result.dirId})`);
 		}
 
 		console.log("✅ 综合隔离性测试通过！所有账号数据完全隔离！");

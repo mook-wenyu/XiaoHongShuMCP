@@ -50,9 +50,7 @@ export async function parsePayload(raw: string): Promise<unknown> {
  */
 export function parseDirIds(argv: string[]): string[] {
 	const dirIdsArg = parseArg("dir-ids", argv) || process.env.ROXY_DIR_IDS;
-	const dirIdSingles = argv
-		.filter((a) => a.startsWith("--dirId="))
-		.map((a) => a.split("=")[1]);
+	const dirIdSingles = argv.filter((a) => a.startsWith("--dirId=")).map((a) => a.split("=")[1]);
 	return [
 		...(dirIdsArg
 			? dirIdsArg
@@ -80,11 +78,7 @@ export function parseDirIds(argv: string[]): string[] {
  * const url = parseArg('url', process.argv);
  * ```
  */
-export function parseArg(
-	name: string,
-	argv: string[],
-	defaultValue?: string
-): string | undefined {
+export function parseArg(name: string, argv: string[], defaultValue?: string): string | undefined {
 	const found = argv.find((a) => a.startsWith(`--${name}=`));
 	return found ? found.split("=")[1] : defaultValue;
 }

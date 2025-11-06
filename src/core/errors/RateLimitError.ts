@@ -30,10 +30,7 @@ export class RateLimitError extends BusinessError {
 	 * @param message 错误消息（默认提示）
 	 * @param context 上下文信息（key、qps、retryAfter 等）
 	 */
-	constructor(
-		message: string = "请求频率超限，请稍后重试",
-		context?: Record<string, unknown>
-	) {
+	constructor(message: string = "请求频率超限，请稍后重试", context?: Record<string, unknown>) {
 		super(message, context);
 	}
 

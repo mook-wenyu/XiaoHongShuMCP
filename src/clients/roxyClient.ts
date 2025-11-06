@@ -11,7 +11,6 @@ import type {
 	WindowCreateResponse,
 	ApiResponse,
 	OpenRequest,
-
 	ConnectionInfo,
 	ConnectionInfoResponse,
 } from "../types/roxy/index.js";
@@ -56,15 +55,18 @@ export class RoxyClient implements IRoxyClient {
 	 * @param logger 日志记录器（可选）
 	 * @param maxRetries HTTP 请求最大重试次数（可选，默认 5）
 	 */
-	constructor(baseURL: string, private token: string, private logger?: ILogger, maxRetries?: number) {
+	constructor(
+		baseURL: string,
+		private token: string,
+		private logger?: ILogger,
+		maxRetries?: number,
+	) {
 		this.http = new HttpClient({ baseURL, headers: { token }, logger, maxRetries });
 	}
 
 	private qs(obj?: Record<string, any>): string {
 		if (!obj) return "";
-		const ent = Object.entries(obj).filter(
-			([, v]) => v !== undefined && v !== null && v !== ""
-		);
+		const ent = Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== "");
 		if (ent.length === 0) return "";
 		const q = ent
 			.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
@@ -111,7 +113,7 @@ export class RoxyClient implements IRoxyClient {
 	async open(
 		dirId: string,
 		args?: string[],
-		workspaceId?: string | number
+		workspaceId?: string | number,
 	): Promise<ConnectionInfo> {
 		this.logger?.debug({ dirId, workspaceId }, "打开浏览器窗口");
 
@@ -131,113 +133,165 @@ export class RoxyClient implements IRoxyClient {
 				const http = d?.http || d?.http_url || d?.endpoint?.http;
 				const id = d?.id || dirId;
 				return { id, ws, http } as ConnectionInfo;
-			} catch { return undefined; }
+			} catch {
+				return undefined;
+			}
 		};
 
 		if (!parsed.success) {
 			const info = salvage(res);
 			if (info) {
-				this.logger?.warn({ endpoint: ROXY_API.WINDOW.OPEN }, "/browser/open 宽容解析成功（跳过严格校验）");
+				this.logger?.warn(
+					{ endpoint: ROXY_API.WINDOW.OPEN },
+					"/browser/open 宽容解析成功（跳过严格校验）",
+				);
 				this.logger?.info({ dirId, ws: info.ws }, "浏览器窗口已打开");
 				return info;
 			}
 			// 宽容策略：解析失败亦尝试回退（轮询 connection_info → 任意已运行窗口 → createWindow 再轮询）
 			try {
-				for (let i = 0; i < 30; i++) { // 轮询 ~15s（30*500ms）
-					const probe = await this.connectionInfo([dirId]).catch(() => ({ data: null } as any));
+				for (let i = 0; i < 30; i++) {
+					// 轮询 ~15s（30*500ms）
+					const probe = await this.connectionInfo([dirId]).catch(() => ({ data: null }) as any);
 					const item = probe?.data?.find((x: any) => x && (x.id === dirId || x.ws));
 					if (item?.ws) {
 						this.logger?.info({ dirId, ws: item.ws }, "浏览器窗口已打开");
 						return { id: item.id || dirId, ws: item.ws, http: item.http } as ConnectionInfo;
 					}
-					await new Promise(r => setTimeout(r, 500));
+					await new Promise((r) => setTimeout(r, 500));
 				}
 				// 进一步回退：选取任意已运行窗口（同工作区）；若没有则尝试创建窗口后再回补
 				const wsList = await this.workspaces().catch(() => undefined as any);
-				const wsId = (wsList?.data && Array.isArray(wsList.data) && wsList.data[0]?.id) || undefined;
+				const wsId =
+					(wsList?.data && Array.isArray(wsList.data) && wsList.data[0]?.id) || undefined;
 				if (wsId) {
-					const win = await this.listWindows({ workspaceId: wsId as any }).catch(() => undefined as any);
-					const dirIds: string[] = Array.isArray(win?.data) ? (win!.data!.map((w: any) => w?.dirId).filter(Boolean)) : [];
+					const win = await this.listWindows({ workspaceId: wsId as any }).catch(
+						() => undefined as any,
+					);
+					const dirIds: string[] = Array.isArray(win?.data)
+						? win!.data!.map((w: any) => w?.dirId).filter(Boolean)
+						: [];
 					if (dirIds.length) {
-						const info2 = await this.connectionInfo(dirIds).catch(() => ({ data: null } as any));
+						const info2 = await this.connectionInfo(dirIds).catch(() => ({ data: null }) as any);
 						const any = info2?.data?.find((x: any) => x?.ws);
-						if (any?.ws) { this.logger?.info({ dirId: any.id || dirId, ws: any.ws }, "浏览器窗口已打开"); return { id: any.id || dirId, ws: any.ws, http: any.http } as ConnectionInfo; }
+						if (any?.ws) {
+							this.logger?.info({ dirId: any.id || dirId, ws: any.ws }, "浏览器窗口已打开");
+							return { id: any.id || dirId, ws: any.ws, http: any.http } as ConnectionInfo;
+						}
 					}
 					try {
-						const created = await this.createWindow({ workspaceId: wsId as any, windowName: String(dirId) } as any);
+						const created = await this.createWindow({
+							workspaceId: wsId as any,
+							windowName: String(dirId),
+						} as any);
 						const newId = (created as any)?.data?.dirId || dirId;
-						for (let i = 0; i < 20; i++) { // 再次轮询 ~10s
-							const probe2 = await this.connectionInfo([newId]).catch(() => ({ data: null } as any));
+						for (let i = 0; i < 20; i++) {
+							// 再次轮询 ~10s
+							const probe2 = await this.connectionInfo([newId]).catch(
+								() => ({ data: null }) as any,
+							);
 							const item2 = probe2?.data?.find((x: any) => x && (x.id === newId || x.ws));
 							if (item2?.ws) {
 								this.logger?.info({ dirId: item2.id || newId, ws: item2.ws }, "浏览器窗口已打开");
 								return { id: item2.id || newId, ws: item2.ws, http: item2.http } as ConnectionInfo;
 							}
-							await new Promise(r => setTimeout(r, 500));
+							await new Promise((r) => setTimeout(r, 500));
 						}
 						// 二次尝试：创建窗口后直接调用 /browser/open 获取 ws，再宽容解析与轮询兜底
 						try {
-							const res2 = await this.http.post<unknown>(ROXY_API.WINDOW.OPEN, { dirId: newId, args, workspaceId: wsId as any });
+							const res2 = await this.http.post<unknown>(ROXY_API.WINDOW.OPEN, {
+								dirId: newId,
+								args,
+								workspaceId: wsId as any,
+							});
 							const info3 = salvage(res2);
 							if (info3) {
 								this.logger?.info({ dirId: newId, ws: info3.ws }, "浏览器窗口已打开");
 								return info3;
 							}
-							for (let i = 0; i < 20; i++) { // 再次轮询 ~10s
-								const probe3 = await this.connectionInfo([newId]).catch(() => ({ data: null } as any));
+							for (let i = 0; i < 20; i++) {
+								// 再次轮询 ~10s
+								const probe3 = await this.connectionInfo([newId]).catch(
+									() => ({ data: null }) as any,
+								);
 								const item3 = probe3?.data?.find((x: any) => x && (x.id === newId || x.ws));
 								if (item3?.ws) {
 									this.logger?.info({ dirId: item3.id || newId, ws: item3.ws }, "浏览器窗口已打开");
-									return { id: item3.id || newId, ws: item3.ws, http: item3.http } as ConnectionInfo;
+									return {
+										id: item3.id || newId,
+										ws: item3.ws,
+										http: item3.http,
+									} as ConnectionInfo;
 								}
-								await new Promise(r => setTimeout(r, 500));
+								await new Promise((r) => setTimeout(r, 500));
 							}
 						} catch {}
 					} catch {}
 				}
 			} catch {}
 			// 与测试预期保持一致：抛出统一错误消息
-			this.logger?.error({ endpoint: ROXY_API.WINDOW.OPEN, zodError: parsed.error.format() }, "打开浏览器窗口响应验证失败");
+			this.logger?.error(
+				{ endpoint: ROXY_API.WINDOW.OPEN, zodError: parsed.error.format() },
+				"打开浏览器窗口响应验证失败",
+			);
 			throw new Error("/browser/open 未返回 ws 端点");
 		}
 
 		// Zod 成功但 data 为空或缺 ws：尝试宽容解析→轮询 connection_info 回补→失败再报错
 		if (!parsed.data.data || !parsed.data.data.ws) {
 			const info = salvage(res);
-			if (info) { this.logger?.info({ dirId, ws: info.ws }, "浏览器窗口已打开"); return info; }
+			if (info) {
+				this.logger?.info({ dirId, ws: info.ws }, "浏览器窗口已打开");
+				return info;
+			}
 			try {
-				for (let i = 0; i < 30; i++) { // 轮询 ~15s（30*500ms）
-					const probe = await this.connectionInfo([dirId]).catch(() => ({ data: null } as any));
+				for (let i = 0; i < 30; i++) {
+					// 轮询 ~15s（30*500ms）
+					const probe = await this.connectionInfo([dirId]).catch(() => ({ data: null }) as any);
 					const item = probe?.data?.find((x: any) => x && (x.id === dirId || x.ws));
 					if (item?.ws) {
 						this.logger?.info({ dirId, ws: item.ws }, "浏览器窗口已打开");
 						return { id: item.id || dirId, ws: item.ws, http: item.http } as ConnectionInfo;
 					}
-					await new Promise(r => setTimeout(r, 500));
+					await new Promise((r) => setTimeout(r, 500));
 				}
 				// 进一步回退：选取任意已运行窗口（同工作区）；若没有则尝试创建窗口后再回补
 				const wsList = await this.workspaces().catch(() => undefined as any);
-				const wsId = (wsList?.data && Array.isArray(wsList.data) && wsList.data[0]?.id) || undefined;
+				const wsId =
+					(wsList?.data && Array.isArray(wsList.data) && wsList.data[0]?.id) || undefined;
 				if (wsId) {
-					const win = await this.listWindows({ workspaceId: wsId as any }).catch(() => undefined as any);
-					const dirIds: string[] = Array.isArray(win?.data) ? (win!.data!.map((w: any) => w?.dirId).filter(Boolean)) : [];
+					const win = await this.listWindows({ workspaceId: wsId as any }).catch(
+						() => undefined as any,
+					);
+					const dirIds: string[] = Array.isArray(win?.data)
+						? win!.data!.map((w: any) => w?.dirId).filter(Boolean)
+						: [];
 					if (dirIds.length) {
-						const info2 = await this.connectionInfo(dirIds).catch(() => ({ data: null } as any));
+						const info2 = await this.connectionInfo(dirIds).catch(() => ({ data: null }) as any);
 						const any = info2?.data?.find((x: any) => x?.ws);
-						if (any?.ws) { this.logger?.info({ dirId: any.id || dirId, ws: any.ws }, "浏览器窗口已打开"); return { id: any.id || dirId, ws: any.ws, http: any.http } as ConnectionInfo; }
+						if (any?.ws) {
+							this.logger?.info({ dirId: any.id || dirId, ws: any.ws }, "浏览器窗口已打开");
+							return { id: any.id || dirId, ws: any.ws, http: any.http } as ConnectionInfo;
+						}
 					}
 					// 若仍未命中，则尝试创建一个窗口并轮询回补
 					try {
-						const created = await this.createWindow({ workspaceId: wsId as any, windowName: String(dirId) } as any);
+						const created = await this.createWindow({
+							workspaceId: wsId as any,
+							windowName: String(dirId),
+						} as any);
 						const newId = (created as any)?.data?.dirId || dirId;
-						for (let i = 0; i < 20; i++) { // 再轮询 ~10s
-							const probe2 = await this.connectionInfo([newId]).catch(() => ({ data: null } as any));
+						for (let i = 0; i < 20; i++) {
+							// 再轮询 ~10s
+							const probe2 = await this.connectionInfo([newId]).catch(
+								() => ({ data: null }) as any,
+							);
 							const item2 = probe2?.data?.find((x: any) => x && (x.id === newId || x.ws));
 							if (item2?.ws) {
 								this.logger?.info({ dirId: item2.id || newId, ws: item2.ws }, "浏览器窗口已打开");
 								return { id: item2.id || newId, ws: item2.ws, http: item2.http } as ConnectionInfo;
 							}
-							await new Promise(r => setTimeout(r, 500));
+							await new Promise((r) => setTimeout(r, 500));
 						}
 					} catch {}
 				}
@@ -281,7 +335,10 @@ export class RoxyClient implements IRoxyClient {
 		// 使用 Zod 验证响应；失败不抛错，并记录为 warn 后继续记录 info（兼容不同版本返回体与单测期望）
 		const parsed = CloseResponseSchema.safeParse(res);
 		if (!parsed.success) {
-			this.logger?.warn({ endpoint: ROXY_API.WINDOW.CLOSE, zodError: parsed.error.format() }, "关闭浏览器窗口响应验证失败（已忽略）");
+			this.logger?.warn(
+				{ endpoint: ROXY_API.WINDOW.CLOSE, zodError: parsed.error.format() },
+				"关闭浏览器窗口响应验证失败（已忽略）",
+			);
 		}
 
 		this.logger?.info({ dirId }, "浏览器窗口已关闭");
@@ -320,7 +377,7 @@ export class RoxyClient implements IRoxyClient {
 		if (!parsed.success) {
 			this.logger?.warn(
 				{ endpoint: ROXY_API.CONNECTION.INFO, zodError: parsed.error.format() },
-				"连接信息响应验证失败（已宽容返回原始响应）"
+				"连接信息响应验证失败（已宽容返回原始响应）",
 			);
 			return res as any;
 		}
@@ -356,7 +413,7 @@ export class RoxyClient implements IRoxyClient {
 		if (!parsed.success) {
 			this.logger?.warn(
 				{ endpoint: "/browser/workspace", zodError: parsed.error.format() },
-				"工作空间列表响应验证失败（已宽容返回原始响应）"
+				"工作空间列表响应验证失败（已宽容返回原始响应）",
 			);
 			return res as any;
 		}
@@ -403,7 +460,7 @@ export class RoxyClient implements IRoxyClient {
 		if (!parsed.success) {
 			this.logger?.warn(
 				{ endpoint: "/browser/list_v3", zodError: parsed.error.format() },
-				"浏览器窗口列表响应验证失败（已宽容返回原始响应）"
+				"浏览器窗口列表响应验证失败（已宽容返回原始响应）",
 			);
 			return res as any;
 		}
@@ -458,14 +515,14 @@ export class RoxyClient implements IRoxyClient {
 		if (!parsed.success) {
 			this.logger?.warn(
 				{ endpoint: "/browser/create", zodError: parsed.error.format() },
-				"创建浏览器窗口响应验证失败（已宽容返回原始响应）"
+				"创建浏览器窗口响应验证失败（已宽容返回原始响应）",
 			);
 			return res as any;
 		}
 
 		this.logger?.info(
 			{ dirId: parsed.data.data.dirId, windowName: parsed.data.data.windowName },
-			"浏览器窗口创建成功"
+			"浏览器窗口创建成功",
 		);
 
 		return parsed.data;
@@ -532,7 +589,7 @@ export class RoxyClient implements IRoxyClient {
 		if (!parsed.success) {
 			this.logger?.error(
 				{ endpoint: ROXY_API.WINDOW.RANDOM_FINGERPRINT, zodError: parsed.error.format() },
-				"随机指纹响应验证失败"
+				"随机指纹响应验证失败",
 			);
 			throw new ValidationError("随机指纹响应验证失败", {
 				endpoint: ROXY_API.WINDOW.RANDOM_FINGERPRINT,
@@ -576,7 +633,7 @@ export class RoxyClient implements IRoxyClient {
 	async ensureOpen(
 		dirId: string,
 		workspaceId?: string | number,
-		args?: string[]
+		args?: string[],
 	): Promise<ConnectionInfo> {
 		try {
 			const info = await this.connectionInfo([dirId]);

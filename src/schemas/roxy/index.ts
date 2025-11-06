@@ -58,8 +58,5 @@ export {
 } from "./connection.js";
 
 // 指纹和代理配置 Schema 和类型
-export {
-	FingerprintConfigSchema,
-	type FingerprintConfig,
-} from "./fingerprint.js";
+export { FingerprintConfigSchema, type FingerprintConfig } from "./fingerprint.js";
 export { ProxyConfigSchema, type ProxyConfig } from "./proxy.js";

@@ -97,8 +97,7 @@ export interface WindowListParams extends PaginatedParams {
  * }
  * ```
  */
-export interface WindowListResponse
-	extends ApiResponse<PaginatedResponse<Window> | null> {}
+export interface WindowListResponse extends ApiResponse<PaginatedResponse<Window> | null> {}
 
 /**
  * 创建窗口请求参数

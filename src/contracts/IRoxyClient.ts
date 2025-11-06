@@ -38,11 +38,7 @@ export interface IRoxyClient {
 	 * @param workspaceId 工作空间 ID
 	 * @returns 窗口连接信息（包含 WebSocket 端点）
 	 */
-	open(
-		dirId: string,
-		args?: string[],
-		workspaceId?: string | number
-	): Promise<ConnectionInfo>;
+	open(dirId: string, args?: string[], workspaceId?: string | number): Promise<ConnectionInfo>;
 
 	/**
 	 * 关闭浏览器窗口
@@ -90,10 +86,7 @@ export interface IRoxyClient {
 	 * @remarks
 	 * 为指定窗口生成随机指纹配置，增强隐私保护和反检测能力。
 	 */
-	randomFingerprint(
-		workspaceId: number | string,
-		dirId: string
-	): Promise<ApiResponse<null>>;
+	randomFingerprint(workspaceId: number | string, dirId: string): Promise<ApiResponse<null>>;
 
 	/**
 	 * 确保窗口已打开（先查询运行中窗口，若不存在再打开）
@@ -105,6 +98,6 @@ export interface IRoxyClient {
 	ensureOpen(
 		dirId: string,
 		workspaceId?: string | number,
-		args?: string[]
+		args?: string[],
 	): Promise<ConnectionInfo>;
 }

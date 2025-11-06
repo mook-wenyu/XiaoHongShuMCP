@@ -6,12 +6,12 @@ import { describe, it, expect } from "vitest";
 import { XHS_CONF } from "../../../src/config/xhs";
 
 describe("xhs: scroll-after strategy config", () => {
-  it("should expose sane defaults for smart batch confirmation", () => {
-    expect(XHS_CONF.scroll.useApiAfterScroll).toBeTypeOf("boolean");
-    expect(XHS_CONF.scroll.shortFeedWaitMs).toBeGreaterThan(0);
-    expect(XHS_CONF.scroll.shortSearchWaitMs).toBeGreaterThan(0);
-    expect(XHS_CONF.scroll.microScrollOnNoProgressPx).toBeGreaterThanOrEqual(60);
-    expect(XHS_CONF.scroll.noProgressRoundsForBoost).toBeGreaterThanOrEqual(1);
-    expect(XHS_CONF.scroll.boostScrollMinPx).toBeGreaterThanOrEqual(800);
-  });
+	it("should expose sane defaults for smart batch confirmation", () => {
+		expect(XHS_CONF.scroll.useApiAfterScroll).toBeTypeOf("boolean");
+		expect(XHS_CONF.scroll.shortFeedWaitMs).toBeGreaterThan(0);
+		expect(XHS_CONF.scroll.shortSearchWaitMs).toBeGreaterThan(0);
+		expect(XHS_CONF.scroll.microScrollOnNoProgressPx).toBeGreaterThanOrEqual(60);
+		expect(XHS_CONF.scroll.noProgressRoundsForBoost).toBeGreaterThanOrEqual(1);
+		expect(XHS_CONF.scroll.boostScrollMinPx).toBeGreaterThanOrEqual(800);
+	});
 });

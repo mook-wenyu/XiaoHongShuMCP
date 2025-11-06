@@ -16,7 +16,7 @@ export type TaskArgs = Record<string, any>;
 export type TaskFn<T = unknown> = (
 	ctx: BrowserContext,
 	dirId: string,
-	args?: TaskArgs
+	args?: TaskArgs,
 ) => Promise<T>;
 
 /**
@@ -74,7 +74,7 @@ export interface ITaskRegistry {
 	register(
 		name: string,
 		fn: TaskFn,
-		metadata: { description: string; params: Record<string, any> }
+		metadata: { description: string; params: Record<string, any> },
 	): void;
 
 	/**

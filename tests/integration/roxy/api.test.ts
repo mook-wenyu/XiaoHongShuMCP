@@ -59,7 +59,7 @@ describeIf("RoxyClient API 集成测试", () => {
 		if (workspaces.data?.rows) {
 			workspaces.data.rows.forEach((ws: Workspace) => {
 				console.log(
-					`  - 工作区 ID: ${ws.id}, 类型: ${typeof ws.id}, 名称: ${ws.workspaceName || "N/A"}`
+					`  - 工作区 ID: ${ws.id}, 类型: ${typeof ws.id}, 名称: ${ws.workspaceName || "N/A"}`,
 				);
 			});
 		}

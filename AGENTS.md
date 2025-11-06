@@ -5,10 +5,12 @@
 本子模块遵循仓库根目录 AGENTS.md 的全部强制指令。本文件在本目录范围内做差异化补充：官方命名、MCP 静默、Roxy/Playwright 运行约束与测试策略等。
 
 ## 范围与优先级
+
 - 作用域：`HushOps.Servers.XiaoHongShu/` 及子目录。
 - 冲突时：以本文件明确标注“覆盖”的条目为准，其余继承。
 
 ## 关键差异（覆盖/补充）
+
 - 依赖与运行时：Node.js + TypeScript + Playwright（CDP 连接 RoxyBrowser）。多窗口=多上下文（1 个 `dirId`=1 个持久化 Context），多页=同 Context 多 Page。
 - 环境变量：
   - **必填**: `ROXY_API_TOKEN`
@@ -32,6 +34,7 @@
 - 工作流边界：本模块仅提供稳定的原子动作，不内置或实践业务工作流（等待/停留/重试等均由外部编排）。
 
 ## MCP 工具面（官方命名）
+
 - 浏览器管理：`browser_open/close`
 - 页面管理：`page_create/list/close/navigate`
 - 页面交互：`page_click/hover/scroll/type/input_clear`
@@ -45,24 +48,29 @@
 设计意图：等待/输入/采集等语义交给业务流程层；工具层仅提供稳定的原子动作与页面管理。
 
 ## 拟人化与选择器韧性
+
 - 拟人化：默认开启（无需传参）；支持贝塞尔曲线、轻过冲、终点微抖动；滚动分段+缓动曲线+微/宏停顿；可通过 `human=false` 或 `human.enabled=false` 关闭，或传入参数细化节律。
 - 选择器：`resolveLocatorResilient` 优先语义（role/name/label/testId/text）→ CSS 兜底；失败/耗时写入 `artifacts/selector-health.ndjson`，`scripts/selector-health-report.ts` 汇总 p95 等。
 
 ## RoxyBrowser 集成架构
+
 - 核心类：`src/services/roxyBrowser.ts:26` - `RoxyBrowserManager`
 - 实现方式：直接调用 RoxyBrowser REST API 获取 CDP WebSocket 端点，使用 Playwright 的 `chromium.connectOverCDP()` 连接
 - Context 管理：每个 dirId 对应一个持久化 BrowserContext，支持缓存与连接验证
 - 生命周期：由 ServiceContainer 协调，支持优雅关闭与资源清理
 
 ## 测试与验证
+
 - 单测优先覆盖：纯函数计划层、人机轨迹、选择器与错误路径。
 - MCP 最小测试：`tests/mcp/*.test.ts`（工具枚举与基本调用），在缺少 Roxy 时自动跳过依赖外部的用例。
 - artifacts 为文件真源：`resources.*` 工具直接读取 `artifacts/<dirId>`，便于在无 Roxy 环境下验证。
 
 ## 安全与日志
+
 - A2 安全清零：不实现或恢复任何认证/指纹/防护逻辑；若发现应立即移除并记录。
 - MCP stdout 禁止输出；必要信息写 stderr 或文件。
 
 ## 提交与文档
+
 - 小步变更、就近测试、UTF-8 无 BOM。
 - 使用向文档：`README.md`；架构与开发细节：`AGENTS.md`。

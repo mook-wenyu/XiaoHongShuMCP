@@ -11,11 +11,7 @@
  */
 
 import { z } from "zod";
-import {
-	PaginatedParamsSchema,
-	ApiResponseSchema,
-	PaginatedResponseSchema,
-} from "./common.js";
+import { PaginatedParamsSchema, ApiResponseSchema, PaginatedResponseSchema } from "./common.js";
 import { FingerprintConfigSchema } from "./fingerprint.js";
 import { ProxyConfigSchema } from "./proxy.js";
 
@@ -63,13 +59,7 @@ export const WindowListParamsSchema = PaginatedParamsSchema.extend({
 	os: z.string().optional().describe("操作系统类型"),
 	projectIds: z.string().optional().describe("项目 ID 列表（逗号分隔）"),
 	windowRemark: z.string().optional().describe("窗口备注（模糊搜索）"),
-	status: z
-		.number()
-		.int()
-		.min(0)
-		.max(1)
-		.optional()
-		.describe("窗口状态（0: 未启动, 1: 运行中）"),
+	status: z.number().int().min(0).max(1).optional().describe("窗口状态（0: 未启动, 1: 运行中）"),
 	labelIds: z.string().optional().describe("标签 ID 列表（逗号分隔）"),
 	softDeleted: z
 		.number()
@@ -108,7 +98,7 @@ export type WindowListParams = z.infer<typeof WindowListParamsSchema>;
  * data 字段可以为 null（当用户没有窗口时）
  */
 export const WindowListResponseSchema = ApiResponseSchema(
-	PaginatedResponseSchema(WindowSchema).nullable()
+	PaginatedResponseSchema(WindowSchema).nullable(),
 );
 
 /**

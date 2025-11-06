@@ -28,10 +28,7 @@ export const ProxyConfigSchema = z
 			.max(2)
 			.optional()
 			.describe("代理方式（0: 不使用, 1: 使用, 2: 从代理池获取）"),
-		proxyCategory: z
-			.enum(["http", "https", "socks5", "ssh"])
-			.optional()
-			.describe("代理类型"),
+		proxyCategory: z.enum(["http", "https", "socks5", "ssh"]).optional().describe("代理类型"),
 		ipType: z.enum(["ipv4", "ipv6"]).optional().describe("IP 类型"),
 		host: z.string().optional().describe("代理主机地址"),
 		port: z.number().int().min(1).max(65535).optional().describe("代理端口"),

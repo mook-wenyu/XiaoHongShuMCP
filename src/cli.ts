@@ -33,7 +33,10 @@ import { runTaskByName, listTasks } from "./tasks/registry.js";
 		const limit = Number(parseArg("limit", process.argv, String(dirIds.length))) || dirIds.length;
 		dirIds = dirIds.slice(0, Math.min(limit, dirIds.length));
 
-		const workspaceId = parseArg("workspace-id", process.argv) || parseArg("workspaceId", process.argv) || process.env.ROXY_DEFAULT_WORKSPACE_ID;
+		const workspaceId =
+			parseArg("workspace-id", process.argv) ||
+			parseArg("workspaceId", process.argv) ||
+			process.env.ROXY_DEFAULT_WORKSPACE_ID;
 
 		// 创建服务
 		const roxy = container.createRoxyClient();
@@ -56,20 +59,27 @@ import { runTaskByName, listTasks } from "./tasks/registry.js";
 			}
 			process.exit(130);
 		};
-		process.once("SIGINT", () => { void onSignal("SIGINT"); });
-		process.once("SIGTERM", () => { void onSignal("SIGTERM"); });
+		process.once("SIGINT", () => {
+			void onSignal("SIGINT");
+		});
+		process.once("SIGTERM", () => {
+			void onSignal("SIGTERM");
+		});
 
 		// 运行任务
 		const res = await runDirIds(
 			dirIds,
-			{ getContext: (id: string) => manager.getContext(id, workspaceId ? { workspaceId } as any : undefined) } as any,
+			{
+				getContext: (id: string) =>
+					manager.getContext(id, workspaceId ? ({ workspaceId } as any) : undefined),
+			} as any,
 			async (ctx: import("playwright").BrowserContext, id: string) => task(ctx, id, payload),
 			{
 				concurrency: config.MAX_CONCURRENCY,
 				timeoutMs: config.TIMEOUT_MS,
 				policy,
-				taskName
-			}
+				taskName,
+			},
 		);
 
 		logger.info({ ...res, total: dirIds.length }, "运行完成");

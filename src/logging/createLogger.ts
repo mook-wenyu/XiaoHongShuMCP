@@ -61,7 +61,7 @@ export function createLogger(options?: { useSilent?: boolean; toStderr?: boolean
 				redact: { paths: ["req.headers.token", "headers.token", "token"], censor: "[Redacted]" },
 			},
 			// fd=2 → stderr
-			pino.destination(2)
+			pino.destination(2),
 		);
 		return new PinoLogger(pinoInstance);
 	}
@@ -73,7 +73,7 @@ export function createLogger(options?: { useSilent?: boolean; toStderr?: boolean
 			? {
 					target: "pino-pretty",
 					options: { colorize: true, translateTime: "SYS:standard" },
-			  }
+				}
 			: undefined,
 	});
 

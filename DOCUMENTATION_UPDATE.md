@@ -7,6 +7,7 @@
 ### 1. README.md（用户指南）
 
 **主要更新**：
+
 - ✅ 补充完整的环境变量说明
   - 新增 `HUMAN_TRACE_LOG` 环境变量说明
   - 添加完整环境变量分类列表（连接配置、并发超时、选择器韧性等）
@@ -30,6 +31,7 @@
 ### 2. AGENTS.md（开发指引）
 
 **主要更新**：
+
 - ✅ 更新工具清单
   - 按类别组织工具列表
   - 补充诊断工具（`server.capabilities/ping`）
@@ -52,6 +54,7 @@
 ### 3. API_REFERENCE.md（新增，API 参考）
 
 **完整内容**：
+
 - ✅ 所有 MCP 工具的详细 API 文档
   - 浏览器与页面管理（7 个工具）
   - 页面交互（5 个工具）
@@ -88,24 +91,24 @@
 
 ### 工具实现对照表
 
-| 工具 | 代码位置 | README | AGENTS | API_REF |
-|------|---------|--------|---------|---------|
-| browser.open/close | src/mcp/tools/browser.ts | ✅ | ✅ | ✅ |
-| page.create/list/close | src/mcp/tools/page.ts | ✅ | ✅ | ✅ |
-| page.navigate | src/mcp/tools/page.ts | ✅ | ✅ | ✅ |
-| page.click/hover/scroll | src/mcp/tools/page.ts | ✅ | ✅ | ✅ |
-| page.type/input.clear | src/mcp/tools/page.ts | ✅ | ✅ | ✅ |
-| page.screenshot | src/mcp/tools/page.ts | ✅ | ✅ | ✅ |
-| page.snapshot | src/mcp/tools/resources.ts | ✅ | ✅ | ✅ |
-| xhs.session.check | src/mcp/tools/xhs.ts | ✅ | ✅ | ✅ |
-| xhs.navigate.home | src/mcp/tools/xhs.ts | ✅ | ✅ | ✅ |
-| resources.listArtifacts | src/mcp/tools/resources.ts | ✅ | ✅ | ✅ |
-| resources.readArtifact | src/mcp/tools/resources.ts | ✅ | ✅ | ✅ |
-| roxy.workspaces.list | src/mcp/tools/roxyAdmin.ts | ✅ | ✅ | ✅ |
-| roxy.windows.list | src/mcp/tools/roxyAdmin.ts | ✅ | ✅ | ✅ |
-| roxy.window.create | src/mcp/tools/roxyAdmin.ts | ✅ | ✅ | ✅ |
-| server.capabilities | src/mcp/server.ts | ✅ | ✅ | ✅ |
-| server.ping | src/mcp/server.ts | ✅ | ✅ | ✅ |
+| 工具                    | 代码位置                   | README | AGENTS | API_REF |
+| ----------------------- | -------------------------- | ------ | ------ | ------- |
+| browser.open/close      | src/mcp/tools/browser.ts   | ✅     | ✅     | ✅      |
+| page.create/list/close  | src/mcp/tools/page.ts      | ✅     | ✅     | ✅      |
+| page.navigate           | src/mcp/tools/page.ts      | ✅     | ✅     | ✅      |
+| page.click/hover/scroll | src/mcp/tools/page.ts      | ✅     | ✅     | ✅      |
+| page.type/input.clear   | src/mcp/tools/page.ts      | ✅     | ✅     | ✅      |
+| page.screenshot         | src/mcp/tools/page.ts      | ✅     | ✅     | ✅      |
+| page.snapshot           | src/mcp/tools/resources.ts | ✅     | ✅     | ✅      |
+| xhs.session.check       | src/mcp/tools/xhs.ts       | ✅     | ✅     | ✅      |
+| xhs.navigate.home       | src/mcp/tools/xhs.ts       | ✅     | ✅     | ✅      |
+| resources.listArtifacts | src/mcp/tools/resources.ts | ✅     | ✅     | ✅      |
+| resources.readArtifact  | src/mcp/tools/resources.ts | ✅     | ✅     | ✅      |
+| roxy.workspaces.list    | src/mcp/tools/roxyAdmin.ts | ✅     | ✅     | ✅      |
+| roxy.windows.list       | src/mcp/tools/roxyAdmin.ts | ✅     | ✅     | ✅      |
+| roxy.window.create      | src/mcp/tools/roxyAdmin.ts | ✅     | ✅     | ✅      |
+| server.capabilities     | src/mcp/server.ts          | ✅     | ✅     | ✅      |
+| server.ping             | src/mcp/server.ts          | ✅     | ✅     | ✅      |
 
 **总计**：23 个工具，文档覆盖率 100%
 
@@ -113,27 +116,27 @@
 
 ### 环境变量对照表
 
-| 类别 | 变量 | .env.example | README | AGENTS |
-|------|------|--------------|--------|--------|
-| 连接 | ROXY_API_TOKEN | ✅ | ✅ | ✅ |
-| 连接 | ROXY_API_BASEURL | ✅ | ✅ | ✅ |
-| 连接 | ROXY_API_HOST/PORT | ✅ | ✅ | ✅ |
-| 上下文 | ROXY_DEFAULT_WORKSPACE_ID | ✅ | ✅ | ✅ |
-| 上下文 | ROXY_DIR_IDS | ✅ | ✅ | ✅ |
-| 并发 | MAX_CONCURRENCY | ✅ | ✅ | - |
-| 并发 | TIMEOUT_MS | ✅ | ✅ | - |
-| 选择器 | SELECTOR_RETRY_* | ✅ | ✅ | ✅ |
-| 选择器 | SELECTOR_BREAKER_* | ✅ | ✅ | ✅ |
-| 小红书 | XHS_SCROLL_* | ✅ | ✅ | - |
-| 小红书 | XHS_SELECT_MAX_SCROLLS | ✅ | ✅ | - |
-| 小红书 | DEFAULT_URL | ✅ | ✅ | - |
-| 日志 | LOG_LEVEL/LOG_PRETTY | ✅ | ✅ | - |
-| 日志 | MCP_LOG_STDERR | ✅ | ✅ | - |
-| 快照 | SNAPSHOT_MAX_NODES | ✅ | ✅ | ✅ |
-| 拟人化 | HUMAN_PROFILE | ✅ | ✅ | ✅ |
-| 拟人化 | HUMAN_TRACE_LOG | ✅ | ✅ | ✅ |
-| 废弃 | ENABLE_ROXY_ADMIN_TOOLS | ✅ | ✅ | ✅ |
-| 废弃 | POLICY_* | ✅ | ✅ | - |
+| 类别   | 变量                      | .env.example | README | AGENTS |
+| ------ | ------------------------- | ------------ | ------ | ------ |
+| 连接   | ROXY_API_TOKEN            | ✅           | ✅     | ✅     |
+| 连接   | ROXY_API_BASEURL          | ✅           | ✅     | ✅     |
+| 连接   | ROXY_API_HOST/PORT        | ✅           | ✅     | ✅     |
+| 上下文 | ROXY_DEFAULT_WORKSPACE_ID | ✅           | ✅     | ✅     |
+| 上下文 | ROXY_DIR_IDS              | ✅           | ✅     | ✅     |
+| 并发   | MAX_CONCURRENCY           | ✅           | ✅     | -      |
+| 并发   | TIMEOUT_MS                | ✅           | ✅     | -      |
+| 选择器 | SELECTOR*RETRY*\*         | ✅           | ✅     | ✅     |
+| 选择器 | SELECTOR*BREAKER*\*       | ✅           | ✅     | ✅     |
+| 小红书 | XHS*SCROLL*\*             | ✅           | ✅     | -      |
+| 小红书 | XHS_SELECT_MAX_SCROLLS    | ✅           | ✅     | -      |
+| 小红书 | DEFAULT_URL               | ✅           | ✅     | -      |
+| 日志   | LOG_LEVEL/LOG_PRETTY      | ✅           | ✅     | -      |
+| 日志   | MCP_LOG_STDERR            | ✅           | ✅     | -      |
+| 快照   | SNAPSHOT_MAX_NODES        | ✅           | ✅     | ✅     |
+| 拟人化 | HUMAN_PROFILE             | ✅           | ✅     | ✅     |
+| 拟人化 | HUMAN_TRACE_LOG           | ✅           | ✅     | ✅     |
+| 废弃   | ENABLE_ROXY_ADMIN_TOOLS   | ✅           | ✅     | ✅     |
+| 废弃   | POLICY\_\*                | ✅           | ✅     | -      |
 
 **总计**：20+ 环境变量，核心变量文档覆盖率 100%
 
@@ -195,17 +198,20 @@
 ## 文档质量指标
 
 ### 完整性
+
 - ✅ 所有 MCP 工具都有文档（23/23 = 100%）
 - ✅ 所有核心环境变量都有说明
 - ✅ 所有 MCP 资源都有说明
 - ✅ 拟人化参数完整说明（档位、细化参数、关闭方法）
 
 ### 一致性
+
 - ✅ README、AGENTS、API_REFERENCE 三者工具列表一致
 - ✅ 环境变量在各文档中说明一致
 - ✅ 术语使用统一（dirId、workspaceId、拟人化等）
 
 ### 可用性
+
 - ✅ README 提供快速上手指南
 - ✅ AGENTS 提供开发者视角
 - ✅ API_REFERENCE 提供完整技术细节
@@ -213,6 +219,7 @@
 - ✅ 包含最佳实践和常见错误说明
 
 ### 可维护性
+
 - ✅ 文档结构清晰，便于更新
 - ✅ 使用 TypeScript 类型定义增强可读性
 - ✅ 包含更新记录和版本信息
@@ -264,6 +271,7 @@
 ## 总结
 
 本次文档更新确保了：
+
 1. **完整性**：所有代码功能都有对应文档
 2. **准确性**：文档内容与代码实现完全一致
 3. **可用性**：三层文档架构满足不同用户需求

@@ -41,17 +41,16 @@ export class ConfigProvider {
 	static load(): ConfigProvider {
 		const parsed = ConfigSchema.safeParse(process.env);
 		if (!parsed.success) {
-			const msg = parsed.error.issues
-				.map((i) => `${i.path.join(".")}: ${i.message}`)
-				.join("; ");
-			throw new Error(`配置错误：${msg}。请在项目根目录配置 .env（参考 .env.example）或设置系统环境变量。`);
+			const msg = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+			throw new Error(
+				`配置错误：${msg}。请在项目根目录配置 .env（参考 .env.example）或设置系统环境变量。`,
+			);
 		}
 
 		const env = parsed.data as any;
 		const host = env.ROXY_API_HOST || "127.0.0.1";
 		const port = env.ROXY_API_PORT || "50000";
-		const baseURL: string =
-			env.ROXY_API_BASEURL || `http://${host}:${port}`;
+		const baseURL: string = env.ROXY_API_BASEURL || `http://${host}:${port}`;
 
 		const config: AppConfig = {
 			roxy: { baseURL, token: env.ROXY_API_TOKEN },

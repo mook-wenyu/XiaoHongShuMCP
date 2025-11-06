@@ -8,7 +8,7 @@ describe("BrowserError 错误路径测试", () => {
 			const error = new BrowserError("Element not found", {
 				dirId: "test-dir-123",
 				operation: "click",
-				selector: "#submit-button"
+				selector: "#submit-button",
 			});
 
 			expect(error).toBeInstanceOf(Error);
@@ -19,7 +19,7 @@ describe("BrowserError 错误路径测试", () => {
 			expect(error.context).toEqual({
 				dirId: "test-dir-123",
 				operation: "click",
-				selector: "#submit-button"
+				selector: "#submit-button",
 			});
 		});
 
@@ -28,7 +28,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "dir-456",
 				operation: "goto",
 				url: "https://example.com",
-				timeout: 30000
+				timeout: 30000,
 			});
 
 			const json = error.toJSON();
@@ -42,8 +42,8 @@ describe("BrowserError 错误路径测试", () => {
 					dirId: "dir-456",
 					operation: "goto",
 					url: "https://example.com",
-					timeout: 30000
-				}
+					timeout: 30000,
+				},
 			});
 			expect(json).toHaveProperty("stack");
 		});
@@ -55,7 +55,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "click",
 				selector: ".non-existent-class",
-				searchedIn: "body"
+				searchedIn: "body",
 			});
 
 			expect(error.context?.selector).toBe(".non-existent-class");
@@ -68,7 +68,7 @@ describe("BrowserError 错误路径测试", () => {
 				operation: "goto",
 				url: "https://slow-website.com",
 				timeout: 30000,
-				elapsed: 30500
+				elapsed: 30500,
 			});
 
 			expect(error.context?.url).toBe("https://slow-website.com");
@@ -81,7 +81,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "click",
 				selector: "#hidden-button",
-				visibility: "hidden"
+				visibility: "hidden",
 			});
 
 			expect(error.context?.visibility).toBe("hidden");
@@ -92,7 +92,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "type",
 				selector: "input[disabled]",
-				reason: "Element is disabled"
+				reason: "Element is disabled",
 			});
 
 			expect(error.context?.reason).toBe("Element is disabled");
@@ -105,7 +105,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "goto",
 				url: "https://nonexistent.example.com",
-				networkStatus: "DNS_FAILED"
+				networkStatus: "DNS_FAILED",
 			});
 
 			expect(error.context?.networkStatus).toBe("DNS_FAILED");
@@ -116,7 +116,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "screenshot",
 				path: "/invalid/path/screenshot.png",
-				reason: "Invalid path"
+				reason: "Invalid path",
 			});
 
 			expect(error.context?.path).toBe("/invalid/path/screenshot.png");
@@ -128,7 +128,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "evaluate",
 				script: "document.querySelector('.invalid').click()",
-				jsError: "Cannot read property 'click' of null"
+				jsError: "Cannot read property 'click' of null",
 			});
 
 			expect(error.context?.script).toBe("document.querySelector('.invalid').click()");
@@ -141,7 +141,7 @@ describe("BrowserError 错误路径测试", () => {
 				operation: "setInputFiles",
 				selector: "input[type=file]",
 				files: ["/path/to/file1.pdf", "/path/to/file2.jpg"],
-				reason: "File not found"
+				reason: "File not found",
 			});
 
 			expect(error.context?.files).toEqual(["/path/to/file1.pdf", "/path/to/file2.jpg"]);
@@ -154,7 +154,7 @@ describe("BrowserError 错误路径测试", () => {
 			const error = new BrowserError("Context already closed", {
 				dirId: "test-dir",
 				operation: "newPage",
-				contextState: "closed"
+				contextState: "closed",
 			});
 
 			expect(error.context?.contextState).toBe("closed");
@@ -165,7 +165,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "click",
 				connectionStatus: "disconnected",
-				lastHeartbeat: new Date().toISOString()
+				lastHeartbeat: new Date().toISOString(),
 			});
 
 			expect(error.context?.connectionStatus).toBe("disconnected");
@@ -177,7 +177,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "connect",
 				wsEndpoint: "ws://localhost:9222/devtools/browser/abc-123",
-				errorCode: "ECONNREFUSED"
+				errorCode: "ECONNREFUSED",
 			});
 
 			expect(error.context?.wsEndpoint).toContain("ws://localhost:9222");
@@ -191,7 +191,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "frameLocator",
 				frameSelector: "iframe#nested-frame",
-				parentFrame: "iframe#main-frame"
+				parentFrame: "iframe#main-frame",
 			});
 
 			expect(error.context?.frameSelector).toBe("iframe#nested-frame");
@@ -203,7 +203,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "dialog.accept",
 				dialogType: "confirm",
-				reason: "No dialog present"
+				reason: "No dialog present",
 			});
 
 			expect(error.context?.dialogType).toBe("confirm");
@@ -215,7 +215,7 @@ describe("BrowserError 错误路径测试", () => {
 				dirId: "test-dir",
 				operation: "keyboard.press",
 				key: "Enter",
-				modifiers: ["Control", "Shift"]
+				modifiers: ["Control", "Shift"],
 			});
 
 			expect(error.context?.key).toBe("Enter");
@@ -228,7 +228,7 @@ describe("BrowserError 错误路径测试", () => {
 				operation: "mouse.click",
 				x: 100,
 				y: 200,
-				button: "right"
+				button: "right",
 			});
 
 			expect(error.context?.x).toBe(100);
@@ -240,7 +240,7 @@ describe("BrowserError 错误路径测试", () => {
 	describe("错误上下文信息", () => {
 		it("应该包含 dirId 信息", () => {
 			const error = new BrowserError("Operation failed", {
-				dirId: "unique-dir-id-789"
+				dirId: "unique-dir-id-789",
 			});
 
 			expect(error.context?.dirId).toBe("unique-dir-id-789");
@@ -261,7 +261,7 @@ describe("BrowserError 错误路径测试", () => {
 				url: "https://example.com/page",
 				viewport: { width: 1920, height: 1080 },
 				userAgent: "Mozilla/5.0...",
-				timestamp: new Date().toISOString()
+				timestamp: new Date().toISOString(),
 			});
 
 			expect(error.context).toMatchObject({
@@ -269,7 +269,7 @@ describe("BrowserError 错误路径测试", () => {
 				operation: "complexAction",
 				selector: "#target",
 				url: "https://example.com/page",
-				viewport: { width: 1920, height: 1080 }
+				viewport: { width: 1920, height: 1080 },
 			});
 		});
 	});
@@ -323,7 +323,7 @@ describe("BrowserError 错误路径测试", () => {
 			const longSelector = "div ".repeat(100) + "> span";
 			const error = new BrowserError("Selector too complex", {
 				dirId: "test",
-				selector: longSelector
+				selector: longSelector,
 			});
 
 			expect(error.context?.selector).toBe(longSelector);
@@ -332,7 +332,7 @@ describe("BrowserError 错误路径测试", () => {
 		it("应该处理特殊字符", () => {
 			const message = "操作失败: 选择器 \"#id > .class\" \n 包含特殊字符";
 			const error = new BrowserError(message, {
-				selector: "#id > .class[data-test='value']"
+				selector: "#id > .class[data-test='value']",
 			});
 
 			expect(error.message).toBe(message);

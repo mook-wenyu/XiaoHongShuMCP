@@ -8,7 +8,7 @@ describe("NetworkError 错误路径测试", () => {
 			const error = new NetworkError("Connection failed", {
 				url: "https://api.example.com/test",
 				method: "GET",
-				status: 503
+				status: 503,
 			});
 
 			expect(error).toBeInstanceOf(Error);
@@ -19,7 +19,7 @@ describe("NetworkError 错误路径测试", () => {
 			expect(error.context).toEqual({
 				url: "https://api.example.com/test",
 				method: "GET",
-				status: 503
+				status: 503,
 			});
 		});
 
@@ -27,7 +27,7 @@ describe("NetworkError 错误路径测试", () => {
 			const error = new NetworkError("Request timeout", {
 				url: "https://api.example.com/test",
 				method: "POST",
-				timeout: 30000
+				timeout: 30000,
 			});
 
 			const json = error.toJSON();
@@ -40,8 +40,8 @@ describe("NetworkError 错误路径测试", () => {
 				context: {
 					url: "https://api.example.com/test",
 					method: "POST",
-					timeout: 30000
-				}
+					timeout: 30000,
+				},
 			});
 			expect(json).toHaveProperty("stack");
 		});
@@ -71,7 +71,7 @@ describe("NetworkError 错误路径测试", () => {
 				statusText: "Internal Server Error",
 				headers: { "content-type": "application/json" },
 				body: { error: "Database connection failed" },
-				duration: 5000
+				duration: 5000,
 			});
 
 			expect(error.context).toEqual({
@@ -81,7 +81,7 @@ describe("NetworkError 错误路径测试", () => {
 				statusText: "Internal Server Error",
 				headers: { "content-type": "application/json" },
 				body: { error: "Database connection failed" },
-				duration: 5000
+				duration: 5000,
 			});
 		});
 
@@ -89,7 +89,7 @@ describe("NetworkError 错误路径测试", () => {
 			const originalError = new Error("Connection refused");
 			const error = new NetworkError("Failed to connect", {
 				url: "https://api.example.com",
-				originalError: originalError.message
+				originalError: originalError.message,
 			});
 
 			expect(error.context?.originalError).toBe("Connection refused");
@@ -118,10 +118,12 @@ describe("NetworkError 错误路径测试", () => {
 			const status = 404;
 			const error = new NetworkError(`Resource not found: ${url} (status: ${status})`, {
 				url,
-				status
+				status,
 			});
 
-			expect(error.message).toBe("Resource not found: https://api.example.com/users/123 (status: 404)");
+			expect(error.message).toBe(
+				"Resource not found: https://api.example.com/users/123 (status: 404)",
+			);
 		});
 
 		it("应该保持错误消息的原始格式", () => {
@@ -158,7 +160,7 @@ describe("NetworkError 错误路径测试", () => {
 		it("应该提供重试建议", () => {
 			const error = new NetworkError("Temporary failure", {
 				status: 503,
-				retryAfter: 60
+				retryAfter: 60,
 			});
 
 			expect(error.retryable).toBe(true);

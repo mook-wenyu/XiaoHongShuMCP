@@ -6,9 +6,9 @@ import { describe, it, expect } from "vitest";
 import * as netwatch from "../../../src/domain/xhs/netwatch";
 
 describe("netwatch exports", () => {
-  it("should export waitFeed/waitHomefeed/waitSearchNotes", () => {
-    expect(typeof netwatch.waitFeed).toBe("function");
-    expect(typeof netwatch.waitHomefeed).toBe("function");
-    expect(typeof netwatch.waitSearchNotes).toBe("function");
-  });
+	it("should export waitFeed/waitHomefeed/waitSearchNotes", () => {
+		expect(typeof netwatch.waitFeed).toBe("function");
+		expect(typeof netwatch.waitHomefeed).toBe("function");
+		expect(typeof netwatch.waitSearchNotes).toBe("function");
+	});
 });

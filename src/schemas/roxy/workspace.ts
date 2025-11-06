@@ -13,11 +13,7 @@
  */
 
 import { z } from "zod";
-import {
-	PaginatedParamsSchema,
-	ApiResponseSchema,
-	PaginatedResponseSchema,
-} from "./common.js";
+import { PaginatedParamsSchema, ApiResponseSchema, PaginatedResponseSchema } from "./common.js";
 
 /**
  * 项目详情 Schema
@@ -87,7 +83,7 @@ export type WorkspaceListParams = z.infer<typeof WorkspaceListParamsSchema>;
  * ```
  */
 export const WorkspaceListResponseSchema = ApiResponseSchema(
-	PaginatedResponseSchema(WorkspaceSchema)
+	PaginatedResponseSchema(WorkspaceSchema),
 );
 
 /**

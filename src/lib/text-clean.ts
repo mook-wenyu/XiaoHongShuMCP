@@ -11,54 +11,63 @@ import type { Page } from "playwright";
 const DEFAULT_REMOVE_CHARS = ",.!?，。！？·—–-:;()[]{}\"'`|<>~@#$%^&*+=_";
 
 function buildRegexFromEnv(): RegExp | null {
-  // 每次根据当前 env 重新构建，避免跨测试缓存导致的不可预期行为
-  const removeChars = process.env.XHS_TEXT_CLEAN_REMOVE_CHARS ?? DEFAULT_REMOVE_CHARS;
-  const removeRegex = process.env.XHS_TEXT_CLEAN_REMOVE_REGEX; // e.g., "[A-Z]" or "[\\p{Emoji_Presentation}]"
-  try {
-    if (removeRegex && removeRegex.trim().length > 0) {
-      return new RegExp(removeRegex, "gu");
-    }
-    if (removeChars && removeChars.length > 0) {
-      const escaped = removeChars.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-      return new RegExp(`[${escaped}]`, "gu");
-    }
-    return null;
-  } catch {
-    return null;
-  }
+	// 每次根据当前 env 重新构建，避免跨测试缓存导致的不可预期行为
+	const removeChars = process.env.XHS_TEXT_CLEAN_REMOVE_CHARS ?? DEFAULT_REMOVE_CHARS;
+	const removeRegex = process.env.XHS_TEXT_CLEAN_REMOVE_REGEX; // e.g., "[A-Z]" or "[\\p{Emoji_Presentation}]"
+	try {
+		if (removeRegex && removeRegex.trim().length > 0) {
+			return new RegExp(removeRegex, "gu");
+		}
+		if (removeChars && removeChars.length > 0) {
+			const escaped = removeChars.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+			return new RegExp(`[${escaped}]`, "gu");
+		}
+		return null;
+	} catch {
+		return null;
+	}
 }
 
-function applyRule(input: string, rule?: { removeChars?: string; removeRegex?: string; collapseWs?: boolean }): string {
-  let s = String(input || "");
-  try {
-    if (rule?.removeRegex) {
-      const re = new RegExp(rule.removeRegex, "gu");
-      s = s.replace(re, "");
-    } else if (rule?.removeChars) {
-      const escaped = rule.removeChars.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-      const re = new RegExp(`[${escaped}]`, "gu");
-      s = s.replace(re, "");
-    } else {
-      const re = buildRegexFromEnv();
-      if (re) s = s.replace(re, "");
-      // 保险兜底：移除所有 Unicode 标点和符号（默认行为），避免环境缓存导致的失效
-      s = s.replace(/[\p{P}\p{S}]+/gu, "");
-    }
-  } catch {
-    const re = buildRegexFromEnv();
-    if (re) s = s.replace(re, "");
-    s = s.replace(/[\p{P}\p{S}]+/gu, "");
-  }
-  const collapse = rule?.collapseWs ?? (String(process.env.XHS_TEXT_CLEAN_COLLAPSE_WS || "true").toLowerCase() !== "false");
-  if (collapse) s = s.replace(/\s+/g, " ").trim();
-  return s;
+function applyRule(
+	input: string,
+	rule?: { removeChars?: string; removeRegex?: string; collapseWs?: boolean },
+): string {
+	let s = String(input || "");
+	try {
+		if (rule?.removeRegex) {
+			const re = new RegExp(rule.removeRegex, "gu");
+			s = s.replace(re, "");
+		} else if (rule?.removeChars) {
+			const escaped = rule.removeChars.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+			const re = new RegExp(`[${escaped}]`, "gu");
+			s = s.replace(re, "");
+		} else {
+			const re = buildRegexFromEnv();
+			if (re) s = s.replace(re, "");
+			// 保险兜底：移除所有 Unicode 标点和符号（默认行为），避免环境缓存导致的失效
+			s = s.replace(/[\p{P}\p{S}]+/gu, "");
+		}
+	} catch {
+		const re = buildRegexFromEnv();
+		if (re) s = s.replace(re, "");
+		s = s.replace(/[\p{P}\p{S}]+/gu, "");
+	}
+	const collapse =
+		rule?.collapseWs ??
+		String(process.env.XHS_TEXT_CLEAN_COLLAPSE_WS || "true").toLowerCase() !== "false";
+	if (collapse) s = s.replace(/\s+/g, " ").trim();
+	return s;
 }
 
 export function cleanText(input: string | null | undefined): string {
-  return applyRule(String(input || ""), undefined);
+	return applyRule(String(input || ""), undefined);
 }
 
-export async function cleanTextFor(_page: Page, _pageType: string | undefined, input: string | null | undefined): Promise<string> {
-  // 直接使用环境变量与默认规则；如需差异化按页面类型处理，可在此处按 _pageType 做条件分支。
-  return applyRule(String(input || ""), undefined);
+export async function cleanTextFor(
+	_page: Page,
+	_pageType: string | undefined,
+	input: string | null | undefined,
+): Promise<string> {
+	// 直接使用环境变量与默认规则；如需差异化按页面类型处理，可在此处按 _pageType 做条件分支。
+	return applyRule(String(input || ""), undefined);
 }

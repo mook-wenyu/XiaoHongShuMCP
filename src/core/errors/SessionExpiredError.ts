@@ -29,10 +29,7 @@ export class SessionExpiredError extends BusinessError {
 	 * @param message 错误消息（默认提示）
 	 * @param context 上下文信息（dirId、lastActiveTime 等）
 	 */
-	constructor(
-		message: string = "会话已过期，请重新登录",
-		context?: Record<string, unknown>
-	) {
+	constructor(message: string = "会话已过期，请重新登录", context?: Record<string, unknown>) {
 		super(message, context);
 	}
 }

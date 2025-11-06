@@ -55,7 +55,7 @@ export class HttpClient {
 					const backoff = Math.min(1000 * 2 ** attempt, 8000);
 					this.logger?.warn(
 						{ status: res.status, attempt, url, method: init?.method },
-						`HTTP ${res.status} 失败，退避 ${backoff}ms 后重试`
+						`HTTP ${res.status} 失败，退避 ${backoff}ms 后重试`,
 					);
 					await delay(backoff);
 					return this.request<T>(path, init, attempt + 1);
@@ -88,7 +88,7 @@ export class HttpClient {
 				const backoff = Math.min(1000 * 2 ** attempt, 8000);
 				this.logger?.warn(
 					{ attempt, url, method: init?.method, error: (err as Error).message },
-					`网络错误，退避 ${backoff}ms 后重试`
+					`网络错误，退避 ${backoff}ms 后重试`,
 				);
 				await delay(backoff);
 				return this.request<T>(path, init, attempt + 1);

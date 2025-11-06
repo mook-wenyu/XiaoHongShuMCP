@@ -37,7 +37,9 @@ export async function ensureSearchLocators(page: Page): Promise<{ input?: any; s
 		} catch {}
 	}
 	// 统一记录一次健康度
-	try { healthMonitor.record("search-input", !!input, Date.now() - t0); } catch {}
+	try {
+		healthMonitor.record("search-input", !!input, Date.now() - t0);
+	} catch {}
 
 	const submitCandidates: any[] = [
 		XhsSelectors.searchSubmit(),
@@ -60,15 +62,22 @@ export async function ensureSearchLocators(page: Page): Promise<{ input?: any; s
 			break;
 		} catch {}
 	}
-	try { healthMonitor.record("search-submit", !!submit, Date.now() - t0); } catch {}
+	try {
+		healthMonitor.record("search-submit", !!submit, Date.now() - t0);
+	} catch {}
 	return { input, submit };
 }
 
 // 旧版调试函数（dumpHtml）已移除，避免未使用警告与不必要的磁盘写入
 
-export async function searchKeyword(page: Page, keyword: string): Promise<{ ok: boolean; url?: string; verified?: boolean; matchedCount?: number }> {
+export async function searchKeyword(
+	page: Page,
+	keyword: string,
+): Promise<{ ok: boolean; url?: string; verified?: boolean; matchedCount?: number }> {
 	// 不强制跳转：先尝试在当前页搜索，找不到再回到“发现”页
-	try { await closeModalIfOpen(page); } catch {}
+	try {
+		await closeModalIfOpen(page);
+	} catch {}
 
 	const isTest = String(process.env.NODE_ENV).toLowerCase() === "test";
 	let { input, submit } = await ensureSearchLocators(page);
@@ -78,7 +87,9 @@ export async function searchKeyword(page: Page, keyword: string): Promise<{ ok: 
 		await ensureDiscoverPage(page);
 		({ input, submit } = await ensureSearchLocators(page));
 		if (!input) {
-			try { await page.goto("https://www.xiaohongshu.com/", { waitUntil: "domcontentloaded" }); } catch {}
+			try {
+				await page.goto("https://www.xiaohongshu.com/", { waitUntil: "domcontentloaded" });
+			} catch {}
 			({ input, submit } = await ensureSearchLocators(page));
 			if (!input) return { ok: false };
 		}
@@ -95,21 +106,35 @@ export async function searchKeyword(page: Page, keyword: string): Promise<{ ok: 
 	await typeHuman(input, keyword, { wpm: 220 });
 
 	const waitSearchUrl = async () => {
-		try { await page.waitForURL(/\/search_result\?keyword=/, { timeout: XHS_CONF.search.waitUrlMs }); return true; } catch { return false; }
+		try {
+			await page.waitForURL(/\/search_result\?keyword=/, { timeout: XHS_CONF.search.waitUrlMs });
+			return true;
+		} catch {
+			return false;
+		}
 	};
 	// 统一监听：先挂 search.notes，再触发提交；与 URL 变化并行等待
 	const waitSearchApiSoft = async (): Promise<{ ok: boolean; count?: number }> => {
 		const { waitSearchNotes } = await import("./netwatch.js");
 		const w = waitSearchNotes(page, XHS_CONF.search.waitApiMs);
-		return w.promise.then(r => ({ ok: r.ok, count: Array.isArray((r as any).data?.items) ? (r as any).data.items.length : undefined })).catch(() => ({ ok: false }));
+		return w.promise
+			.then((r) => ({
+				ok: r.ok,
+				count: Array.isArray((r as any).data?.items) ? (r as any).data.items.length : undefined,
+			}))
+			.catch(() => ({ ok: false }));
 	};
 
 	for (let i = 0; i < 3; i++) {
 		const apiP = waitSearchApiSoft();
 		if (submit && (i === 0 || i === 2)) {
-			try { await clickHuman(page as any, submit); } catch {}
+			try {
+				await clickHuman(page as any, submit);
+			} catch {}
 		} else {
-			try { await page.keyboard.press("Enter"); } catch {}
+			try {
+				await page.keyboard.press("Enter");
+			} catch {}
 		}
 		const [urlOk, apiOk] = await Promise.all([waitSearchUrl(), apiP]);
 		if (urlOk || apiOk.ok) {

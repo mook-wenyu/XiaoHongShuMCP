@@ -17,7 +17,9 @@ export async function checkSession(ctx: BrowserContext) {
 	try {
 		const page = await ctx.newPage();
 		await page.goto("https://www.xiaohongshu.com", { waitUntil: "domcontentloaded" });
-		try { await page.waitForLoadState("networkidle", { timeout: 5000 }); } catch {}
+		try {
+			await page.waitForLoadState("networkidle", { timeout: 5000 });
+		} catch {}
 		cookies = await ctx.cookies();
 		await page.close();
 		ok = hasCookie(["xiaohongshu.com", "xhs.com"], cookies);

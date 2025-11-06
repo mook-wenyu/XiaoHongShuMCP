@@ -9,14 +9,17 @@ const { mockFetch } = vi.hoisted(() => ({ mockFetch: vi.fn() }));
 
 // Mock undici fetch
 vi.mock("undici", () => ({
-	fetch: mockFetch
+	fetch: mockFetch,
 }));
 
 describe("错误恢复测试", () => {
 	let logger: ILogger;
 
 	// Helper 函数：创建完整的 Response mock
-	const createMockResponse = (data: any, options: { ok?: boolean; status?: number; contentType?: string; statusText?: string } = {}) => ({
+	const createMockResponse = (
+		data: any,
+		options: { ok?: boolean; status?: number; contentType?: string; statusText?: string } = {},
+	) => ({
 		ok: options.ok ?? true,
 		status: options.status ?? 200,
 		statusText: options.statusText ?? "OK",
@@ -26,10 +29,10 @@ describe("错误恢复测试", () => {
 					return options.contentType ?? "application/json";
 				}
 				return null;
-			}
+			},
 		},
 		json: () => Promise.resolve(data),
-		text: () => Promise.resolve(typeof data === "string" ? data : JSON.stringify(data))
+		text: () => Promise.resolve(typeof data === "string" ? data : JSON.stringify(data)),
 	});
 
 	beforeEach(() => {
@@ -38,7 +41,7 @@ describe("错误恢复测试", () => {
 			info: vi.fn(),
 			warn: vi.fn(),
 			error: vi.fn(),
-			child: vi.fn().mockReturnThis()
+			child: vi.fn().mockReturnThis(),
 		} as unknown as ILogger;
 
 		// 重置所有 mocks
@@ -60,7 +63,7 @@ describe("错误恢复测试", () => {
 				baseURL: "https://api.example.com",
 				headers: { token: "test-token" },
 				maxRetries: 3,
-				logger
+				logger,
 			};
 
 			const client = new HttpClient(options);
@@ -76,7 +79,12 @@ describe("错误恢复测试", () => {
 			mockFetch.mockImplementation(() => {
 				attempt++;
 				if (attempt < 2) {
-					return Promise.resolve(createMockResponse({ error: "Service unavailable" }, { ok: false, status: 503, statusText: "Service Unavailable" }));
+					return Promise.resolve(
+						createMockResponse(
+							{ error: "Service unavailable" },
+							{ ok: false, status: 503, statusText: "Service Unavailable" },
+						),
+					);
 				}
 				return Promise.resolve(createMockResponse({ ok: true }));
 			});
@@ -84,7 +92,7 @@ describe("错误恢复测试", () => {
 			const options: HttpClientOptions = {
 				baseURL: "https://api.example.com",
 				maxRetries: 3,
-				logger
+				logger,
 			};
 
 			const client = new HttpClient(options);
@@ -100,7 +108,7 @@ describe("错误恢复测试", () => {
 			const options: HttpClientOptions = {
 				baseURL: "https://api.example.com",
 				maxRetries: 2, // 最多 2 次重试 = 总共 3 次尝试
-				logger
+				logger,
 			};
 
 			const client = new HttpClient(options);
@@ -109,17 +117,22 @@ describe("错误恢复测试", () => {
 			expect(mockFetch).toHaveBeenCalledTimes(3); // 1次初始 + 2次重试
 			expect(logger.error).toHaveBeenCalledWith(
 				expect.objectContaining({ err: expect.any(Error), url: expect.stringContaining("/test") }),
-				"HTTP 请求最终失败"
+				"HTTP 请求最终失败",
 			);
 		});
 
 		it("应该不重试 HTTP 4xx 错误", async () => {
-			mockFetch.mockResolvedValue(createMockResponse({ error: "Bad request" }, { ok: false, status: 400, statusText: "Bad Request" }));
+			mockFetch.mockResolvedValue(
+				createMockResponse(
+					{ error: "Bad request" },
+					{ ok: false, status: 400, statusText: "Bad Request" },
+				),
+			);
 
 			const options: HttpClientOptions = {
 				baseURL: "https://api.example.com",
 				maxRetries: 3,
-				logger
+				logger,
 			};
 
 			const client = new HttpClient(options);
@@ -145,7 +158,7 @@ describe("错误恢复测试", () => {
 			const options: HttpClientOptions = {
 				baseURL: "https://api.example.com",
 				maxRetries: 3,
-				logger
+				logger,
 			};
 
 			const client = new HttpClient(options);
@@ -167,16 +180,16 @@ describe("错误恢复测试", () => {
 							return "application/json";
 						}
 						return null;
-					}
+					},
 				},
 				json: () => Promise.reject(new Error("Invalid JSON")),
-				text: () => Promise.resolve("plain text response")
+				text: () => Promise.resolve("plain text response"),
 			});
 
 			const options: HttpClientOptions = {
 				baseURL: "https://api.example.com",
 				maxRetries: 1, // 限制重试次数，避免长时间退避
-				logger
+				logger,
 			};
 
 			const client = new HttpClient(options);
@@ -196,7 +209,7 @@ describe("错误恢复测试", () => {
 			const options: HttpClientOptions = {
 				baseURL: "https://api.example.com",
 				maxRetries: 1,
-				logger
+				logger,
 			};
 
 			const client = new HttpClient(options);
@@ -217,7 +230,7 @@ describe("错误恢复测试", () => {
 			const options: HttpClientOptions = {
 				baseURL: "https://api.example.com",
 				maxRetries: 1, // 最多 1 次重试 = 总共 2 次尝试
-				logger
+				logger,
 			};
 
 			const client = new HttpClient(options);
@@ -225,7 +238,7 @@ describe("错误恢复测试", () => {
 			const results = await Promise.allSettled([
 				client.get("/success1"),
 				client.get("/fail"),
-				client.get("/success2")
+				client.get("/success2"),
 			]);
 
 			expect(results[0].status).toBe("fulfilled");
@@ -245,7 +258,7 @@ describe("错误恢复测试", () => {
 				baseURL: "https://api.example.com",
 				headers: { token: "test-token" },
 				maxRetries: 1,
-				logger
+				logger,
 			};
 
 			const client = new HttpClient(options);
@@ -258,18 +271,23 @@ describe("错误恢复测试", () => {
 				const netError = error as NetworkError;
 				expect(netError.context).toMatchObject({
 					url: expect.stringContaining("/test"),
-					method: "GET"
+					method: "GET",
 				});
 			}
 		});
 
 		it("应该在错误中包含响应状态码", async () => {
-			mockFetch.mockResolvedValue(createMockResponse({ error: "Server error" }, { ok: false, status: 500, statusText: "Internal Server Error" }));
+			mockFetch.mockResolvedValue(
+				createMockResponse(
+					{ error: "Server error" },
+					{ ok: false, status: 500, statusText: "Internal Server Error" },
+				),
+			);
 
 			const options: HttpClientOptions = {
 				baseURL: "https://api.example.com",
 				maxRetries: 1,
-				logger
+				logger,
 			};
 
 			const client = new HttpClient(options);

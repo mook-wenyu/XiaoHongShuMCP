@@ -27,6 +27,7 @@
 打开或复用浏览器窗口（dirId 映射到持久化 BrowserContext）。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;          // 必填，账号窗口标识
@@ -35,6 +36,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -46,10 +48,11 @@
 ```
 
 **示例**：
+
 ```json
 {
-  "dirId": "user123",
-  "workspaceId": "28255"
+	"dirId": "user123",
+	"workspaceId": "28255"
 }
 ```
 
@@ -60,13 +63,15 @@
 关闭浏览器窗口。
 
 **参数**：
+
 ```typescript
 {
-  dirId: string;          // 必填，要关闭的窗口标识
+	dirId: string; // 必填，要关闭的窗口标识
 }
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -83,6 +88,7 @@
 在窗口中创建新页面。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;          // 必填
@@ -92,6 +98,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -109,6 +116,7 @@
 列出窗口中的所有页面。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;          // 必填
@@ -117,6 +125,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -136,6 +145,7 @@
 关闭指定页面。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;          // 必填
@@ -145,6 +155,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -162,6 +173,7 @@
 导航到指定 URL。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;          // 必填
@@ -172,6 +184,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -190,6 +203,7 @@
 点击页面元素（支持拟人化鼠标移动）。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;                  // 必填
@@ -201,6 +215,7 @@
 ```
 
 **target 定位参数**：
+
 ```typescript
 {
   // 语义定位（优先）
@@ -219,6 +234,7 @@
 ```
 
 **HumanOptions**：
+
 ```typescript
 {
   enabled?: boolean;      // 是否启用拟人化（默认 true）
@@ -235,6 +251,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -249,18 +266,19 @@
 ```
 
 **示例**：
+
 ```json
 {
-  "dirId": "user123",
-  "target": {
-    "role": "button",
-    "name": "登录"
-  },
-  "human": {
-    "profile": "default",
-    "steps": 24,
-    "randomness": 0.2
-  }
+	"dirId": "user123",
+	"target": {
+		"role": "button",
+		"name": "登录"
+	},
+	"human": {
+		"profile": "default",
+		"steps": 24,
+		"randomness": 0.2
+	}
 }
 ```
 
@@ -273,6 +291,7 @@
 **参数**：同 `page.click`
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -293,6 +312,7 @@
 滚动页面（支持拟人化分段滚动）。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;                  // 必填
@@ -323,6 +343,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -334,15 +355,16 @@
 ```
 
 **示例**：
+
 ```json
 {
-  "dirId": "user123",
-  "deltaY": 500,
-  "human": {
-    "segments": 6,
-    "perSegmentMs": 120,
-    "microPauseChance": 0.25
-  }
+	"dirId": "user123",
+	"deltaY": 500,
+	"human": {
+		"segments": 6,
+		"perSegmentMs": 120,
+		"microPauseChance": 0.25
+	}
 }
 ```
 
@@ -353,6 +375,7 @@
 输入文本（支持逐字延时）。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;                  // 必填
@@ -368,6 +391,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -379,17 +403,18 @@
 ```
 
 **示例**：
+
 ```json
 {
-  "dirId": "user123",
-  "target": {
-    "role": "textbox",
-    "name": "标题"
-  },
-  "text": "今天天气真好",
-  "human": {
-    "wpm": 180
-  }
+	"dirId": "user123",
+	"target": {
+		"role": "textbox",
+		"name": "标题"
+	},
+	"text": "今天天气真好",
+	"human": {
+		"wpm": 180
+	}
 }
 ```
 
@@ -400,6 +425,7 @@
 清空输入框内容。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;
@@ -410,6 +436,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -429,6 +456,7 @@
 截取页面截图。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;          // 必填
@@ -440,6 +468,7 @@
 ```
 
 **返回值**：
+
 - 文本内容项：JSON 格式的元数据
 - 图片内容项：image/png 格式的截图数据
 
@@ -469,6 +498,7 @@
 获取页面可访问性快照（a11y 树）。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;          // 必填
@@ -479,6 +509,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -501,10 +532,11 @@
 ```
 
 **示例**：
+
 ```json
 {
-  "dirId": "user123",
-  "maxNodes": 500
+	"dirId": "user123",
+	"maxNodes": 500
 }
 ```
 
@@ -517,6 +549,7 @@
 检查小红书会话状态。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;
@@ -525,6 +558,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -543,6 +577,7 @@
 导航到小红书首页并验证。
 
 **参数**：
+
 ```typescript
 {
   dirId: string;
@@ -551,6 +586,7 @@
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -570,13 +606,15 @@
 列出指定 dirId 下的所有 artifacts 文件。
 
 **参数**：
+
 ```typescript
 {
-  dirId: string;
+	dirId: string;
 }
 ```
 
 **返回值**：
+
 ```typescript
 {
   ok: true,
@@ -594,14 +632,16 @@
 读取 artifacts 文件内容。
 
 **参数**：
+
 ```typescript
 {
-  dirId: string;
-  path: string;           // 相对于 artifacts/<dirId> 的路径
+	dirId: string;
+	path: string; // 相对于 artifacts/<dirId> 的路径
 }
 ```
 
 **返回值**：
+
 - 文本文件：返回 text 内容项
 - 图片文件（png/jpg）：返回 image 内容项
 
@@ -629,6 +669,7 @@
 获取工作区列表。
 
 **参数**：
+
 ```typescript
 {
   page_index?: number;    // 页码（从 0 开始，默认 0）
@@ -645,6 +686,7 @@
 获取浏览器窗口列表。
 
 **参数**：
+
 ```typescript
 {
   workspaceId: number | string;  // 必填
@@ -665,6 +707,7 @@
 创建新浏览器窗口。
 
 **参数**：
+
 ```typescript
 {
   workspaceId: number | string;  // 必填
@@ -693,6 +736,7 @@
 **参数**：无
 
 **返回值**：
+
 ```typescript
 {
   adapter: "official";
@@ -714,10 +758,11 @@
 **参数**：无
 
 **返回值**：
+
 ```typescript
 {
-  ok: true;
-  ts: number;             // 时间戳
+	ok: true;
+	ts: number; // 时间戳
 }
 ```
 
@@ -730,9 +775,11 @@
 列出指定 dirId 的所有 artifacts 文件。
 
 **参数**：
+
 - `dirId`: 路径参数，账号标识
 
 **返回值**：
+
 ```typescript
 {
   root: string;
@@ -747,6 +794,7 @@
 获取指定页面的 a11y 快照。
 
 **参数**：
+
 - `dirId`: 路径参数，账号标识
 - `page`: 路径参数，页面索引（数字）
 
@@ -828,6 +876,7 @@
 ### 选择器韧性
 
 系统自动实现选择器韧性策略：
+
 1. 优先尝试语义定位
 2. 失败时自动回退到 CSS 选择器
 3. 所有失败和耗时会记录到 `artifacts/selector-health.ndjson`
@@ -938,6 +987,7 @@ console.log(snapshot.url, snapshot.clickableCount);
 完整的环境变量列表请查看 [.env.example](.env.example)。
 
 关键配置：
+
 - `ROXY_API_TOKEN`: 必填，Roxy API 令牌
 - `HUMAN_PROFILE`: default/cautious/rapid，影响所有拟人化动作
 - `SNAPSHOT_MAX_NODES`: 页面快照节点上限，默认 800

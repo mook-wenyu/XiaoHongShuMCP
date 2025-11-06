@@ -4,58 +4,76 @@ import { createLogger } from "../logging/index.js";
 const log = createLogger();
 import type { BrowserContext } from "playwright";
 
-export interface RunOptions { concurrency: number; timeoutMs: number; policy?: import("../services/policy.js").PolicyEnforcer; taskName?: string; }
-export interface RunResult { success: string[]; failed: { dirId: string; error: string }[]; durationMs: number; metricsPath?: string }
+export interface RunOptions {
+	concurrency: number;
+	timeoutMs: number;
+	policy?: import("../services/policy.js").PolicyEnforcer;
+	taskName?: string;
+}
+export interface RunResult {
+	success: string[];
+	failed: { dirId: string; error: string }[];
+	durationMs: number;
+	metricsPath?: string;
+}
 
 export type ContextTask<T = unknown> = (ctx: BrowserContext, dirId: string) => Promise<T>;
 
 export async function runDirIds<T>(
-  dirIds: string[],
-  adapter: { getContext: (dirId: string) => Promise<{ context: BrowserContext }> },
-  task: ContextTask<T>,
-  opts: RunOptions
+	dirIds: string[],
+	adapter: { getContext: (dirId: string) => Promise<{ context: BrowserContext }> },
+	task: ContextTask<T>,
+	opts: RunOptions,
 ): Promise<RunResult> {
-  const start = Date.now();
-  const pq = new PQueue({ concurrency: opts.concurrency });
-  const success: string[] = [];
-  const failed: { dirId: string; error: string }[] = [];
+	const start = Date.now();
+	const pq = new PQueue({ concurrency: opts.concurrency });
+	const success: string[] = [];
+	const failed: { dirId: string; error: string }[] = [];
 
-  await Promise.all(
-    dirIds.map((id) =>
-      pq.add(async () => {
-        try {
-          if (opts.policy) await opts.policy.acquire(id);
-          const started = Date.now();
-          const { context } = await adapter.getContext(id);
-          const result = await task(context, id);
-          success.push(id);
-          opts.policy?.success(id);
-          try {
-            const { writeManifest } = await import("../services/artifacts.js");
-            await writeManifest("artifacts", id, {
-              task: opts.taskName ?? "unknown",
-              dirId: id,
-              startedAt: new Date(started).toISOString(),
-              finishedAt: new Date().toISOString(),
-              result
-            });
-          } catch {}
-          return result;
-        } catch (err: any) {
-          failed.push({ dirId: id, error: String(err?.message || err) });
-          opts.policy?.fail(id, err);
-          log.error({ err, dirId: id }, "任务失败");
-        }
-      }, { timeout: opts.timeoutMs })
-    )
-  );
+	await Promise.all(
+		dirIds.map((id) =>
+			pq.add(
+				async () => {
+					try {
+						if (opts.policy) await opts.policy.acquire(id);
+						const started = Date.now();
+						const { context } = await adapter.getContext(id);
+						const result = await task(context, id);
+						success.push(id);
+						opts.policy?.success(id);
+						try {
+							const { writeManifest } = await import("../services/artifacts.js");
+							await writeManifest("artifacts", id, {
+								task: opts.taskName ?? "unknown",
+								dirId: id,
+								startedAt: new Date(started).toISOString(),
+								finishedAt: new Date().toISOString(),
+								result,
+							});
+						} catch {}
+						return result;
+					} catch (err: any) {
+						failed.push({ dirId: id, error: String(err?.message || err) });
+						opts.policy?.fail(id, err);
+						log.error({ err, dirId: id }, "任务失败");
+					}
+				},
+				{ timeout: opts.timeoutMs },
+			),
+		),
+	);
 
-  const duration = Date.now() - start;
-  let metricsPath: string | undefined;
-  try {
-    const { writeMetrics } = await import("../services/metrics.js");
-    metricsPath = await writeMetrics("artifacts", { startedAt: new Date(start).toISOString(), finishedAt: new Date().toISOString(), durationMs: duration, success, failed });
-  } catch {}
-  return { success, failed, durationMs: duration, metricsPath };
+	const duration = Date.now() - start;
+	let metricsPath: string | undefined;
+	try {
+		const { writeMetrics } = await import("../services/metrics.js");
+		metricsPath = await writeMetrics("artifacts", {
+			startedAt: new Date(start).toISOString(),
+			finishedAt: new Date().toISOString(),
+			durationMs: duration,
+			success,
+			failed,
+		});
+	} catch {}
+	return { success, failed, durationMs: duration, metricsPath };
 }
-

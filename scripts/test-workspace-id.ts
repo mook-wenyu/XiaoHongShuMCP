@@ -133,7 +133,9 @@ async function testWorkspaceIdFormat() {
 							console.log("\n   ⚠️ 发现: 不传 workspaceId 时能查到窗口！");
 							console.log("   这些窗口的 workspaceId:");
 							windows2.data.rows.forEach((win: any) => {
-								console.log(`     - ${win.windowName}: workspaceId=${win.workspaceId} (${typeof win.workspaceId})`);
+								console.log(
+									`     - ${win.windowName}: workspaceId=${win.workspaceId} (${typeof win.workspaceId})`,
+								);
 							});
 						}
 					} catch (e) {
@@ -145,7 +147,7 @@ async function testWorkspaceIdFormat() {
 					const windows3 = await roxyClient.listWindows({
 						workspaceId,
 						page_index: 0,
-						page_size: 100
+						page_size: 100,
 					});
 					console.log(`   返回窗口数: ${windows3.data?.rows?.length || 0}`);
 
@@ -154,12 +156,12 @@ async function testWorkspaceIdFormat() {
 					const windows4 = await roxyClient.listWindows({
 						workspaceId,
 						softDeleted: 0,
-						page_size: 100
+						page_size: 100,
 					});
 					console.log(`   返回窗口数: ${windows4.data?.rows?.length || 0}`);
 
 					// 选择有窗口的结果进行详细展示
-					const windowsResults = [windows1, windows2, windows3, windows4].filter(w => w !== null);
+					const windowsResults = [windows1, windows2, windows3, windows4].filter((w) => w !== null);
 					let windowsList: any[] = [];
 
 					for (const result of windowsResults) {
@@ -191,13 +193,13 @@ async function testWorkspaceIdFormat() {
 						windowsList.forEach((win: any, index: number) => {
 							console.log(`窗口 #${index + 1}:`);
 							console.log(`  - dirId: ${win.dirId}`);
-							console.log(`  - windowName: ${win.windowName || 'N/A'}`);
-							console.log(`  - os: ${win.os || 'N/A'}`);
-							console.log(`  - status: ${win.status} (${win.status === 1 ? '运行中' : '未运行'})`);
+							console.log(`  - windowName: ${win.windowName || "N/A"}`);
+							console.log(`  - os: ${win.os || "N/A"}`);
+							console.log(`  - status: ${win.status} (${win.status === 1 ? "运行中" : "未运行"})`);
 							console.log(`  - workspaceId: ${win.workspaceId} (类型: ${typeof win.workspaceId})`);
-							console.log(`  - projectId: ${win.projectId || 'N/A'}`);
-							console.log(`  - windowRemark: ${win.windowRemark || 'N/A'}`);
-							console.log(`  - createTime: ${win.createTime || 'N/A'}`);
+							console.log(`  - projectId: ${win.projectId || "N/A"}`);
+							console.log(`  - windowRemark: ${win.windowRemark || "N/A"}`);
+							console.log(`  - createTime: ${win.createTime || "N/A"}`);
 
 							// 显示所有字段
 							const allKeys = Object.keys(win);
@@ -231,7 +233,6 @@ async function testWorkspaceIdFormat() {
 
 		console.log("✅ 测试完成!\n");
 		process.exit(0);
-
 	} catch (error) {
 		console.error("\n❌ 测试失败:");
 		console.error(error);

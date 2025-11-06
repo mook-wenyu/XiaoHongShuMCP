@@ -10,28 +10,28 @@ import { runDirIds } from "../src/runner/multiAccountRunner.js";
 import { runTaskByName } from "../src/tasks/registry.js";
 
 (async () => {
-  const provider = ConfigProvider.load();
-  const cfg = provider.getConfig();
-  const container = new ServiceContainer(cfg);
-  const logger = container.createLogger({ module: "demo" });
+	const provider = ConfigProvider.load();
+	const cfg = provider.getConfig();
+	const container = new ServiceContainer(cfg);
+	const logger = container.createLogger({ module: "demo" });
 
-  const url = parseArg("url", process.argv, cfg.DEFAULT_URL)!;
-  const taskName = parseArg("task", process.argv, "openAndScreenshot")!;
-  const dirIds = parseDirIds(process.argv);
-  if (dirIds.length === 0) throw new Error("请通过 --dir-ids 或 --dirId 提供至少一个 dirId");
+	const url = parseArg("url", process.argv, cfg.DEFAULT_URL)!;
+	const taskName = parseArg("task", process.argv, "openAndScreenshot")!;
+	const dirIds = parseDirIds(process.argv);
+	if (dirIds.length === 0) throw new Error("请通过 --dir-ids 或 --dirId 提供至少一个 dirId");
 
-  const payload: any = { url };
-  const task = runTaskByName(taskName);
-  const manager = container.createRoxyBrowserManager();
-  const policy = container.createPolicyEnforcer();
+	const payload: any = { url };
+	const task = runTaskByName(taskName);
+	const manager = container.createRoxyBrowserManager();
+	const policy = container.createPolicyEnforcer();
 
-  const res = await runDirIds(
-    dirIds,
-    { getContext: (id) => manager.getContext(id) } as any,
-    (ctx, id) => task(ctx, id, payload),
-    { concurrency: cfg.MAX_CONCURRENCY, timeoutMs: cfg.TIMEOUT_MS, policy, taskName }
-  );
+	const res = await runDirIds(
+		dirIds,
+		{ getContext: (id) => manager.getContext(id) } as any,
+		(ctx, id) => task(ctx, id, payload),
+		{ concurrency: cfg.MAX_CONCURRENCY, timeoutMs: cfg.TIMEOUT_MS, policy, taskName },
+	);
 
-  logger.info(res, "demo-local 完成");
-  await container.cleanup();
+	logger.info(res, "demo-local 完成");
+	await container.cleanup();
 })();

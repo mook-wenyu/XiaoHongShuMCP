@@ -22,15 +22,21 @@ export class PolicyEnforcer {
 	// 便捷包装：acquire + 执行 + success/fail
 	async use<T>(key: string, fn: () => Promise<T>): Promise<T> {
 		await this.acquire(key);
-		try { const r = await fn(); this.success(key); return r; }
-		catch (e) { this.fail(key, e); throw e; }
+		try {
+			const r = await fn();
+			this.success(key);
+			return r;
+		} catch (e) {
+			this.fail(key, e);
+			throw e;
+		}
 	}
 
 	constructor(private options: PolicyOptions = {}) {
 		this.opts = {
 			qps: options.qps ?? 5,
 			openSeconds: options.openSeconds ?? 15,
-			failureThreshold: options.failureThreshold ?? 5
+			failureThreshold: options.failureThreshold ?? 5,
 		};
 		// 防止 qps 为 0 导致 Infinity
 		this.perTokenMs = this.opts.qps > 0 ? 1000 / this.opts.qps : 0;
@@ -65,7 +71,10 @@ export class PolicyEnforcer {
 		if (this.perTokenMs > 0) {
 			for (;;) {
 				this.refill(Date.now());
-				if (this.tokens > 0) { this.tokens--; break; }
+				if (this.tokens > 0) {
+					this.tokens--;
+					break;
+				}
 				await delay(this.perTokenMs);
 			}
 		}

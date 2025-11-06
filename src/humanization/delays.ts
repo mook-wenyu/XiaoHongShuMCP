@@ -1,5 +1,10 @@
 /* 中文注释：输入与等待的延迟分布工具 */
-export interface DelayProfile { baseMs?: number; jitterMs?: number; minMs?: number; maxMs?: number }
+export interface DelayProfile {
+	baseMs?: number;
+	jitterMs?: number;
+	minMs?: number;
+	maxMs?: number;
+}
 
 export function jitter(ms: number, jitterMs = 30, minMs = 5, maxMs = 2000) {
 	const val = Math.round(ms + (Math.random() * 2 - 1) * jitterMs);
@@ -13,4 +18,6 @@ export function charDelayByWPM(wpm = 180, jitterMs = 40) {
 	return (ch: string) => jitter(msPerChar + (/[.,!?:;]/.test(ch) ? 120 : 0), jitterMs, 15, 600);
 }
 
-export function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+export function sleep(ms: number) {
+	return new Promise((r) => setTimeout(r, ms));
+}

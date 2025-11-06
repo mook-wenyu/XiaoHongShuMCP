@@ -3,7 +3,12 @@ import type { BrowserContext } from "playwright";
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
 
-export async function openAndScreenshot(ctx: BrowserContext, profileId: string, url: string, outDir = "artifacts") {
+export async function openAndScreenshot(
+	ctx: BrowserContext,
+	profileId: string,
+	url: string,
+	outDir = "artifacts",
+) {
 	const page = await ctx.newPage();
 	await page.goto(url, { waitUntil: "domcontentloaded" });
 	const dir = join(outDir, profileId);
