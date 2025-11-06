@@ -40,7 +40,7 @@ async function main() {
     // XHS 基线
     "xhs_session_check","xhs_navigate_home",
     // XHS 扩展（快捷语义动作）
-    "xhs_close_modal","xhs_navigate_discover","xhs_search_keyword",
+    "xhs_close_modal","xhs_navigate_discover","xhs_search_keyword","xhs_keyword_browse","xhs_select_note",
     "xhs_note_like","xhs_note_unlike","xhs_note_collect","xhs_note_uncollect",
     "xhs_user_follow","xhs_user_unfollow","xhs_comment_post",
     // 资源工具
