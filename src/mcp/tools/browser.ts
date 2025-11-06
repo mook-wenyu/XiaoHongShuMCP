@@ -10,7 +10,7 @@ const DirId = z.string().min(1);
 const WorkspaceId = z.string().optional();
 
 export function registerBrowserToolsWithPrefix(server: McpServer, _container: ServiceContainer, manager: RoxyBrowserManager, prefix = "browser") {
-  const name = (n: string) => `${prefix}.${n}`;
+  const name = (n: string) => `${prefix}_${n}`;
 
   server.registerTool(name("open"), {
     description: "打开浏览器窗口（dirId=账号窗口，workspaceId 可选）",

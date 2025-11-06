@@ -29,9 +29,9 @@ afterAll(async () => {
 })
 
 describe("mcp server tools", () => {
-  it("server.ping returns ok", async () => {
+  it("server_ping returns ok", async () => {
     if (SKIP) { expect(true).toBe(true); return }
-    const res = await client.callTool({ name: "server.ping", arguments: {} })
+    const res = await client.callTool({ name: "server_ping", arguments: {} })
     const text = (res?.content?.[0] as any)?.text as string
     const obj = JSON.parse(text)
     expect(obj.ok).toBe(true)

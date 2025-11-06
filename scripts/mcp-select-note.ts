@@ -24,7 +24,7 @@ function getArg(name: string, def?: string) {
   await client.connect(transport);
 
   // 1) 到探索页主页
-  await client.callTool({ name: 'xhs.navigate.home', arguments: workspaceId ? { dirId, workspaceId } : { dirId } });
+  await client.callTool({ name: 'xhs_navigate_home', arguments: workspaceId ? { dirId, workspaceId } : { dirId } });
 
   // 2) 关键词浏览（会滚动一段，提升可见文本覆盖）
   await client.callTool({ name: 'xhs_keyword_browse', arguments: workspaceId ? { dirId, keywords, workspaceId } : { dirId, keywords } });

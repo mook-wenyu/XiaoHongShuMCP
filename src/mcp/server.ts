@@ -6,6 +6,7 @@ import { ServiceContainer } from "../core/container.js";
 import { registerBrowserTools } from "./tools/browser.js";
 import { registerPageTools } from "./tools/page.js";
 import { registerXhsTools } from "./tools/xhs.js";
+import { registerXhsShortcutsTools } from "./tools/xhsShortcuts.js";
 import { registerResourceTools } from "./tools/resources.js";
 import type { IRoxyClient } from "../contracts/IRoxyClient.js";
 import type { PolicyEnforcer } from "../services/policy.js";
@@ -31,10 +32,11 @@ async function main() {
   registerBrowserTools(server, container, roxyBrowserManager);
   registerPageTools(server, container, roxyBrowserManager);
   registerXhsTools(server, container, roxyBrowserManager);
+  registerXhsShortcutsTools(server, container, roxyBrowserManager);
   registerResourceTools(server, container, roxyBrowserManager);
   // 仅保留官方命名的原子动作（browser./page.）；不再注册 roxy.* 浏览别名
 
-  server.registerTool("server.capabilities", { description: "返回适配器与版本信息", inputSchema: {} }, async () => {
+  server.registerTool("server_capabilities", { description: "返回适配器与版本信息", inputSchema: {} }, async () => {
     const caps: any = {
       adapter: "roxyBrowser",
       version: "0.2.0",
@@ -123,7 +125,7 @@ async function main() {
     }
   );
 
-  server.registerTool("server.ping", { description: "连通性/心跳", inputSchema: {} }, async () => ({ content: [{ type: "text", text: JSON.stringify({ ok: true, ts: Date.now() }) }] }));
+  server.registerTool("server_ping", { description: "连通性/心跳", inputSchema: {} }, async () => ({ content: [{ type: "text", text: JSON.stringify({ ok: true, ts: Date.now() }) }] }));
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

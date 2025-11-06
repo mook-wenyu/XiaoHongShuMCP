@@ -37,7 +37,7 @@ afterAll(async () => {
 describe("resources tools", () => {
   it("lists artifacts under dirId", async () => {
     if (SKIP) { expect(true).toBe(true); return }
-    const res = await client.callTool({ name: "resources.listArtifacts", arguments: { dirId } })
+    const res = await client.callTool({ name: "resources_listArtifacts", arguments: { dirId } })
     const text = (res?.content?.find(c => (c as any).type === "text") as any)?.text as string
     const obj = JSON.parse(text)
     expect(obj.ok).toBe(true)
@@ -47,7 +47,7 @@ describe("resources tools", () => {
 
   it("reads artifact as text", async () => {
     if (SKIP) { expect(true).toBe(true); return }
-    const res = await client.callTool({ name: "resources.readArtifact", arguments: { dirId, path: "hello.txt" } })
+    const res = await client.callTool({ name: "resources_readArtifact", arguments: { dirId, path: "hello.txt" } })
     const text = (res?.content?.find(c => (c as any).type === "text") as any)?.text as string
     expect(text).toContain("hello world")
   })

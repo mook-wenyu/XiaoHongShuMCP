@@ -11,8 +11,8 @@ const DirId = z.string().min(1);
 const WorkspaceId = z.string().optional();
 
 export function registerXhsTools(server: McpServer, container: ServiceContainer, manager: RoxyBrowserManager) {
-  // xhs.session.check —— 使用现有 domain/xhs/session 进行基于首页/ cookies 的快速判定
-  server.registerTool("xhs.session.check", {
+  // xhs_session_check —— 使用现有 domain/xhs/session 进行基于首页/ cookies 的快速判定
+  server.registerTool("xhs_session_check", {
     description: "检查小红书会话（cookies/首页加载为依据，快速判定）",
     inputSchema: { dirId: DirId, workspaceId: WorkspaceId }
   }, async (input: any) => {
@@ -25,8 +25,8 @@ export function registerXhsTools(server: McpServer, container: ServiceContainer,
     } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify(err("INTERNAL_ERROR", String(e?.message || e))) }] }; }
   });
 
-  // xhs.navigate.home —— 导航到首页 explore
-  server.registerTool("xhs.navigate.home", {
+  // xhs_navigate_home —— 导航到首页 explore
+  server.registerTool("xhs_navigate_home", {
     description: "导航到小红书首页 explore 并做轻量验证",
     inputSchema: { dirId: DirId, workspaceId: WorkspaceId }
   }, async (input: any) => {
@@ -41,4 +41,3 @@ export function registerXhsTools(server: McpServer, container: ServiceContainer,
     } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify(err("NAVIGATE_FAILED", String(e?.message || e))) }] }; }
   });
 }
-

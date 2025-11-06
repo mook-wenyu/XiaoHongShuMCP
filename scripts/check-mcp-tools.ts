@@ -4,6 +4,7 @@
 import { registerBrowserTools } from "../src/mcp/tools/browser.js";
 import { registerPageTools } from "../src/mcp/tools/page.js";
 import { registerXhsTools } from "../src/mcp/tools/xhs.js";
+import { registerXhsShortcutsTools } from "../src/mcp/tools/xhsShortcuts.js";
 import { registerResourceTools } from "../src/mcp/tools/resources.js";
 import { registerRoxyAdminTools } from "../src/mcp/tools/roxyAdmin.js";
 
@@ -23,25 +24,31 @@ async function main() {
   const roxy: any = {};
   const policy: any = {};
 
-  // 官方命名
+  // 官方命名（改为下划线风格，避免部分客户端点号解析问题）
   registerBrowserTools(server as any, container, adapter);
   registerPageTools(server as any, container, adapter);
   registerXhsTools(server as any, container, adapter);
+  registerXhsShortcutsTools(server as any, container, adapter);
   registerResourceTools(server as any, container, adapter);
   // 高权限管理工具
   registerRoxyAdminTools(server as any, roxy, policy);
 
   const expected = [
-    // 官方命名（唯一标准）
-    "browser.open","browser.close",
-    "page.create","page.list","page.close","page.navigate","page.click","page.hover","page.scroll","page.screenshot",
-    "page.type","page.input.clear",
-    "xhs.session.check","xhs.navigate.home",
-    "resources.listArtifacts","resources.readArtifact","page.snapshot",
-    // 管理工具（保留 roxy 命名空间，仅用于管理）
-    "roxy.workspaces.list","roxy.windows.list","roxy.window.create"
+    // 浏览器 / 页面
+    "browser_open","browser_close",
+    "page_create","page_list","page_close","page_navigate","page_click","page_hover","page_scroll","page_screenshot","page_type","page_input_clear",
+    // XHS 基线
+    "xhs_session_check","xhs_navigate_home",
+    // XHS 扩展（快捷语义动作）
+    "xhs_close_modal","xhs_navigate_discover","xhs_search_keyword",
+    "xhs_note_like","xhs_note_unlike","xhs_note_collect","xhs_note_uncollect",
+    "xhs_user_follow","xhs_user_unfollow","xhs_comment_post",
+    // 资源工具
+    "resources_listArtifacts","resources_readArtifact","page_snapshot",
+    // 管理工具
+    "roxy_workspaces_list","roxy_windows_list","roxy_window_create"
   ];
-  const optional = ["server.ping","server.capabilities"];
+  const optional = ["server_ping","server_capabilities"];
 
   const names = server.tools.map(t => t.name);
   const missing = expected.filter((n) => !names.includes(n));

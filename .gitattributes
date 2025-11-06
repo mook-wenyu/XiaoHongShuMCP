@@ -1,0 +1,22 @@
+* text=auto eol=lf
+
+# 强制常见文本文件使用 LF 行尾，便于跨平台一致性
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.cjs text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.cst text eol=lf
+
+# 构建产物与二进制
+dist/** binary
+artifacts/** binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary

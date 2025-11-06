@@ -84,28 +84,54 @@ npm run mcp
 ## MCP 工具清单（唯一标准）
 
 ### 浏览器与页面管理
-- `browser.open` / `browser.close` - 打开/关闭浏览器窗口（dirId 映射持久化 Context）
-- `page.create` / `page.list` / `page.close` - 创建/列出/关闭页面
-- `page.navigate` - 导航到指定 URL
+- `browser_open` / `browser_close` - 打开/关闭浏览器窗口（dirId 映射持久化 Context）
+- `page_create` / `page_list` / `page_close` - 创建/列出/关闭页面
+- `page_navigate` - 导航到指定 URL
 
 ### 页面交互（支持拟人化）
-- `page.click` - 点击元素（支持语义定位：role/name/label/text/testId/selector）
-- `page.hover` - 悬停元素
-- `page.scroll` - 滚动页面（支持相对/绝对/元素滚动）
-- `page.type` - 输入文本（支持 WPM 逐字延时）
-- `page.input.clear` - 清空输入框
+- `page_click` - 点击元素（支持语义定位：role/name/label/text/testId/selector）
+- `page_hover` - 悬停元素
+- `page_scroll` - 滚动页面（支持相对/绝对/元素滚动）
+- `page_type` - 输入文本（支持 WPM 逐字延时）
+- `page_input_clear` - 清空输入框
 
 ### 页面信息获取
-- `page.screenshot` - 截图（返回文本 JSON + image/png 内容项）
-- `page.snapshot` - 可访问性快照（a11y 树 + url/title + 统计信息）
+- `page_screenshot` - 截图（返回文本 JSON + image/png 内容项）
+- `page_snapshot` - 可访问性快照（a11y 树 + url/title + 统计信息）
 
 ### 小红书专用
-- `xhs.session.check` - 检查会话状态（基于 cookies 和首页加载）
-- `xhs.navigate.home` - 导航到小红书首页并验证
+- `xhs_session_check` - 检查会话状态（基于 cookies 和首页加载）
+- `xhs_navigate_home` - 导航到小红书首页并验证
+ 
+### 小红书快捷工具（语义化）
+- `xhs.close.modal`（兼容别名 `xhs_close_modal`）- 关闭当前笔记详情模态（Esc→关闭按钮→遮罩）
+- `xhs.navigate.discover` - 导航到“发现”推荐流（含 homefeed 接口软校验）
+- `xhs.search.keyword` - 站内搜索关键词（拟人化输入 + 接口软校验）
+- `xhs.note.like` / `xhs.note.unlike` - 点赞 / 取消点赞当前笔记（需模态已打开）
+- `xhs.note.collect` / `xhs.note.uncollect` - 收藏 / 取消收藏当前笔记（需模态已打开）
+- `xhs.user.follow` / `xhs.user.unfollow` - 关注 / 取关当前笔记作者（需模态已打开）
+- `xhs.comment.post` - 发表评论（拟人化输入 + 接口软校验，需模态已打开）
+
+示例（命令行脚本）：
+```
+# 导航到发现页（stdio MCP）
+npm run mcp -- --tool xhs.navigate.discover --dirId user
+
+# 站内搜索关键词
+npm run mcp:call:search -- --dirId=user --keyword=美食
+
+# 关闭笔记模态（若已打开）
+npm run mcp -- --tool xhs.close.modal --dirId user
+
+# 点赞/取关/评论（需笔记详情模态已打开）
+npm run mcp -- --tool xhs.note.like --dirId user
+npm run mcp -- --tool xhs.user.unfollow --dirId user
+npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
+```
 
 ### 资源管理
-- `resources.listArtifacts` - 列出 artifacts/<dirId> 下的所有文件
-- `resources.readArtifact` - 读取 artifacts 文件（自动识别图片/文本）
+- `resources_listArtifacts` - 列出 artifacts/<dirId> 下的所有文件
+- `resources_readArtifact` - 读取 artifacts 文件（自动识别图片/文本）
 
 ### 高权限管理工具（默认已注册）
 - `roxy.workspaces.list` - 获取工作区列表
@@ -113,22 +139,22 @@ npm run mcp
 - `roxy.window.create` - 创建新浏览器窗口
 
 ### 诊断与监控
-- `server.capabilities` - 查看适配器信息（adapter/roxyBridge/adminTools）
-- `server.ping` - 连通性检查与心跳
+- `server_capabilities` - 查看适配器信息（adapter/roxyBridge/adminTools）
+- `server_ping` - 连通性检查与心跳
 
 ### MCP 资源（Resources）
 - `xhs://artifacts/{dirId}/index` - 列出指定 dirId 的所有 artifacts 文件
 - `xhs://snapshot/{dirId}/{page}` - 获取指定页面的 a11y 快照
 
 示例（默认开启拟人化；两种方式关闭：`human=false` 或 `human.enabled=false`，可按需细化参数）：
-- 打开窗口：`browser.open`，`{"dirId":"user"}`
-- 导航：`page.navigate`，`{"dirId":"user","url":"https://example.com"}`
+- 打开窗口：`browser_open`，`{"dirId":"user"}`
+- 导航：`page_navigate`，`{"dirId":"user","url":"https://example.com"}`
 - 语义点击（拟人化）：
   - 快速关闭：`{"dirId":"user","target":{"text":"登录"},"human":false}`
   - 细化参数：`{"dirId":"user","target":{"text":"登录"},"human":{"enabled":true,"steps":24,"randomness":0.2}}`
-- 输入（拟人化）：`page.type`，`{"dirId":"user","target":{"role":"textbox","name":"标题"},"text":"今天好开心","human":{"enabled":true,"wpm":180}}`
-- 截图：`page.screenshot` → 返回文本 JSON + `image/png`
-- 快照：`page.snapshot` → 返回 `url/title/a11y` 摘要 + 统计
+- 输入（拟人化）：`page_type`，`{"dirId":"user","target":{"role":"textbox","name":"标题"},"text":"今天好开心","human":{"enabled":true,"wpm":180}}`
+- 截图：`page_screenshot` → 返回文本 JSON + `image/png`
+- 快照：`page_snapshot` → 返回 `url/title/a11y` 摘要 + 统计
 
 ---
 

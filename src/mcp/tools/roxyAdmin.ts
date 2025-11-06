@@ -13,7 +13,7 @@ import { getParams } from "../utils/params.js";
 export function registerRoxyAdminTools(server: McpServer, roxy: IRoxyClient, policy: PolicyEnforcer) {
   // GET /browser/workspace
   const WorkspaceList = z.object({ page_index: z.number().int().nonnegative().optional(), page_size: z.number().int().positive().max(200).optional() });
-  server.registerTool("roxy.workspaces.list", { description: "获取空间项目列表（分页）", inputSchema: { page_index: z.number().optional(), page_size: z.number().optional() } },
+  server.registerTool("roxy_workspaces_list", { description: "获取空间项目列表（分页）", inputSchema: { page_index: z.number().optional(), page_size: z.number().optional() } },
     async (input: any) => {
       const { page_index, page_size } = WorkspaceList.parse(getParams(input));
       const res = await policy.use("admin:workspace", async () => roxy.workspaces({ page_index, page_size }));
@@ -40,7 +40,7 @@ export function registerRoxyAdminTools(server: McpServer, roxy: IRoxyClient, pol
     isMultiLogin: z.number().int().optional(),
     is_not_proxy: z.number().int().optional()
   });
-  server.registerTool("roxy.windows.list", {
+  server.registerTool("roxy_windows_list", {
     description: "获取浏览器窗口列表（v3）",
     inputSchema: {
       workspaceId: z.union([z.number(), z.string()]),
@@ -84,7 +84,7 @@ export function registerRoxyAdminTools(server: McpServer, roxy: IRoxyClient, pol
     proxyInfo: z.record(z.any()).optional(),
     // 允许透传文档中的其他字段：tags/labelIds/.. 等
   }).passthrough();
-  server.registerTool("roxy.window.create", {
+  server.registerTool("roxy_window_create", {
     description: "创建浏览器窗口（POST /browser/create）",
     inputSchema: {
       workspaceId: z.union([z.number(), z.string()]),

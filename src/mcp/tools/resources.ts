@@ -29,8 +29,8 @@ async function listFiles(root: string): Promise<string[]> {
 }
 
 export function registerResourceTools(server: McpServer, container: ServiceContainer, manager: RoxyBrowserManager) {
-  // resources.listArtifacts
-  server.registerTool("resources.listArtifacts", {
+  // resources_listArtifacts
+  server.registerTool("resources_listArtifacts", {
     description: "列出 artifacts/<dirId> 下的文件（相对路径数组）",
     inputSchema: { dirId: DirId }
   }, async (input: any) => {
@@ -42,8 +42,8 @@ export function registerResourceTools(server: McpServer, container: ServiceConta
     } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify(err("INTERNAL_ERROR", String(e?.message || e))) }] }; }
   });
 
-  // resources.readArtifact（返回 text 或 image）
-  server.registerTool("resources.readArtifact", {
+  // resources_readArtifact（返回 text 或 image）
+  server.registerTool("resources_readArtifact", {
     description: "读取 artifacts 文件；若为 png/jpg 则返回 image 内容项",
     inputSchema: { dirId: DirId, path: z.string().min(1) }
   }, async (input: any) => {
@@ -62,8 +62,8 @@ export function registerResourceTools(server: McpServer, container: ServiceConta
     } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify(err("INTERNAL_ERROR", String(e?.message || e))) }] }; }
   });
 
-  // page.snapshot（可访问性快照，裁剪输出 + 统计）
-  server.registerTool("page.snapshot", {
+  // page_snapshot（可访问性快照，裁剪输出 + 统计）
+  server.registerTool("page_snapshot", {
     description: "返回可访问性快照（a11y）以及 url/title（可选 pageIndex），并附加统计",
     inputSchema: { dirId: DirId, pageIndex: z.number().int().nonnegative().optional(), workspaceId: WorkspaceId, maxNodes: z.number().int().positive().default(800).optional() }
   }, async (input: any) => {
@@ -107,4 +107,3 @@ export function registerResourceTools(server: McpServer, container: ServiceConta
     } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify(err("INTERNAL_ERROR", String(e?.message || e))) }] }; }
   });
 }
-

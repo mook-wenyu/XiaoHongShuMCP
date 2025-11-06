@@ -28,18 +28,18 @@
   - 运行示例：`npm run run:example -- --dir-ids=user --url=https://example.com --limit=2`
   - 启动 MCP：`npm run mcp`
 - 目录：入口 `src/cli.ts`、`src/mcp/server.ts`；核心代码在 `src/config/`、`src/services/`、`src/adapter/`、`src/mcp/tools/`、`src/selectors/`、`src/humanization/`。
-- 兼容性：不向后兼容重构已生效；仅保留官方命名 `browser.*` / `page.*` 作为唯一标准；高权限管理类 `roxy.*`（工作区/窗口管理）默认注册，无需任何环境变量开关；不保留 roxy.* 浏览器动作别名。
+- 兼容性：不向后兼容重构已生效；为适配部分 MCP 客户端解析限制，工具命名统一采用下划线 `_` 记法（例如 `browser_open`/`page_navigate`），不再使用点号 `.`；高权限管理类 `roxy_*`（工作区/窗口管理）默认注册，无需任何环境变量开关。
 - 工作流边界：本模块仅提供稳定的原子动作，不内置或实践业务工作流（等待/停留/重试等均由外部编排）。
 
 ## MCP 工具面（官方命名）
-- 浏览器管理：`browser.open/close`
-- 页面管理：`page.create/list/close/navigate`
-- 页面交互：`page.click/hover/scroll/type/input.clear`
-- 信息获取：`page.screenshot/snapshot`
-- 小红书：`xhs.session.check/navigate.home`
-- 资源管理：`resources.listArtifacts/readArtifact`
-- 管理工具（高权限）：`roxy.workspaces.list/windows.list/window.create`
-- 诊断工具：`server.capabilities/ping`
+- 浏览器管理：`browser_open/close`
+- 页面管理：`page_create/list/close/navigate`
+- 页面交互：`page_click/hover/scroll/type/input_clear`
+- 信息获取：`page_screenshot/snapshot`
+- 小红书：`xhs_session_check/navigate_home`
+- 资源管理：`resources_listArtifacts/readArtifact`
+- 管理工具（高权限）：`roxy_workspaces_list/windows_list/window_create`
+- 诊断工具：`server_capabilities/ping`
 - MCP 资源：`xhs://artifacts/{dirId}/index`, `xhs://snapshot/{dirId}/{page}`
 
 设计意图：等待/输入/采集等语义交给业务流程层；工具层仅提供稳定的原子动作与页面管理。

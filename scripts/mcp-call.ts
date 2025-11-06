@@ -22,7 +22,7 @@ function getArg(name: string, def?: string) {
   await client.connect(transport);
 
   const res = await client.callTool({
-    name: 'xhs.navigate.home',
+    name: 'xhs_navigate_home',
     arguments: workspaceId ? { dirId, workspaceId } : { dirId }
   });
 

@@ -34,10 +34,10 @@ describe("mcp tools list (official names)", () => {
     const tools = (res?.tools) ?? res
     const names = (tools || []).map((t: any) => t.name)
     const expected = [
-      "browser.open","browser.close",
-      "page.create","page.list","page.close","page.navigate","page.click","page.hover","page.scroll","page.screenshot",
-      "xhs.session.check","xhs.navigate.home",
-      "resources.listArtifacts","resources.readArtifact","page.snapshot"
+      "browser_open","browser_close",
+      "page_create","page_list","page_close","page_navigate","page_click","page_hover","page_scroll","page_screenshot","page_type","page_input_clear",
+      "xhs_session_check","xhs_navigate_home",
+      "resources_listArtifacts","resources_readArtifact","page_snapshot"
     ]
     for (const n of expected) {
       expect(names).toContain(n)

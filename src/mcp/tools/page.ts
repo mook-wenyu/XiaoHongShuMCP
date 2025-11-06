@@ -75,7 +75,7 @@ function buildScrollOptions(human: any | undefined, container: ServiceContainer)
 }
 
 export function registerPageToolsWithPrefix(server: McpServer, container: ServiceContainer, manager: RoxyBrowserManager, prefix = "page") {
-  const name = (n: string) => `${prefix}.${n}`;
+  const name = (n: string) => `${prefix}_${n.replace(/\./g, "_")}`;
 
   // create
   server.registerTool(name("create"), {
