@@ -8,7 +8,7 @@ describe("selectorIdFromTarget", () => {
     expect(a).toBe(b)
   })
   it("works for object", () => {
-    const id = selectorIdFromTarget({ role: 'button', name: 'Search' })
-    expect(id.startsWith('sel:')).toBe(true)
+    const id = selectorIdFromTarget({ role: "button", name: "Search" })
+    expect(id.startsWith("sel:")).toBe(true)
   })
 })

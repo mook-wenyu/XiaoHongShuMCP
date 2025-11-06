@@ -1,5 +1,5 @@
 /* 中文注释：熔断器测试（连续失败→熔断→半开→恢复） */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { PolicyEnforcer, type PolicyOptions } from "../../../src/services/policy.js";
 
 describe("熔断器错误路径测试", () => {

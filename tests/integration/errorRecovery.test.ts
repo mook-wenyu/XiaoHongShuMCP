@@ -19,17 +19,17 @@ describe("错误恢复测试", () => {
 	const createMockResponse = (data: any, options: { ok?: boolean; status?: number; contentType?: string; statusText?: string } = {}) => ({
 		ok: options.ok ?? true,
 		status: options.status ?? 200,
-		statusText: options.statusText ?? 'OK',
+		statusText: options.statusText ?? "OK",
 		headers: {
 			get: (key: string) => {
-				if (key.toLowerCase() === 'content-type') {
-					return options.contentType ?? 'application/json';
+				if (key.toLowerCase() === "content-type") {
+					return options.contentType ?? "application/json";
 				}
 				return null;
 			}
 		},
 		json: () => Promise.resolve(data),
-		text: () => Promise.resolve(typeof data === 'string' ? data : JSON.stringify(data))
+		text: () => Promise.resolve(typeof data === "string" ? data : JSON.stringify(data))
 	});
 
 	beforeEach(() => {
@@ -163,8 +163,8 @@ describe("错误恢复测试", () => {
 				status: 200,
 				headers: {
 					get: (key: string) => {
-						if (key.toLowerCase() === 'content-type') {
-							return 'application/json';
+						if (key.toLowerCase() === "content-type") {
+							return "application/json";
 						}
 						return null;
 					}

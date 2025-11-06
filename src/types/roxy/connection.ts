@@ -10,7 +10,6 @@
  * @packageDocumentation
  */
 
-import type { ApiResponse } from "./common.js";
 import {
 	OpenRequestSchema,
 	OpenResponseSchema,
@@ -59,4 +58,3 @@ export type CloseResponse = z.infer<typeof CloseResponseSchema>;
  * 返回多个窗口的连接信息数组，data 可能为 null（查询失败或窗口不存在时）。
  */
 export type ConnectionInfoResponse = z.infer<typeof ConnectionInfoResponseSchema>;
-

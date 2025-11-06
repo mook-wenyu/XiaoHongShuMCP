@@ -44,7 +44,7 @@ export async function roxySupportsOpen(): Promise<boolean> {
     const dirId = `selftest_${Date.now()}`;
     try {
       const opened = await roxy.ensureOpen(dirId);
-      const ok = !!opened?.ws && typeof opened.ws === 'string';
+      const ok = !!opened?.ws && typeof opened.ws === "string";
       await roxy.close(dirId).catch(() => {});
       await container.cleanup().catch(() => {});
       return ok;

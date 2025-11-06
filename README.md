@@ -1,227 +1,307 @@
-# HushOps.Servers.XiaoHongShu · 使用指南（User Guide）
+# HushOps.Servers.XiaoHongShu — 自动化浏览/MCP 服务
 
-面向使用者的快速上手与常用操作说明。本指南不涉及内部实现细节与架构设计，聚焦“怎么用，如何把事做成”。
-
----
-
-## 我能用它做什么？
-- 连接 RoxyBrowser 指纹浏览器窗口（按 `dirId` 区分账号）。
-- 通过 Playwright/CDP 执行稳定的“拟人化”原子动作：打开页面、点击、悬停、滚动、截图。
-- 以最小 MCP 工具面（stdio）暴露上述能力，便于在智能体/IDE 中直接调用。
-- 产物与日志统一落地到 `artifacts/<dirId>/...`，便于回看与审计。
-
-## 你需要准备什么
-- Node.js ≥ 18（推荐 22.x）。
-- RoxyBrowser 本地服务可用，且获取到 API Token。
-- `.env` 文件中配置：`ROXY_API_TOKEN=<你的 Token>`（必填）。
-
-> 备注：`npm install` 后会自动安装 Playwright Chromium（postinstall）。
+面向“小红书（Little Red Book）”相关业务的人机浏览自动化与 MCP 服务。以 RoxyBrowser 提供的多账号隔离（持久化 Context）为基础，通过 Playwright CDP 接入实现稳定、最小的原子动作工具面；截图、快照与选择器健康数据统一沉淀到 `artifacts/<dirId>` 便于离线验证与审计。
 
 ---
 
-## 安装与配置（3 步）
+## 能力总览
+- 多账号隔离：`dirId` 表示账号窗口；1 个 `dirId` = 1 个持久化 BrowserContext；同 Context 可创建多 Page。
+- 原子化工具（唯一标准命名）：`browser.*`、`page.*`、`xhs.*`、`resources.*`。
+- Roxy 管理工具（保留 roxy 命名空间，仅用于管理）：`roxy.*`（工作区/窗口管理）默认注册，无需开关。
+- 选择器韧性与拟人化：语义优先选择器（role/name/label/testId/text）→ CSS 兜底；人类化鼠标与输入（可按参数关闭）。
+- 工件真源：截图、快照与选择器健康日志统一落盘 `artifacts/<dirId>`，支持 MCP 资源读取。
+
+---
+
+## 环境要求
+- Node.js >= 18（建议 22.x）
+- 可用的 RoxyBrowser 本地/远程 API 与有效 `ROXY_API_TOKEN`
+- 首次安装通过 `postinstall` 自动安装 Playwright Chromium
+
+关键环境变量：
+- `ROXY_API_TOKEN`（必填）
+- `ROXY_API_BASEURL` 或 `ROXY_API_HOST` + `ROXY_API_PORT`
+- `ROXY_DEFAULT_WORKSPACE_ID`（可选，用于默认上下文）
+- `SNAPSHOT_MAX_NODES`（页面快照节点上限，默认 800）
+- `OFFICIAL_ADAPTER_REQUIRED`（默认 `true`。官方桥接包不可用时是否终止 MCP 启动）
+- `HUMAN_PROFILE`（`default`/`cautious`/`rapid`），决定鼠标/滚动/输入节律的默认值
+- `HUMAN_TRACE_LOG`（可选，设为 `true` 将拟人化事件落盘到 `artifacts/<dirId>/human-trace.ndjson`）
+
+完整环境变量列表请参考 [.env.example](.env.example)，包括：
+- **连接配置**: `ROXY_API_*`, `ROXY_DEFAULT_WORKSPACE_ID`, `ROXY_DIR_IDS`
+- **并发与超时**: `MAX_CONCURRENCY`, `TIMEOUT_MS`
+- **选择器韧性**: `SELECTOR_RETRY_*`, `SELECTOR_BREAKER_*`
+- **小红书配置**: `XHS_SCROLL_*`, `XHS_SELECT_MAX_SCROLLS`, `DEFAULT_URL`
+- **日志**: `LOG_LEVEL`, `LOG_PRETTY`, `MCP_LOG_STDERR`
+- **拟人化**: `HUMAN_PROFILE`, `HUMAN_TRACE_LOG`
+- **兼容性**: `OFFICIAL_ADAPTER_REQUIRED`
+
+**废弃变量**：
+- `ENABLE_ROXY_ADMIN_TOOLS`（自 0.2.x 起 `roxy.*` 管理工具默认注册，无需开关）
+- `POLICY_*`（已由 `SELECTOR_BREAKER_*` 替代）
+
+---
+
+## 安装与最小自检
 1) 安装依赖
 ```
 npm install
 ```
 2) 配置环境变量
 ```
-# Windows PowerShell（示例）
 Copy-Item .env.example .env
-# 打开 .env，填写 ROXY_API_TOKEN
+# 编辑 .env，填写 ROXY_API_TOKEN，设置 ROXY_API_BASEURL 或 HOST/PORT
 ```
-3) 快速检查
+3) 预检（可选）
 ```
-# 可选：校验 .env，并探活 Roxy（如设置 CHECK_ROXY_HEALTH=true）
+npm run preflight
+```
+4) 自检脚本（可选）
+```
 npm run check:env
 ```
+5) 工具面对照检查（可选）
+```
+npm run check:tools
+```
+6) 编码巡检（可选，CI 推荐）
+```
+npm run check:encoding
+```
 
 ---
 
-
-## Claude MCP 配置与自然语言使用教程
-
-> 目标：在 Claude Desktop / Claude Code 中把本项目作为 MCP 服务器接入，并直接调用 `page.*` / `action.*` 工具。
-
+## 启动与集成（stdio MCP）
 1) 构建（或直接 TS 运行）
 ```
-# 推荐：构建后由 Claude 通过 node 启动
-npm install
-npm run build   # 生成 dist/**
+npm run build
 ```
-
-2) 通过 Claude CLI 添加 MCP 服务器（推荐）
-```
-# macOS/Linux 或 Windows（PowerShell）
-claude mcp add xhs-mcp -- env ROXY_API_TOKEN=YOUR_TOKEN \
-  node ./dist/mcp/server.js
-
-# 校验
-claude mcp list
-claude mcp get xhs-mcp
-```
-提示：Windows 下若使用相对路径失败，可改为 `cmd /c node .\\dist\\mcp\\server.js`。
-
-3) 或编辑 Claude Desktop 配置文件
-- 配置文件：
-  - Windows：`%APPDATA%\Claude\claude_desktop_config.json`
-  - macOS：`~/Library/Application Support/Claude/claude_desktop_config.json`
-  - Linux：`~/.config/Claude/claude_desktop_config.json`
-- 追加片段（保持 JSON 合法）：
-```json
-{
-  "mcpServers": {
-    "xhs-mcp": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["dist/mcp/server.js"],
-      "env": {
-        "ROXY_API_TOKEN": "YOUR_TOKEN",
-        "ROXY_API_BASEURL": "http://127.0.0.1:50000"
-      }
-    }
-  }
-}
-```
-
-4) 在 Claude 中用“自然语言”调用（示例）
-- 示例提示词（Claude 会自动选择合适的工具调用）：
-  - “在 dir <DIRID> 打开/复用浏览器会话，然后访问小红书发现页并全页截图。”
-  - “在 dir <DIRID> 页面中滚动两屏，最后再截图。”
-  - “在 dir <DIRID> 查找文字为‘登录’的按钮并点击。”
-
-> 小贴士
-> - 不要在 MCP 模式下输出 stdout 日志；本项目已默认静默（stderr/文件可用）。
-> - `dirId` 必填，指向 Roxy 的账号窗口；`workspaceId` 可选，未提供时读取 `ROXY_DEFAULT_WORKSPACE_ID`。
-
----
-
-## 使用 MCP（在 IDE/智能体中调用）
-- 启动 MCP 服务器（stdio）
+2) 启动 MCP Server（stdio）
 ```
 npm run mcp
 ```
-- 最小工具面（部分）：
-  - `roxy.openDir`（建立/复用上下文）
-  - `page.new` / `page.list` / `page.close`
-  - `action.navigate` / `action.click` / `action.hover` / `action.scroll` / `action.screenshot`
+提示：若未安装官方 RoxyBrowser Playwright MCP 桥接包（候选如 `@roxybrowser/playwright-mcp`），在 `OFFICIAL_ADAPTER_REQUIRED=true`（默认）时将退出；设为 `false` 可允许服务继续启动，但浏览器相关工具将不可用。可执行：
 
-- 在 IDE/智能体中用“自然语言”发出指令，客户端会自动选择合适的工具：
-  - “在 dir <DIRID> 打开或复用浏览器会话。”
-  - “在当前页面全页截图并保存到 artifacts 目录。”
-  - “点击页面上名称为 ‘登录’ 的按钮。”
-> 提示：本仓库自带脚本 `scripts/mcp-call.ts` / `scripts/mcp-call-search.ts` 可用于本地调试，但推荐在 Claude/Codex 内直接用自然语言操作。
+```
+npm run advisor:official   # 自动给出一键安装命令（按当前包管理器）
+```
+
+在内网/私有源环境，请在 `.npmrc` 配置作用域 registry 后再安装，例如：
+
+```
+@roxybrowser:registry=https://registry.npmjs.org/
+```
 
 ---
 
-## 人性化默认与返回值
-- 鼠标移动默认带“轻微微抖动”（幅度≈0.6px、次数≈4），点击前自动靠近目标中心；滚动为“分段+缓动+微/宏停顿”。
-- 所有动作统一返回 `ok/value`，失败时返回 `error{ code,message,screenshotPath? }`。
-- 失败截图由 `ACTION_SNAP_ON_ERROR=true|false` 控制（默认 true）。
+## MCP 工具清单（唯一标准）
+
+### 浏览器与页面管理
+- `browser.open` / `browser.close` - 打开/关闭浏览器窗口（dirId 映射持久化 Context）
+- `page.create` / `page.list` / `page.close` - 创建/列出/关闭页面
+- `page.navigate` - 导航到指定 URL
+
+### 页面交互（支持拟人化）
+- `page.click` - 点击元素（支持语义定位：role/name/label/text/testId/selector）
+- `page.hover` - 悬停元素
+- `page.scroll` - 滚动页面（支持相对/绝对/元素滚动）
+- `page.type` - 输入文本（支持 WPM 逐字延时）
+- `page.input.clear` - 清空输入框
+
+### 页面信息获取
+- `page.screenshot` - 截图（返回文本 JSON + image/png 内容项）
+- `page.snapshot` - 可访问性快照（a11y 树 + url/title + 统计信息）
+
+### 小红书专用
+- `xhs.session.check` - 检查会话状态（基于 cookies 和首页加载）
+- `xhs.navigate.home` - 导航到小红书首页并验证
+
+### 资源管理
+- `resources.listArtifacts` - 列出 artifacts/<dirId> 下的所有文件
+- `resources.readArtifact` - 读取 artifacts 文件（自动识别图片/文本）
+
+### 高权限管理工具（默认已注册）
+- `roxy.workspaces.list` - 获取工作区列表
+- `roxy.windows.list` - 获取浏览器窗口列表
+- `roxy.window.create` - 创建新浏览器窗口
+
+### 诊断与监控
+- `server.capabilities` - 查看适配器信息（adapter/roxyBridge/adminTools）
+- `server.ping` - 连通性检查与心跳
+
+### MCP 资源（Resources）
+- `xhs://artifacts/{dirId}/index` - 列出指定 dirId 的所有 artifacts 文件
+- `xhs://snapshot/{dirId}/{page}` - 获取指定页面的 a11y 快照
+
+示例（默认开启拟人化；两种方式关闭：`human=false` 或 `human.enabled=false`，可按需细化参数）：
+- 打开窗口：`browser.open`，`{"dirId":"user"}`
+- 导航：`page.navigate`，`{"dirId":"user","url":"https://example.com"}`
+- 语义点击（拟人化）：
+  - 快速关闭：`{"dirId":"user","target":{"text":"登录"},"human":false}`
+  - 细化参数：`{"dirId":"user","target":{"text":"登录"},"human":{"enabled":true,"steps":24,"randomness":0.2}}`
+- 输入（拟人化）：`page.type`，`{"dirId":"user","target":{"role":"textbox","name":"标题"},"text":"今天好开心","human":{"enabled":true,"wpm":180}}`
+- 截图：`page.screenshot` → 返回文本 JSON + `image/png`
+- 快照：`page.snapshot` → 返回 `url/title/a11y` 摘要 + 统计
 
 ---
 
-## 目录与产物
-- 截图与结果：`artifacts/<DIRID>/**`。
-- 选择器健康度：`artifacts/selector-health.ndjson`（自动批量写入，进程退出前会尽力 flush）。
+## 适配层（Adapter）策略
+- 优先尝试官方 Playwright MCP 桥接包（多名称候选，动态加载并读取版本）。若可用，走官方上下文 `getContext/openContext`；否则依据 `OFFICIAL_ADAPTER_REQUIRED` 决定是否终止。
+- 能力探针：调用 `server.capabilities` 可查看 `{ adapter:"official", roxyBridge:{loaded,package,version}, adminTools:true }`。
 
 ---
 
-## 常用环境变量（精简表）
-| 变量 | 说明 | 必填 | 默认 |
-|---|---|---|---|
-| `ROXY_API_TOKEN` | Roxy API Token（Header `token`） | 是 | - |
-| `ROXY_API_BASEURL` | Roxy API 基址（或用 `ROXY_API_HOST/PORT`） | 否 | `http://127.0.0.1:50000` |
-| `ROXY_DEFAULT_WORKSPACE_ID` | 默认工作区 ID | 否 | - |
-| `ACTION_SNAP_ON_ERROR` | 动作失败自动截图 | 否 | `true` |
-| `XHS_SELECT_MAX_SCROLLS` | 选择笔记时的最大滚动轮次 | 否 | `18` |
-
-> 更多变量可查看 `.env.example` 与 `package.json` 脚本说明。
+## 常用脚本
+- 检查环境：`npm run check:env`
+- 工具面对照检查：`npm run check:tools`
+- 选择器健康报告：`npm run report:selectors`
+- 本地演示：`npm run demo:local`
+- Roxy 创建窗口（管理工具）：`npm run roxy:create-window`
 
 ---
 
-## 故障排查（Quick Troubleshooting）
-- 提示无 Token / 401：检查 `.env` 的 `ROXY_API_TOKEN`，或以环境变量方式注入。
-- 连接正常但页面空白：确认 Roxy 窗口可用，且 `dirId` 指向存活的账号窗口。
-- Windows 传 JSON 失败：PowerShell 需用双引号并转义，或 `--payload=@file`。
-- 等待卡住/动作不生效：避免盲等；优先使用工具内置的语义等待与监听脚本。
+## 测试与质量
+- 全量测试：`npm test`
+- 指定用例：`npx vitest run tests/unit/selectors/resilient.test.ts --reporter=verbose`
+- MCP stdout 守卫：`tests/mcp/stdout.guard.test.ts` 确保 stdio 日志仅走 stderr 或文件
+- Roxy 相关集成测试：在 Roxy 可用且必要环境变量存在时运行
 
 ---
 
-## FAQ（精简）
-- Q：`dirId` 是什么？
-  - A：Roxy 窗口/账号的唯一标识。可用 `scripts/roxy-connection-info.ts` 进行探活与确认。
-- Q：产物保存在哪里？
-  - A：统一在 `artifacts/<DIRID>` 下，包含截图、结果 JSON 与轨迹/健康度文件等。
-- Q：如何关闭“拟人化”微抖？
-  - A：调用 `action.click/hover` 时传 `options.microJitterPx=0` 或 `microJitterCount=0`；滚动的停顿可通过 `microPauseChance/macroPauseEvery` 关闭。
+## 设计与限制
+- 工具层最小化、稳定化：仅提供原子动作与页面管理，业务流程上移。
+- 多账号隔离：`dirId` 对应持久化 Context；连接与清理由容器协调。
+- 拟人化与韧性：默认开启拟人化；选择器语义优先，失败与时延沉淀 p95 指标；可通过 `human=false` 或 `human.enabled=false` 显式关闭。
+- 编码与日志：所有文件 UTF-8 无 BOM；MCP stdio 禁止 stdout 日志（仅 stderr/文件）。
 
 ---
 
-## 许可证
-本项目使用 Apache-2.0 许可证。详见 `LICENSE`。
+## 变更要点（0.2.x）
+- 仅保留官方命名 `browser.*` / `page.*` 作为唯一标准；移除 roxy.* 浏览别名以降低心智负担。
+- 高权限管理类 `roxy.*` 默认注册（无需环境变量开关）。
+- 官方桥接包不可用时可通过 `OFFICIAL_ADAPTER_REQUIRED=false` 继续（但浏览器相关工具不可用）。
+- 页面快照节点上限受 `SNAPSHOT_MAX_NODES` 保护。
 
-### Claude CLI（claude）
-> 使用 Anthropic 官方 `claude` 命令行，在终端里用自然语言驱动 MCP。
+---
 
-1) 添加本地 MCP 服务器（stdio）
+## 官方桥接安装指引
+若启动提示官方桥接不可用，可运行：
 ```
-claude mcp add xhs-mcp -- env ROXY_API_TOKEN=YOUR_TOKEN \
-  node ./dist/mcp/server.js
-```
-2) 开启交互会话（示例）
-```
-claude chat
-# 输入自然语言：
-# 在 dir <DIRID> 打开/复用浏览器并访问 https://www.xiaohongshu.com/explore ，随后全页截图
-```
-3) 管理命令
-```
-claude mcp list
-claude mcp get xhs-mcp
-claude mcp remove xhs-mcp
+npm run advisor:official
 ```
 
-### Codex CLI（~/.codex/config.toml）
-> Codex CLI 也支持 MCP。将本项目注册为本地 stdio 服务器后，用自然语言让 Codex 自动调度工具。
+---
 
-1) 配置文件（新增或合并）
-```toml
-[mcp_servers.xhs]
-command = "node"
-args    = ["dist/mcp/server.js"]
-enabled = true
-startup_timeout_sec = 15
-tool_timeout_sec    = 60
+## 人机参数模板（快速参考）
 
-[mcp_servers.xhs.env]
-ROXY_API_TOKEN   = "YOUR_TOKEN"
-ROXY_API_BASEURL = "http://127.0.0.1:50000"
+- 档位（使用 `profile` 一键选择节律，亦可与下方细化参数叠加）：
 ```
-2) 启动 Codex 并对话
+// 默认节律（平衡型）
+{"human": {"profile": "default"}}
+
+// 稳健型（更慢、更稳）
+{"human": {"profile": "cautious"}}
+
+// 效率型（更快、更灵敏）
+{"human": {"profile": "rapid"}}
 ```
-# 启动后在对话里输入：
-# “在 dir <DIRID> 打开探索页，滚动两屏并保存一张全页截图。”
+
+- 点击/悬停（鼠标移动曲线与抖动）
 ```
-3) 验收要点
-- 看到工具列表中含 `page.*` 与 `action.*`。
-- 执行后在 `artifacts/<DIRID>/actions` 出现截图。
+{"human": {"steps": 24, "randomness": 0.2, "overshoot": true, "overshootAmount": 12, "microJitterPx": 1.2, "microJitterCount": 2}}
+```
 
-### Claude Code（VS Code 扩展）
-> 在 VS Code 的 Claude 扩展中用自然语言调用 MCP 工具。
+- 滚动（分段滚动与停顿）
+```
+{"human": {"segments": 6, "perSegmentMs": 120, "jitterPx": 20, "microPauseChance": 0.25, "microPauseMinMs": 60, "microPauseMaxMs": 160, "macroPauseEvery": 4, "macroPauseMinMs": 120, "macroPauseMaxMs": 260}}
+```
 
-- 方式一：沿用 Claude CLI 的配置
-  1) 先用 `claude mcp add` 注册本项目（参考上文）。
-  2) 打开 VS Code，确保安装并登录 Claude 扩展；扩展会自动识别本地 MCP 服务器。
-  3) 在 Claude 面板输入自然语言，例如：
-     - “在 dir <DIRID> 打开/复用浏览器会话并访问小红书发现页，随后全页截图。”
-     - “在 dir <DIRID> 滚动两屏并截图，保存到 artifacts。”
+- 输入（每分钟字数，逐字延时）
+```
+{"human": {"wpm": 180}}
+```
 
-- 方式二：在 Claude Code 中手动添加
-  - 打开扩展设置（Settings）或命令面板（Command Palette），搜索 MCP Servers/Add Server，按提示选择 `stdio` 并填写：
-    - Command: `node`
-    - Args: `dist/mcp/server.js`
-    - Env: `ROXY_API_TOKEN=YOUR_TOKEN`（可选 `ROXY_API_BASEURL`）
-  - 完成后在对话中以自然语言驱动操作。
+- 关闭拟人化（一次调用）
+```
+{"human": false}
+// 或：{"human": {"enabled": false}}
+```
 
-> 参考：官方 MCP 文档关于 “Connectors / Claude / Claude Code” 章节与 Quickstart，推荐优先通过 Claude CLI 统一管理本地 MCP 服务器。
+说明：
+- 不传 `enabled` 时，对象形态默认开启拟人化；`human=false` 或 `human.enabled=false` 才会关闭。
+- `profile` 提供预设节律，细化参数可按需叠加覆盖。
+
+---
+
+## 有效停留策略（外部编排工作流）
+
+- 图文有效阅读：建议随机停留 3.2–6.0s（≥3s），可加一次小滚动提升自然度
+- 视频早期有效观看：建议随机停留 5–10s（≥5s），必要时在流程层触发播放
+
+外部工作流（MCP 客户端）调用序列示意：
+```
+// 1) 打开或聚焦目标页
+tools/call: page.click { dirId, target: {...}, human: true }
+
+// 2) 等待主要内容可见（由外部工作流自行 wait/sleep）
+sleep(random(3200, 6000)) // 图文；视频建议 random(5000, 10000) 并先触发播放
+
+// 3) 可选小幅滚动（提升自然度）
+tools/call: page.scroll { dirId, human: { segments: 4, perSegmentMs: 120 } }
+
+// 4) 返回或继续下一步
+```
+
+说明：
+- 本服务只提供稳定的原子动作，不内置语义流程（wait/停留）。
+- 外部工作流负责编排等待、重试与业务逻辑；如需更自然的微动作，调用时传入 `human` 即可（默认已开启）。
+
+---
+
+## 外部工作流最佳实践清单
+
+- 工具调用顺序（常见骨架）
+  - 打开/聚焦上下文 → 页面创建/列表 → 导航（如需要） → 定位并点击/悬停/输入 →（图文≥3s/视频≥5s）有效停留 → 截图/快照/落盘 → 下一步或返回。
+
+- 等待与确认
+  - 首选“可见性/可交互”准则：点击前等待关键内容可见（例如标题、正文、播放器按钮）。
+  - 轻等待与抖动：使用外部 `sleep(random(300,600)ms)` 等短暂停顿衔接原子动作，避免“连发”。
+  - 证据确认：在关键节点调用 `page.snapshot` 抽取 `url/title/a11y`，作为“已到达/已可见”的低成本证据。
+
+- 重试与回退
+  - 选择器容错：优先语义定位（role/name/label/testId/text），必要时回退 CSS；失败可改用文本/正则匹配变体。
+  - 动作级重试（1–2 次）：定位失败/超时 → 刷新/轻滚动再定位；持续失败则降级退出，避免无限重试。
+
+- 节流与熔断
+  - 客户端侧设置 QPS 上限与指数退避（jitter），避免“突发连点”。
+  - 并发与隔离：`dirId` 映射持久化 Context；跨账号并行时保证每个 `dirId` 的动作队列化，避免页面竞态。
+
+- 拟人化策略
+  - 默认开启（无需传参）；全局档位 `HUMAN_PROFILE=default/cautious/rapid` 控制节律风格；按次可 `human=false` 关闭或用对象细化（steps/randomness/wpm/segments…）。
+  - 输入建议使用逐字延时（WPM），标点增加额外停顿（本模块已内置）。
+
+- 有效停留（仅外部编排）
+  - 图文：随机停留 3.2–6.0s（≥3s），可加一次小幅滚动（0.25–0.5 视口高）。
+  - 视频：随机停留 5–10s（≥5s）；若未自动播放先触发播放，再计时。
+
+- 证据与归档
+  - 截图：`page.screenshot`（文本 + image/png）；命名规则可带上步骤号与毫秒时间戳。
+  - 资源：`resources.listArtifacts`/`resources.readArtifact` 直接读取 `artifacts/<dirId>` 下的文件。
+  - 快照：关键操作后调用 `page.snapshot` 留存 a11y 树摘要与统计（clickableCount 等）。
+
+- 错误分类与处理
+  - 定位错误（selector/locator）→ 先回退轻滚动/切换候选 → 再次定位。
+  - 动作错误（action）→ 检查元素遮挡/不可交互 → 轻移动/微停顿 → 再尝试；必要时切换为非拟人化点击。
+  - 导航错误（navigate）→ 回退至上一步 URL，再行导航。
+
+- 诊断与能力自检
+  - 启动前/运行中可调用 `server.capabilities` 检查 `{ adapter, roxyBridge, adminTools }`。
+  - 可开启 `HUMAN_TRACE_LOG=true` 将关键拟人化事件落盘到 `artifacts/<dirId>/human-trace.ndjson`（仅在需要时）。
+
+- 参考调用片段（MCP 客户端）
+  - 进入详情：
+    - tools/call `page.click` → 外部 `sleep(random(3200,6000))`（图文）
+  - 视频播放：
+    - tools/call `page.click`（播放按钮）→ 外部 `sleep(random(5000,10000))`
+  - 证据：
+    - tools/call `page.screenshot` → tools/call `page.snapshot`

@@ -21,6 +21,7 @@ export function loadConfig(): AppConfig {
 			qps: env.POLICY_QPS,
 			failureThreshold: env.POLICY_FAILURES,
 			openSeconds: env.POLICY_OPEN_SECONDS
-		}
+		},
+		HUMAN_PROFILE: env.HUMAN_PROFILE
 	};
 }

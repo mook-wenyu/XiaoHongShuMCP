@@ -12,7 +12,7 @@ export const XHS_CONF = {
     step: Number(process.env.XHS_SCROLL_STEP || 1400),
     settleMs: Number(process.env.XHS_SCROLL_SETTLE_MS || 250),
     // 智能批次确认参数（滚动后）
-    useApiAfterScroll: (String(process.env.XHS_SCROLL_USE_API_AFTER || 'true').toLowerCase() !== 'false'),
+    useApiAfterScroll: (String(process.env.XHS_SCROLL_USE_API_AFTER || "true").toLowerCase() !== "false"),
     shortFeedWaitMs: Number(process.env.XHS_SCROLL_SHORT_FEED_WAIT_MS || 1500),
     shortSearchWaitMs: Number(process.env.XHS_SCROLL_SHORT_SEARCH_WAIT_MS || 1500),
     microScrollOnNoProgressPx: Number(process.env.XHS_SCROLL_MICRO_ON_NOPROGRESS_PX || 120),

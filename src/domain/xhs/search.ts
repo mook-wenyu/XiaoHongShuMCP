@@ -13,11 +13,11 @@ import { XHS_CONF } from "../../config/xhs.js";
  * - 提交：.input-box .input-button → .input-box .search-icon → 按回车兜底
  */
 export async function ensureSearchLocators(page: Page): Promise<{ input?: any; submit?: any }> {
-	const { healthMonitor } = await import('../../selectors/health.js');
-	const isTest = String(process.env.NODE_ENV).toLowerCase() === 'test';
+	const { healthMonitor } = await import("../../selectors/health.js");
+	const isTest = String(process.env.NODE_ENV).toLowerCase() === "test";
 	const inputCandidates: any[] = [
 		XhsSelectors.searchInput(),
-		{ role: 'textbox' },
+		{ role: "textbox" },
 		{ selector: "#search-input.search-input" },
 		{ selector: ".input-box input.search-input" },
 	];
@@ -37,11 +37,11 @@ export async function ensureSearchLocators(page: Page): Promise<{ input?: any; s
 		} catch {}
 	}
 	// 统一记录一次健康度
-	try { healthMonitor.record('search-input', !!input, Date.now() - t0); } catch {}
+	try { healthMonitor.record("search-input", !!input, Date.now() - t0); } catch {}
 
 	const submitCandidates: any[] = [
 		XhsSelectors.searchSubmit(),
-		{ role: 'button' },
+		{ role: "button" },
 		{ selector: ".input-box .input-button" },
 		{ selector: ".input-box .search-icon" },
 	];
@@ -60,37 +60,17 @@ export async function ensureSearchLocators(page: Page): Promise<{ input?: any; s
 			break;
 		} catch {}
 	}
-	try { healthMonitor.record('search-submit', !!submit, Date.now() - t0); } catch {}
+	try { healthMonitor.record("search-submit", !!submit, Date.now() - t0); } catch {}
 	return { input, submit };
 }
 
-/**
- * 在小红书首页执行搜索
- * - 关闭模态（若有）
- * - 点击输入框并输入关键词
- * - 点击提交按钮（或回车）
- * - 等待导航到 search_result 页面
- */
-async function dumpHtml(page: Page, dirId: string | undefined, tag: string): Promise<string | undefined> {
-	try {
-		if (!dirId) return undefined;
-		const { ensureDir } = await import("../../services/artifacts.js");
-		const { join } = await import("node:path");
-		const { writeFile } = await import("node:fs/promises");
-		const base = join("artifacts", dirId, "html");
-		await ensureDir(base);
-		const p = join(base, `${tag}-${Date.now()}.html`);
-		const html = await page.content();
-		await writeFile(p, html, "utf-8");
-		return p;
-	} catch { return undefined; }
-}
+// 旧版调试函数（dumpHtml）已移除，避免未使用警告与不必要的磁盘写入
 
 export async function searchKeyword(page: Page, keyword: string): Promise<{ ok: boolean; url?: string; verified?: boolean; matchedCount?: number }> {
 	// 不强制跳转：先尝试在当前页搜索，找不到再回到“发现”页
 	try { await closeModalIfOpen(page); } catch {}
 
-	const isTest = String(process.env.NODE_ENV).toLowerCase() === 'test';
+	const isTest = String(process.env.NODE_ENV).toLowerCase() === "test";
 	let { input, submit } = await ensureSearchLocators(page);
 	if (!input) {
 		if (isTest) return { ok: false };
@@ -107,7 +87,7 @@ export async function searchKeyword(page: Page, keyword: string): Promise<{ ok: 
 	// 点击输入框并清空已有内容（拟人化）
 	await clickHuman(page as any, input);
 	try {
-		const { clearInputHuman } = await import('../../humanization/actions.js');
+		const { clearInputHuman } = await import("../../humanization/actions.js");
 		await clearInputHuman(page as any, input);
 	} catch {}
 
@@ -119,7 +99,7 @@ export async function searchKeyword(page: Page, keyword: string): Promise<{ ok: 
 	};
 	// 统一监听：先挂 search.notes，再触发提交；与 URL 变化并行等待
 	const waitSearchApiSoft = async (): Promise<{ ok: boolean; count?: number }> => {
-		const { waitSearchNotes } = await import('./netwatch.js');
+		const { waitSearchNotes } = await import("./netwatch.js");
 		const w = waitSearchNotes(page, XHS_CONF.search.waitApiMs);
 		return w.promise.then(r => ({ ok: r.ok, count: Array.isArray((r as any).data?.items) ? (r as any).data.items.length : undefined })).catch(() => ({ ok: false }));
 	};

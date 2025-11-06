@@ -5,7 +5,7 @@
  *  - XHS_TEXT_CLEAN_COLLAPSE_WS: 是否压缩空白为单空格（默认 true）
  */
 
-import type { Page } from 'playwright';
+import type { Page } from "playwright";
 // 外部清洗配置已移除，保留环境变量驱动与默认策略（Unicode 标点/符号剔除 + 压缩空白）
 
 const DEFAULT_REMOVE_CHARS = ",.!?，。！？·—–-:;()[]{}\"'`|<>~@#$%^&*+=_";
@@ -32,33 +32,33 @@ function applyRule(input: string, rule?: { removeChars?: string; removeRegex?: s
   let s = String(input || "");
   try {
     if (rule?.removeRegex) {
-      const re = new RegExp(rule.removeRegex, 'gu');
-      s = s.replace(re, '');
+      const re = new RegExp(rule.removeRegex, "gu");
+      s = s.replace(re, "");
     } else if (rule?.removeChars) {
       const escaped = rule.removeChars.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-      const re = new RegExp(`[${escaped}]`, 'gu');
-      s = s.replace(re, '');
+      const re = new RegExp(`[${escaped}]`, "gu");
+      s = s.replace(re, "");
     } else {
       const re = buildRegexFromEnv();
-      if (re) s = s.replace(re, '');
+      if (re) s = s.replace(re, "");
       // 保险兜底：移除所有 Unicode 标点和符号（默认行为），避免环境缓存导致的失效
-      s = s.replace(/[\p{P}\p{S}]+/gu, '');
+      s = s.replace(/[\p{P}\p{S}]+/gu, "");
     }
   } catch {
     const re = buildRegexFromEnv();
-    if (re) s = s.replace(re, '');
-    s = s.replace(/[\p{P}\p{S}]+/gu, '');
+    if (re) s = s.replace(re, "");
+    s = s.replace(/[\p{P}\p{S}]+/gu, "");
   }
   const collapse = rule?.collapseWs ?? (String(process.env.XHS_TEXT_CLEAN_COLLAPSE_WS || "true").toLowerCase() !== "false");
-  if (collapse) s = s.replace(/\s+/g, ' ').trim();
+  if (collapse) s = s.replace(/\s+/g, " ").trim();
   return s;
 }
 
 export function cleanText(input: string | null | undefined): string {
-  return applyRule(String(input || ''), undefined);
+  return applyRule(String(input || ""), undefined);
 }
 
 export async function cleanTextFor(_page: Page, _pageType: string | undefined, input: string | null | undefined): Promise<string> {
   // 直接使用环境变量与默认规则；如需差异化按页面类型处理，可在此处按 _pageType 做条件分支。
-  return applyRule(String(input || ''), undefined);
+  return applyRule(String(input || ""), undefined);
 }

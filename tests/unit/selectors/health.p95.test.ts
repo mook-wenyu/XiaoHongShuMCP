@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { healthMonitor } from '../../../src/selectors/health.js'
+import { describe, it, expect, beforeEach } from "vitest"
+import { healthMonitor } from "../../../src/selectors/health.js"
 
-describe('health monitor p95', () => {
+describe("health monitor p95", () => {
   beforeEach(() => healthMonitor.clear())
 
-  it('computes p95 from recent durations', () => {
-    const id = 'sel.p95.test'
+  it("computes p95 from recent durations", () => {
+    const id = "sel.p95.test"
     // 1..100 ms
     for (let i=1;i<=100;i++) healthMonitor.record(id, true, i)
     const h = healthMonitor.getHealth(id)!

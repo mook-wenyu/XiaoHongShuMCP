@@ -1,11 +1,13 @@
 {
 	"name": "hushops-servers-xiaohongshu",
 	"version": "0.1.0",
+	"description": "小红书场景的人机浏览自动化 MCP 服务，基于 RoxyBrowser + Playwright 提供最小原子动作与多账号隔离",
 	"private": true,
 	"type": "module",
 	"engines": {
 		"node": ">=18"
 	},
+	"license": "Apache-2.0",
 	"scripts": {
 		"dev": "tsx src/cli.ts",
 		"build": "tsc -p tsconfig.json",
@@ -14,12 +16,11 @@
 		"run:example": "tsx src/cli.ts --task=openAndScreenshot --payload={\"url\":\"https://example.com\"} --limit=2",
 		"run:publish:example": "tsx src/cli.ts --task=xhs.publish --payload=@docs/examples/publish-payload.json",
 		"demo:local": "tsx scripts/demo-local.ts",
-		"smoke:actions": "tsx scripts/smoke-actions.ts",
-		"xhs:open": "tsx scripts/xhs-open.ts",
 		"cleanup:artifacts": "tsx scripts/cleanup-artifacts.ts",
 		"lint": "eslint .",
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
+		"check:encoding": "tsx scripts/check-encoding.ts",
 		"test": "npm run build:test && vitest run",
 		"test:roxy": "npm run build:test && vitest run tests/integration/roxy",
 		"test:api": "npm run build:test && vitest run tests/integration/roxy/api.test.ts",
@@ -27,6 +28,9 @@
 		"test:isolation": "npm run build:test && vitest run tests/integration/roxy/isolation.test.ts",
 		"test:pool": "npm run build:test && vitest run tests/integration/roxy/connection-pool.test.ts",
 		"check:env": "tsx scripts/check-env.ts",
+		"check:tools": "npm run build:test && tsx scripts/check-mcp-tools.ts",
+		"preflight": "tsx scripts/preflight.ts",
+		"advisor:official": "tsx scripts/advisor-official-adapter.ts",
 		"test:workspace-id": "tsx scripts/test-workspace-id.ts",
 		"mcp:call:navigate": "tsx scripts/mcp-call.ts --dirId=user",
 		"mcp:call:search": "tsx scripts/mcp-call-search.ts --dirId=user --keyword=美食",
@@ -36,8 +40,7 @@
 		"roxy:create-window": "tsx scripts/create-window.ts",
 		"report:selectors": "tsx scripts/selector-health-report.ts",
 		"bench:human": "tsx scripts/bench-humanization.ts",
-		"smoke:local": "tsx scripts/open-and-screenshot-local.ts",
-		"xhs:note:demo": "tsx scripts/xhs-note-actions-repro.ts",
+		
 		"postinstall": "playwright install chromium"
 	},
 	"dependencies": {

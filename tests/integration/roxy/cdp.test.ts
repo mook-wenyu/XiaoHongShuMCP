@@ -12,11 +12,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { roxySupportsOpen } from "../../helpers/roxy.js";
 const ready = await roxySupportsOpen();
 const describeIf = ready ? describe : (describe.skip as typeof describe);
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import { ConfigProvider } from "../../../src/config/ConfigProvider.js";
 import { ServiceContainer } from "../../../src/core/container.js";
 import type { IRoxyClient } from "../../../src/contracts/IRoxyClient.js";
-import { setTimeout as delay } from "node:timers/promises";
 
 describeIf("CDP 连接集成测试", () => {
 	let roxyClient: IRoxyClient;

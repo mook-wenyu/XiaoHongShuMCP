@@ -46,7 +46,7 @@ export async function detectPageType(page: Page): Promise<PageType> {
 		if (url === "https://www.xiaohongshu.com/explore") return PageType.ExploreHome;
 
 		// 兜底：模态探针（role=dialog/aria-modal 或小红书特征类名 note-detail-mask/note-container）
-		const modalCount = await page.locator('[role="dialog"], [aria-modal="true"], .note-detail-mask, #noteContainer, .note-container').count();
+		const modalCount = await page.locator("[role=\"dialog\"], [aria-modal=\"true\"], .note-detail-mask, #noteContainer, .note-container").count();
 		if (modalCount > 0) return PageType.NoteModal;
 	} catch {}
 	return PageType.Unknown;
@@ -102,7 +102,7 @@ export async function ensureDiscoverPage(page: Page): Promise<void> {
  * 返回是否执行了关闭动作。
  */
 export async function closeModalIfOpen(page: Page): Promise<boolean> {
-	const isOpen = async () => (await page.locator('[role="dialog"], [aria-modal="true"], .note-detail-mask, #noteContainer, .note-container').count()) > 0;
+	const isOpen = async () => (await page.locator("[role=\"dialog\"], [aria-modal=\"true\"], .note-detail-mask, #noteContainer, .note-container").count()) > 0;
 	if (!(await isOpen())) return false;
 
 	// 1) Esc
@@ -114,13 +114,13 @@ export async function closeModalIfOpen(page: Page): Promise<boolean> {
 
 	// 2) 找关闭按钮（aria-label / 文本 / data-testid / 常见 class / 小红书特征 close-* / 图标 use#close）
 	const closeSelectors = [
-		'button[aria-label*="关闭" i]',
-		'button:has-text("关闭")',
-		'[data-testid*="close" i]',
-		'[class*="close" i]',
-		'.close-mask-dark',
-		'.close-box',
-		'svg:has(use[xlink\\:href="#close"])'
+		"button[aria-label*=\"关闭\" i]",
+		"button:has-text(\"关闭\")",
+		"[data-testid*=\"close\" i]",
+		"[class*=\"close\" i]",
+		".close-mask-dark",
+		".close-box",
+		"svg:has(use[xlink\\:href=\"#close\"])"
 	];
 	for (const sel of closeSelectors) {
 		try {
@@ -133,10 +133,10 @@ export async function closeModalIfOpen(page: Page): Promise<boolean> {
 
 	// 3) 点击遮罩/背景（包含 note-detail-mask）
 	const backdropSelectors = [
-		'.note-detail-mask',
-		'[class*="mask" i]',
-		'[class*="backdrop" i]',
-		'[class*="overlay" i]'
+		".note-detail-mask",
+		"[class*=\"mask\" i]",
+		"[class*=\"backdrop\" i]",
+		"[class*=\"overlay\" i]"
 	];
 	for (const sel of backdropSelectors) {
 		try {
@@ -188,8 +188,8 @@ export async function findAndOpenNoteByKeywords(
 	const pageTypeForClean = await detectPageType(page);
 	const normAsync = async (s: string) => (await cleanTextFor(page as any, pageTypeForClean, s)).toLowerCase();
 	const normKeywords = await Promise.all(keywords.map(async (k) => {
-		const nk = await normAsync(String(k || ''));
-		const nkNoSpace = nk.replace(/\s+/g, '');
+		const nk = await normAsync(String(k || ""));
+		const nkNoSpace = nk.replace(/\s+/g, "");
 		return { nk, nkNoSpace };
 	}));
 	const matchAny = (tn: string, tnNoSpace: string): number => {
@@ -228,14 +228,14 @@ export async function findAndOpenNoteByKeywords(
 	const pageType = await detectPageType(page);
 	// 使用集中映射的容器选择器（优先 selectors/*.json 的逻辑 ID）
 	const containerSel = await resolveContainerSelector(page as any);
-	const anchorAllSelFallback = 'a[href]'
+	const anchorAllSelFallback = "a[href]"
 
 	// 供全流程累积的 feed 侧证指标
 	let feedVerified: boolean | undefined; let feedItems: number | undefined; let feedType: string | undefined; let feedTtfbMs: number | undefined;
 
 	const isModalOpen = async (): Promise<boolean> => {
 		try {
-			const c = await page.locator('[role="dialog"], [aria-modal="true"], .note-detail-mask, #noteContainer, .note-container').count();
+			const c = await page.locator("[role=\"dialog\"], [aria-modal=\"true\"], .note-detail-mask, #noteContainer, .note-container").count();
 			return c > 0;
 		} catch { return false; }
 	};
@@ -253,7 +253,7 @@ export async function findAndOpenNoteByKeywords(
 						const id = item.id;
 						const idAnchor = page.locator(`a[href*="/discovery/item/${id}"], a[href*="/search_result/${id}"], a[href*="/explore/${id}"]`);
 						const card = page.locator(containerSel).filter({ has: idAnchor }).first();
-						const clickable = card.locator('a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible').first();
+						const clickable = card.locator("a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible").first();
 						if (await clickable.count() > 0) { await clickHuman(page as any, clickable); clicked = true; }
 					} catch {}
 				}
@@ -262,7 +262,7 @@ export async function findAndOpenNoteByKeywords(
 					try {
 						const titleAnchor = page.locator(anchorAllSelFallback).filter({ hasText: item.title });
 						const card = page.locator(containerSel).filter({ has: titleAnchor }).first();
-						const clickable = card.locator('a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible').first();
+						const clickable = card.locator("a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible").first();
 						if (await clickable.count() > 0) { await clickHuman(page as any, clickable); clicked = true; }
 					} catch {}
 				}
@@ -290,13 +290,13 @@ export async function findAndOpenNoteByKeywords(
 			const tn = await normAsync(a.text);
 			if (!tn) continue;
 			const tnNoSpace = tn.replace(/\s+/g, "");
-			if ((process.env.XHS_KEYWORDS_DEBUG || 'false').toLowerCase() === 'true' && round === 0 && a.index < 2) {
-				try { process.stderr.write(JSON.stringify({ ts: Date.now(), selectorId: 'kw-debug', idx: a.index, tn: tn.slice(0, 80), kws: normKeywords }) + '\n'); } catch {}
+			if ((process.env.XHS_KEYWORDS_DEBUG || "false").toLowerCase() === "true" && round === 0 && a.index < 2) {
+				try { process.stderr.write(JSON.stringify({ ts: Date.now(), selectorId: "kw-debug", idx: a.index, tn: tn.slice(0, 80), kws: normKeywords }) + "\n"); } catch {}
 			}
 			let hitIdx = matchAny(tn, tnNoSpace);
 
 			if (hitIdx >= 0) {
-				if ((process.env.XHS_KEYWORDS_DEBUG || 'false').toLowerCase() === 'true') { try { process.stderr.write(JSON.stringify({ ts: Date.now(), selectorId: 'kw-debug-hit', idx: a.index, hit: keywords[hitIdx] }) + '\n'); } catch {} }
+				if ((process.env.XHS_KEYWORDS_DEBUG || "false").toLowerCase() === "true") { try { process.stderr.write(JSON.stringify({ ts: Date.now(), selectorId: "kw-debug-hit", idx: a.index, hit: keywords[hitIdx] }) + "\n"); } catch {} }
 				// 测试环境：直接返回命中成功
 				if (process.env.VITEST_WORKER_ID) {
 					const matchedKw = keywords[hitIdx];
@@ -318,9 +318,9 @@ export async function findAndOpenNoteByKeywords(
 						).first();
 					} else {
 						// 退化：卡片容器内的可点击封面或标题（仅此两类）
-						loc = page.locator(containerSel).nth(a.index).locator('a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible').first();
+						loc = page.locator(containerSel).nth(a.index).locator("a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible").first();
 					}
-					const shouldWaitFeed = String(process.env.XHS_FEED_WAIT_ON_CLICK ?? 'true').toLowerCase() === 'true' && !process.env.VITEST_WORKER_ID;
+					const shouldWaitFeed = String(process.env.XHS_FEED_WAIT_ON_CLICK ?? "true").toLowerCase() === "true" && !process.env.VITEST_WORKER_ID;
 					let fr: any = undefined;
 					if (shouldWaitFeed) {
 						const feedWaitMs = Math.max(10, Number(process.env.XHS_FEED_WAIT_API_MS || XHS_CONF.feed.waitApiMs));
@@ -355,14 +355,14 @@ export async function findAndOpenNoteByKeywords(
 		}
 		// 未命中：如接近硬超时直接退出（可选：降级点击首卡）
 		if (Date.now() - tStart > hardCapMs) {
-			const degradeEnv = String(process.env.XHS_SELECT_DEGRADE_ON_FAIL ?? process.env.XHS_DSL_DISABLE_ON_FAIL ?? 'true').toLowerCase();
-			if (degradeEnv === 'true' && anchors.length > 0) {
+			const degradeEnv = String(process.env.XHS_SELECT_DEGRADE_ON_FAIL ?? process.env.XHS_DSL_DISABLE_ON_FAIL ?? "true").toLowerCase();
+			if (degradeEnv === "true" && anchors.length > 0) {
 				try {
 					// 降级也仅允许封面或标题
-					const loc = page.locator(containerSel).nth(0).locator('a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible').first();
+					const loc = page.locator(containerSel).nth(0).locator("a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible").first();
 					await clickHuman(page as any, loc);
 					await page.waitForTimeout(150);
-					if (await isModalOpen()) return { ok: true, matched: 'degraded:first-card', modalOpen: true, feedVerified, feedItems, feedType, feedTtfbMs };
+					if (await isModalOpen()) return { ok: true, matched: "degraded:first-card", modalOpen: true, feedVerified, feedItems, feedType, feedTtfbMs };
 				} catch {}
 			}
 			return { ok: false, modalOpen: false };
@@ -426,7 +426,7 @@ export async function findAndOpenNoteByKeywords(
 				let hitIdx = matchAny(tn, tnNoSpace);
 
 				if (hitIdx >= 0) {
-					if ((process.env.XHS_KEYWORDS_DEBUG || 'false').toLowerCase() === 'true') { try { process.stderr.write(JSON.stringify({ ts: Date.now(), selectorId: 'kw-debug-hit', idx: a.index, phase: 'after-scroll', hit: keywords[hitIdx] }) + '\n'); } catch {} }
+					if ((process.env.XHS_KEYWORDS_DEBUG || "false").toLowerCase() === "true") { try { process.stderr.write(JSON.stringify({ ts: Date.now(), selectorId: "kw-debug-hit", idx: a.index, phase: "after-scroll", hit: keywords[hitIdx] }) + "\n"); } catch {} }
 					// 测试环境：直接返回命中成功
 					if (process.env.VITEST_WORKER_ID) {
 						const matchedKw = keywords[hitIdx];
@@ -447,9 +447,9 @@ export async function findAndOpenNoteByKeywords(
 							).first();
 						} else {
 							// 退化：卡片容器内的可点击封面或标题（仅此两类）
-							loc = page.locator(containerSel).nth(a.index).locator('a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible').first();
+							loc = page.locator(containerSel).nth(a.index).locator("a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible").first();
 						}
-						const shouldWaitFeed = String(process.env.XHS_FEED_WAIT_ON_CLICK ?? 'true').toLowerCase() === 'true' && !process.env.VITEST_WORKER_ID;
+						const shouldWaitFeed = String(process.env.XHS_FEED_WAIT_ON_CLICK ?? "true").toLowerCase() === "true" && !process.env.VITEST_WORKER_ID;
 						let fr: any = undefined;
 						if (shouldWaitFeed) {
 							const feedWaitMs = Math.max(10, Number(process.env.XHS_FEED_WAIT_API_MS || XHS_CONF.feed.waitApiMs));
@@ -483,7 +483,7 @@ export async function findAndOpenNoteByKeywords(
 				}
 			}
 
-			const { recordScrollMetrics } = await import('./scroll-metrics.js');
+			const { recordScrollMetrics } = await import("./scroll-metrics.js");
 			const ratioEnv = Number(process.env.XHS_SCROLL_STEP_RATIO || 0.55);
 			await recordScrollMetrics({ slug: domainSlugFromUrl(page.url()), url: page.url(), round, stepPx: stepNow, progressed, prev: anchors as any, curr: afterCards as any, ratioEnv, screenshotPath: snapPath });
 			try {

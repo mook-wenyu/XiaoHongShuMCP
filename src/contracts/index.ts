@@ -8,7 +8,6 @@
  */
 
 export * from "./IRoxyClient.js";
-export * from "./IPlaywrightConnector.js";
-export * from "./IConnectionManager.js";
+// 官方唯一：移除本地 PlaywrightConnector/ConnectionManager 接口
 export * from "./ILogger.js";
 export * from "./ITaskRegistry.js";

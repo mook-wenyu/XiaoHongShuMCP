@@ -11,7 +11,13 @@ const BaseEnv = z.object({
 	DEFAULT_URL: z.string().url().default("https://example.com"),
 	POLICY_QPS: z.string().default("5").transform((s) => Math.max(1, Number(s) || 5)),
 	POLICY_FAILURES: z.string().default("5").transform((s) => Math.max(1, Number(s) || 5)),
-	POLICY_OPEN_SECONDS: z.string().default("15").transform((s) => Math.max(1, Number(s) || 15))
+	POLICY_OPEN_SECONDS: z.string().default("15").transform((s) => Math.max(1, Number(s) || 15)),
+	HUMAN_PROFILE: z
+		.string()
+		.default("default")
+		.refine((v) => ["default", "cautious", "rapid"].includes(v), {
+			message: "HUMAN_PROFILE 仅支持 default/cautious/rapid",
+		}),
 });
 
 export const ConfigSchema = BaseEnv; // baseURL 可空，运行时默认 http://127.0.0.1:50000；也可通过 HOST/PORT 指定
@@ -22,4 +28,5 @@ export type AppConfig = {
 	TIMEOUT_MS: number;
 	DEFAULT_URL: string;
 	policy: { qps: number; failureThreshold: number; openSeconds: number };
+	HUMAN_PROFILE: "default" | "cautious" | "rapid";
 };

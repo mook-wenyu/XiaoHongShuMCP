@@ -1,6 +1,6 @@
-/* 中文注释：弹性选择器集成测试（真实浏览器场景模拟） */
+/* 中文注释：韧性选择器集成测试（真实浏览器场景模拟） */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { resolveLocatorResilient, getPolicyEnforcer } from "../../../src/selectors/resilient.js";
+import { resolveLocatorResilient } from "../../../src/selectors/resilient.js";
 import { healthMonitor } from "../../../src/selectors/health.js";
 import { generateHealthReport, logHealthReport } from "../../../src/selectors/report.js";
 import type { Page, Locator } from "playwright";
@@ -62,7 +62,7 @@ function createMockLocator(
   } as any;
 }
 
-describe("弹性选择器集成测试", () => {
+describe("韧性选择器集成测试", () => {
   beforeEach(() => {
     // 清空健康度监控数据
     healthMonitor.clear();
@@ -243,7 +243,7 @@ describe("弹性选择器集成测试", () => {
       const hints: TargetHints = { selector: "#concurrent" };
 
       // 并发执行 10 个选择器解析
-      const promises = Array.from({ length: 10 }, (_, i) =>
+      const promises = Array.from({ length: 10 }, (_, _i) =>
         resolveLocatorResilient(page, hints, {
           selectorId: "concurrent-selector",
         })

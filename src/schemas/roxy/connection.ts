@@ -52,9 +52,9 @@ const ConnectionInfoLooseSchema = z
 	.transform((d) => {
 		const ws = d.ws_url || d.websocket || d.cdpWs || d.cdp_ws || d.endpoint?.ws;
 		const http = d.http || d.endpoint?.http;
-		return { id: (typeof d.id === 'string' ? d.id : (d.id != null ? String(d.id) : undefined)), ws, http };
+		return { id: (typeof d.id === "string" ? d.id : (d.id != null ? String(d.id) : undefined)), ws, http };
 	})
-	.refine((x) => typeof x.ws === 'string' && x.ws.length > 0, { message: 'ws missing' });
+	.refine((x) => typeof x.ws === "string" && x.ws.length > 0, { message: "ws missing" });
 
 /**
  * 从 Schema 推断的连接信息类型

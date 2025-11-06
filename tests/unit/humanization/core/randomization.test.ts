@@ -17,10 +17,10 @@ describe("randomization", () => {
     }
   })
   it("neighbor keys", () => {
-    expect(QWERTY_NEIGHBORS['a']).toContain('q')
-    const k = getNeighborKey('E')
+    expect(QWERTY_NEIGHBORS["a"]).toContain("q")
+    const k = getNeighborKey("E")
     if (k) {
-      expect(QWERTY_NEIGHBORS['e']).toContain(k)
+      expect(QWERTY_NEIGHBORS["e"]).toContain(k)
     }
   })
 })

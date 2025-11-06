@@ -57,7 +57,7 @@ export async function recordScrollMetrics(opts: {
     ts: Date.now(),
     slug: opts.slug,
     url: opts.url,
-    selectorId: 'nav-scroll-metrics',
+    selectorId: "nav-scroll-metrics",
     ok: !suspectedSkip,
     durationMs: 0,
     metric: {
@@ -66,17 +66,17 @@ export async function recordScrollMetrics(opts: {
       visited: prevCount, // 这里复用字段名记录 prev 集合规模
       progressed: opts.progressed,
     },
-    errorCode: suspectedSkip ? 'SCROLL_SKIP_SUSPECT' : undefined,
+    errorCode: suspectedSkip ? "SCROLL_SKIP_SUSPECT" : undefined,
   });
   // 追加一条带详细度量的扩展示例（不影响上条的结构化报表）
   await appendHealth({
-    ts: Date.now(), slug: opts.slug, url: opts.url, selectorId: 'nav-scroll-metrics-detail', ok: true, durationMs: 0,
+    ts: Date.now(), slug: opts.slug, url: opts.url, selectorId: "nav-scroll-metrics-detail", ok: true, durationMs: 0,
     metric: { round: opts.round, anchors: currCount, visited: prevCount, progressed: opts.progressed },
     errorCode: undefined as any,
   });
   // 为了简洁，详细值写到 stderr（可选），避免 NDJSON 过大；如需落盘，可扩展 health-sink。
   try {
-    const line = `[scroll-metrics] round=${opts.round} step=${opts.stepPx} prev=${prevCount} curr=${currCount} shared=${shared} retention=${retention.toFixed(3)} expected≈${expected.toFixed(2)} suspect=${suspectedSkip} snap=${opts.screenshotPath || '-'}\n`;
+    const line = `[scroll-metrics] round=${opts.round} step=${opts.stepPx} prev=${prevCount} curr=${currCount} shared=${shared} retention=${retention.toFixed(3)} expected≈${expected.toFixed(2)} suspect=${suspectedSkip} snap=${opts.screenshotPath || "-"}\n`;
     process.stderr.write(line);
   } catch {}
 }

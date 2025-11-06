@@ -2,7 +2,7 @@
 import type { Page } from "playwright"
 import { sleep } from "../delays.js"
 import type { EasingFunction } from "../core/timing.js"
-import { easeOut } from "../core/timing.js"
+// import { easeOut } from "../core/timing.js" // 由下层默认节律处理
 import { planScroll } from "../plans/scrollPlan.js"
 // 扩展：默认引入人类“停顿式”滚动（微停顿/宏停顿 + 非线性节律）
 export interface ScrollOptions {
@@ -20,7 +20,7 @@ export interface ScrollOptions {
 
 export async function scrollHumanized(page: Page, deltaY = 800, opts: ScrollOptions = {}) {
   const segments = Math.max(1, Math.min(30, Math.floor(opts.segments ?? 6)))
-  const easing = opts.easing ?? easeOut
+  // const easing = opts.easing ?? easeOut // 由下层默认节律处理，此处不额外覆盖
 
   // 默认参数：微/宏停顿均开启；可通过将概率或最大值设为 0 显式关闭
   const microChance = Math.max(0, Math.min(1, opts.microPauseChance ?? 0.25))
@@ -31,16 +31,16 @@ export async function scrollHumanized(page: Page, deltaY = 800, opts: ScrollOpti
   const macroMax = Math.max(macroMin, opts.macroPauseMaxMs ?? 260)
 
   const plan = planScroll(deltaY, {
-    segments: segments,
+    segments,
     jitterPx: opts.jitterPx,
     perSegmentMs: opts.perSegmentMs,
     easingName: undefined, // 由 planScroll 内部默认 easeOut；保持行为一致
-    microPauseChance: opts.microPauseChance,
-    microPauseMinMs: opts.microPauseMinMs,
-    microPauseMaxMs: opts.microPauseMaxMs,
-    macroPauseEvery: opts.macroPauseEvery,
-    macroPauseMinMs: opts.macroPauseMinMs,
-    macroPauseMaxMs: opts.macroPauseMaxMs,
+    microPauseChance: microChance,
+    microPauseMinMs: microMin,
+    microPauseMaxMs: microMax,
+    macroPauseEvery: macroEvery,
+    macroPauseMinMs: macroMin,
+    macroPauseMaxMs: macroMax,
   })
   for (const seg of plan) {
     await page.mouse.wheel(0, seg.delta)

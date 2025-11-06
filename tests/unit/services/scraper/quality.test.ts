@@ -1,5 +1,5 @@
 /* 单元测试：HTML 抓取质量验证 */
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { validateCaptureQuality, progressiveWait } from "../../../../src/services/scraper/quality.js";
 import type { Page } from "playwright";
 
@@ -19,7 +19,7 @@ function createMockPage(options: {
 
   return {
     content: async () => "x".repeat(htmlLength),
-    evaluate: async (fn: any) => {
+    evaluate: async (_fn: any) => {
       // 模拟浏览器环境执行
       return {
         contentLength,

@@ -1,6 +1,6 @@
-/* 单元测试：弹性选择器解析 */
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { resolveLocatorResilient, getPolicyEnforcer } from "../../../src/selectors/resilient.js";
+/* 单元测试：韧性选择器解析 */
+import { describe, it, expect, beforeEach } from "vitest";
+import { resolveLocatorResilient } from "../../../src/selectors/resilient.js";
 import { healthMonitor } from "../../../src/selectors/health.js";
 import type { Page, Locator } from "playwright";
 import type { TargetHints } from "../../../src/selectors/types.js";
@@ -116,7 +116,7 @@ describe("resolveLocatorResilient", () => {
           selectorId: "failSelector",
           retryAttempts: 2,
         })
-      ).rejects.toThrow("弹性选择器解析失败");
+      ).rejects.toThrow("韧性选择器解析失败");
 
       // 验证健康度记录（应该记录为失败）
       const health = healthMonitor.getHealth("failSelector");

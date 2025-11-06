@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RoxyClient } from "../../../src/clients/roxyClient.js";
 import type { ILogger } from "../../../src/contracts/ILogger.js";
-import type { RoxyOpenResponse, RoxyConnInfoResponse } from "../../../src/types/roxy.js";
+// 移除未使用的类型导入
 
 // 创建 mock fetch（使用 vi.hoisted 确保在 vi.mock 之前初始化）
 const { mockFetch } = vi.hoisted(() => ({ mockFetch: vi.fn() }));
@@ -22,14 +22,14 @@ describe("RoxyClient 服务单元测试", () => {
 		status: options.status ?? 200,
 		headers: {
 			get: (key: string) => {
-				if (key.toLowerCase() === 'content-type') {
-					return options.contentType ?? 'application/json';
+				if (key.toLowerCase() === "content-type") {
+					return options.contentType ?? "application/json";
 				}
 				return null;
 			}
 		},
 		json: () => Promise.resolve(data),
-		text: () => Promise.resolve(typeof data === 'string' ? data : JSON.stringify(data))
+		text: () => Promise.resolve(typeof data === "string" ? data : JSON.stringify(data))
 	});
 
 	beforeEach(() => {
@@ -267,9 +267,7 @@ describe("RoxyClient 服务单元测试", () => {
 		});
 
 		it("应该在窗口不存在时打开新窗口", async () => {
-			let callCount = 0;
 			mockFetch.mockImplementation((url: string) => {
-				callCount++;
 				if (url.includes("connection_info")) {
 					return Promise.resolve(createMockResponse({ data: [] }));
 				}
@@ -293,9 +291,7 @@ describe("RoxyClient 服务单元测试", () => {
 			// 创建限制重试次数的客户端，避免长时间等待
 			const clientWithRetry = new RoxyClient("https://api.example.com", "test-token", mockLogger, 1);
 
-			let callCount = 0;
 			mockFetch.mockImplementation((url: string) => {
-				callCount++;
 				if (url.includes("connection_info")) {
 					return Promise.reject(new Error("ConnectionInfo failed"));
 				}

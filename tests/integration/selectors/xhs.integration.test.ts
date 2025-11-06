@@ -1,4 +1,4 @@
-/* 中文注释：XHS 导航和搜索模块集成测试（验证弹性选择器集成） */
+/* 中文注释：XHS 导航和搜索模块集成测试（验证韧性选择器集成） */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ensureSearchLocators, searchKeyword } from "../../../src/domain/xhs/search.js";
 import { ensureDiscoverPage, closeModalIfOpen } from "../../../src/domain/xhs/navigation.js";
@@ -27,13 +27,13 @@ function createMockPage(options: {
     url: () => url,
     goto: vi.fn().mockResolvedValue(undefined),
     waitForLoadState: vi.fn().mockResolvedValue(undefined),
-    waitForURL: vi.fn().mockImplementation(async (pattern, opts) => {
+    waitForURL: vi.fn().mockImplementation(async (_pattern, _opts) => {
       if (apiSucceeds) {
         return Promise.resolve();
       }
       throw new Error("URL wait timeout");
     }),
-    waitForResponse: vi.fn().mockImplementation(async (predicate, opts) => {
+    waitForResponse: vi.fn().mockImplementation(async (_predicate, _opts) => {
       if (apiSucceeds) {
         return {
           json: async () => ({

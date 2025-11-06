@@ -51,8 +51,8 @@ export async function clearInputHuman(page: Page, loc: Locator) {
 
   // 策略 1：Ctrl/Meta + A，Backspace
   try {
-    await pressHuman(page, 'Control+A', 60);
-    await pressHuman(page, 'Backspace', 60);
+    await pressHuman(page, "Control+A", 60);
+    await pressHuman(page, "Backspace", 60);
   } catch {}
   await page.waitForTimeout(40 + Math.random() * 80);
   value = await read();
@@ -60,8 +60,8 @@ export async function clearInputHuman(page: Page, loc: Locator) {
 
   // 兼容 macOS：Meta+A
   try {
-    await pressHuman(page, 'Meta+A', 60);
-    await pressHuman(page, 'Backspace', 60);
+    await pressHuman(page, "Meta+A", 60);
+    await pressHuman(page, "Backspace", 60);
   } catch {}
   await page.waitForTimeout(30 + Math.random() * 60);
   value = await read();
@@ -70,7 +70,7 @@ export async function clearInputHuman(page: Page, loc: Locator) {
   // 策略 2：三击选中 → Delete
   try {
     await loc.click({ clickCount: 3, delay: 20 + Math.random() * 40 });
-    await pressHuman(page, 'Delete', 60);
+    await pressHuman(page, "Delete", 60);
   } catch {}
   await page.waitForTimeout(30 + Math.random() * 60);
   value = await read();
@@ -79,7 +79,7 @@ export async function clearInputHuman(page: Page, loc: Locator) {
   // 策略 3：逐字符 Backspace（上限 80 次，避免长文本超时）
   const n = Math.min(80, value.length);
   for (let i = 0; i < n; i++) {
-    await pressHuman(page, 'Backspace', 40 + Math.random() * 40);
+    await pressHuman(page, "Backspace", 40 + Math.random() * 40);
     if (i % 6 === 0) await page.waitForTimeout(20 + Math.random() * 40);
   }
 }

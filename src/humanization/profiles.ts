@@ -1,6 +1,6 @@
 /* 中文注释：拟人化行为档案（行为节律参数预设） */
 
-export type BehaviorProfileKey = 'default' | 'cautious' | 'rapid'
+export type BehaviorProfileKey = "default" | "cautious" | "rapid"
 
 export interface BehaviorProfile {
   mouseSteps: number         // 鼠标曲线步进
@@ -12,12 +12,15 @@ export interface BehaviorProfile {
 }
 
 const profiles: Record<BehaviorProfileKey, BehaviorProfile> = {
-  default:  { mouseSteps: 25, mouseRandomness: 0.2, wpm: 180, scrollSegments: 6,  scrollJitterPx: 20, scrollPerSegmentMs: 120 },
-  cautious: { mouseSteps: 35, mouseRandomness: 0.25, wpm: 140, scrollSegments: 8,  scrollJitterPx: 24, scrollPerSegmentMs: 180 },
-  rapid:    { mouseSteps: 18, mouseRandomness: 0.15, wpm: 220, scrollSegments: 4,  scrollJitterPx: 16, scrollPerSegmentMs: 80  }
+  // 平衡：移动/滚动/输入节律相对自然，适合多数场景
+  default:  { mouseSteps: 24, mouseRandomness: 0.20, wpm: 110, scrollSegments: 6,  scrollJitterPx: 20, scrollPerSegmentMs: 110 },
+  // 稳健：更慢、更稳，适合对可读性/稳定性敏感的流程
+  cautious: { mouseSteps: 32, mouseRandomness: 0.23, wpm: 85,  scrollSegments: 8,  scrollJitterPx: 24, scrollPerSegmentMs: 150 },
+  // 高效：更快的移动与输入，节奏偏紧凑
+  rapid:    { mouseSteps: 18, mouseRandomness: 0.16, wpm: 140, scrollSegments: 4,  scrollJitterPx: 16, scrollPerSegmentMs: 90  }
 }
 
 export function getProfile(key?: string | null): BehaviorProfile {
-  const k = (key as BehaviorProfileKey) ?? 'default'
+  const k = (key as BehaviorProfileKey) ?? "default"
   return profiles[k] ?? profiles.default
 }

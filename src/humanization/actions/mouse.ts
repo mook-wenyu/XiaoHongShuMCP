@@ -6,7 +6,7 @@ import { sleep } from "../delays.js"
 import { planMousePath } from "../plans/mousePlan.js"
 
 export interface MoveOptions { steps?: number; randomness?: number; overshoot?: boolean; overshootAmount?: number; microJitterPx?: number; microJitterCount?: number }
-export interface ClickOptions { button?: 'left'|'right'|'middle'; clickCount?: number; delay?: number; microJitterPx?: number; microJitterCount?: number }
+export interface ClickOptions { button?: "left"|"right"|"middle"; clickCount?: number; delay?: number; microJitterPx?: number; microJitterCount?: number }
 
 export async function moveMouseCubic(page: Page, loc: Locator, opts: MoveOptions = {}) {
   await ensureVisible(loc)
@@ -30,5 +30,5 @@ export async function clickHuman(page: Page, loc: Locator, opts: ClickOptions = 
   // 若提供微抖动参数，则在点击前做一次轻微抖动（停留在目标附近）
   await moveMouseCubic(page, loc, { microJitterPx: opts.microJitterPx, microJitterCount: opts.microJitterCount })
   const delay = jitter(opts.delay ?? 50, 20, 10, 200)
-  await loc.click({ button: opts.button ?? 'left', clickCount: opts.clickCount ?? 1, delay })
+  await loc.click({ button: opts.button ?? "left", clickCount: opts.clickCount ?? 1, delay })
 }

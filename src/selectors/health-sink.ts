@@ -81,7 +81,7 @@ export async function appendNavProgress(rec: { url?: string; slug?: string; roun
     ts: Date.now(),
     slug: rec.slug,
     url: rec.url,
-    selectorId: 'nav-progress',
+    selectorId: "nav-progress",
     ok: true,
     durationMs: 0,
     metric: { round: rec.round, anchors: rec.anchors, visited: rec.visited, progressed: rec.progressed }
@@ -91,8 +91,8 @@ export async function appendNavProgress(rec: { url?: string; slug?: string; roun
 // 在进程结束前尽量冲刷缓冲，减少丢失
 try {
   const drain = async () => { try { await (flushNow as any)(); } catch {} };
-  (process as any).on('beforeExit', drain);
-  (process as any).on('exit', () => { /* 同步上下文，尽力而为 */ });
-  (process as any).on('SIGINT', async () => { await drain(); process.exit(0); });
-  (process as any).on('SIGTERM', async () => { await drain(); process.exit(0); });
+  (process as any).on("beforeExit", drain);
+  (process as any).on("exit", () => { /* 同步上下文，尽力而为 */ });
+  (process as any).on("SIGINT", async () => { await drain(); process.exit(0); });
+  (process as any).on("SIGTERM", async () => { await drain(); process.exit(0); });
 } catch {}

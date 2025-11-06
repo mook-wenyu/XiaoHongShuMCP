@@ -1,7 +1,7 @@
 /* 统一的 API 监听封装（先挂监听→再触发）
  * 目标：高内聚、低耦合；避免各处分散 waitForResponse；便于超时/解析策略统一调整。
  */
-import type { Page, Response } from 'playwright';
+import type { Page, Response } from "playwright";
 
 export type ApiResult<T = any> = {
   ok: boolean;
@@ -26,16 +26,16 @@ function safeMeta(resp: any): { ok: boolean; url?: string; status?: number } {
   let ok = true;
   let url: string | undefined;
   let status: number | undefined;
-  try { ok = typeof resp?.ok === 'function' ? Boolean(resp.ok()) : true; } catch {}
-  try { url = typeof resp?.url === 'function' ? String(resp.url()) : undefined; } catch {}
-  try { status = typeof resp?.status === 'function' ? Number(resp.status()) : undefined; } catch {}
+  try { ok = typeof resp?.ok === "function" ? Boolean(resp.ok()) : true; } catch {}
+  try { url = typeof resp?.url === "function" ? String(resp.url()) : undefined; } catch {}
+  try { status = typeof resp?.status === "function" ? Number(resp.status()) : undefined; } catch {}
   return { ok, url, status };
 }
 
 export function waitApi<T = any>(page: Page, matcher: (r: Response) => boolean, opts: WaitOpts<T>): Waiter<T> {
   const started = Date.now();
   const predicate = (r: Response) => {
-    try { return matcher(r) && (opts.okOnly !== false ? (typeof (r as any).ok === 'function' ? (r as any).ok() : true) : true); } catch { return false; }
+    try { return matcher(r) && (opts.okOnly !== false ? (typeof (r as any).ok === "function" ? (r as any).ok() : true) : true); } catch { return false; }
   };
   const promise = page.waitForResponse(predicate, { timeout: opts.timeoutMs })
     .then(async (resp): Promise<ApiResult<T>> => {
@@ -53,7 +53,7 @@ export function waitApi<T = any>(page: Page, matcher: (r: Response) => boolean, 
 
 // 小红书常用 API 封装
 export function waitFeed(page: Page, timeoutMs: number): Waiter<{ items?: any[]; type?: string }> {
-  return waitApi(page, r => r.url().includes('/api/sns/web/v1/feed'), {
+  return waitApi(page, r => r.url().includes("/api/sns/web/v1/feed"), {
     timeoutMs,
     okOnly: true,
     map: async (resp) => {
@@ -68,7 +68,7 @@ export function waitFeed(page: Page, timeoutMs: number): Waiter<{ items?: any[];
 }
 
 export function waitHomefeed(page: Page, timeoutMs: number): Waiter<{ items?: any[] }> {
-  return waitApi(page, r => r.url().includes('/api/sns/web/v1/homefeed'), {
+  return waitApi(page, r => r.url().includes("/api/sns/web/v1/homefeed"), {
     timeoutMs,
     okOnly: true,
     map: async (resp) => {
@@ -82,7 +82,7 @@ export function waitHomefeed(page: Page, timeoutMs: number): Waiter<{ items?: an
 
 export type SearchItem = { id?: string; note_card?: { display_title?: string } };
 export function waitSearchNotes(page: Page, timeoutMs: number): Waiter<{ items: SearchItem[] }> {
-  return waitApi(page, r => r.url().includes('/api/sns/web/v1/search/notes'), {
+  return waitApi(page, r => r.url().includes("/api/sns/web/v1/search/notes"), {
     timeoutMs,
     okOnly: true,
     map: async (resp) => {
@@ -154,7 +154,7 @@ export function waitFollow(page: Page, timeoutMs: number): Waiter<{ fstatus?: st
     map: async (resp) => {
       const meta = safeMeta(resp as any);
       let data: any; try { data = await (resp as any).json?.(); } catch { data = undefined; }
-      const ok = (data?.code === 0 || data?.success === true) && (data?.data?.fstatus === 'follows');
+      const ok = (data?.code === 0 || data?.success === true) && (data?.data?.fstatus === "follows");
       return { ...meta, ok, data: { fstatus: data?.data?.fstatus } } as any;
     }
   });
@@ -166,7 +166,7 @@ export function waitUnfollow(page: Page, timeoutMs: number): Waiter<{ fstatus?: 
     map: async (resp) => {
       const meta = safeMeta(resp as any);
       let data: any; try { data = await (resp as any).json?.(); } catch { data = undefined; }
-      const ok = (data?.code === 0 || data?.success === true) && (data?.data?.fstatus === 'none');
+      const ok = (data?.code === 0 || data?.success === true) && (data?.data?.fstatus === "none");
       return { ...meta, ok, data: { fstatus: data?.data?.fstatus } } as any;
     }
   });

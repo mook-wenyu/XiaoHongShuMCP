@@ -37,7 +37,6 @@ function applyFilters(base: Locator, hints: any): Locator {
 }
 
 function compileLocator(page: Page, hints: any, scope?: Locator): Locator {
-	const container = scope ?? (hints.within && page ? undefined : undefined);
 	const prefer: string[] = Array.isArray(hints.prefer) && hints.prefer?.length ? hints.prefer : ["role","label","placeholder","testId","text","selector"];
 	let base: Locator | undefined;
 	for (const key of prefer) {

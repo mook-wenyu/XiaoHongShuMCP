@@ -99,7 +99,7 @@ export async function progressiveWait(page: Page): Promise<void> {
       { durationMs: Date.now() - startTime },
       "网络空闲等待完成"
     );
-  } catch (err) {
+  } catch {
     log.debug(
       { durationMs: Date.now() - startTime },
       "网络空闲等待超时（继续执行）"
@@ -121,7 +121,7 @@ export async function progressiveWait(page: Page): Promise<void> {
       { durationMs: Date.now() - startTime },
       "内容长度等待完成"
     );
-  } catch (err) {
+  } catch {
     log.debug(
       { durationMs: Date.now() - startTime },
       "内容长度等待超时（继续执行）"
