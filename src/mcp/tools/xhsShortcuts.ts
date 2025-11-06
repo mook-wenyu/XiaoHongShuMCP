@@ -260,7 +260,7 @@ export function registerXhsShortcutsTools(
 
 				// 1) 判定当前页面，若不在【首页/发现/搜索】则先导航到发现页
 				const { detectPageType, ensureDiscoverPage, findAndOpenNoteByKeywords, PageType } = await import(
-					"../../domain/xhs/navigation.js",
+					"../../domain/xhs/navigation.js"
 				);
 				let pType = await detectPageType(page);
 				const allowed = [PageType.ExploreHome, PageType.Discover, PageType.Search];
