@@ -266,3 +266,91 @@ export function waitComment(
 		},
 	});
 }
+
+// ========== 笔记详情内容提取 ==========
+export interface NoteDetailData {
+	note_id: string;
+	title: string;
+	desc: string; // 正文内容
+	tags: Array<{
+		id: string;
+		name: string;
+		type: string;
+	}>;
+	images: Array<{
+		url: string;
+		width?: number;
+		height?: number;
+	}>;
+	author: {
+		user_id: string;
+		nickname: string;
+		avatar?: string;
+	};
+	interact_info: {
+		liked_count: number;
+		collected_count: number;
+		comment_count: number;
+		share_count: number;
+	};
+}
+
+/**
+ * 等待笔记详情 API 响应并提取完整内容
+ * 监听端点：/api/sns/web/v1/feed
+ * 用途：提取笔记标题、正文、标签、互动数据等完整内容
+ */
+export function waitNoteDetail(page: Page, timeoutMs: number): Waiter<NoteDetailData> {
+	return waitApi(page, (r) => r.url().includes("/api/sns/web/v1/feed"), {
+		timeoutMs,
+		okOnly: true,
+		map: async (resp) => {
+			const meta = safeMeta(resp as any);
+			let data: any;
+			try {
+				data = await (resp as any).json?.();
+			} catch {
+				data = undefined;
+			}
+
+			const ok = data?.code === 0 || data?.success === true;
+			if (!ok) return { ...meta, ok: false } as any;
+
+			const noteData = data?.data?.items?.[0]?.note_card;
+			if (!noteData) return { ...meta, ok: false } as any;
+
+			const detail: NoteDetailData = {
+				note_id: noteData.note_id || "",
+				title: noteData.title || noteData.display_title || "",
+				desc: noteData.desc || "",
+				tags: Array.isArray(noteData.tag_list)
+					? noteData.tag_list.map((tag: any) => ({
+							id: tag.id || "",
+							name: tag.name || "",
+							type: tag.type || "",
+						}))
+					: [],
+				images: Array.isArray(noteData.image_list)
+					? noteData.image_list.map((img: any) => ({
+							url: img.url || img.url_default || "",
+							width: img.width,
+							height: img.height,
+						}))
+					: [],
+				author: {
+					user_id: noteData.user?.user_id || noteData.user?.userid || "",
+					nickname: noteData.user?.nickname || "",
+					avatar: noteData.user?.avatar || noteData.user?.image || "",
+				},
+				interact_info: {
+					liked_count: noteData.interact_info?.liked_count || 0,
+					collected_count: noteData.interact_info?.collected_count || 0,
+					comment_count: noteData.interact_info?.comment_count || 0,
+					share_count: noteData.interact_info?.share_count || 0,
+				},
+			};
+
+			return { ...meta, ok: true, data: detail } as any;
+		},
+	});
+}

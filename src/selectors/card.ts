@@ -4,7 +4,15 @@ import type { Page } from "playwright";
 export type CardInfo = {
 	index: number;
 	noteId?: string;
+	href?: string;
+	/** 用于匹配的最终标题：优先可见标题，其次封面图片 alt，最后用整卡文本截断 */
 	title: string;
+	/** 原始可见标题（未兜底，仅诊断/测试使用） */
+	titleRaw?: string;
+	/** 封面图片的 alt 文本（若存在，仅诊断/测试使用） */
+	coverAlt?: string;
+	/** 标题来源：text | alt | fallback（仅诊断/测试使用） */
+	titleSource?: "text" | "alt" | "fallback";
 	text: string;
 	y: number;
 	h?: number;
@@ -32,7 +40,11 @@ export async function collectVisibleCards(page: Page, containerSel: string): Pro
 			const out: Array<{
 				index: number;
 				noteId?: string;
+				href?: string;
 				title: string;
+				titleRaw?: string;
+				coverAlt?: string;
+				titleSource?: "text" | "alt" | "fallback";
 				text: string;
 				y: number;
 				h?: number;
@@ -49,10 +61,52 @@ export async function collectVisibleCards(page: Page, containerSel: string): Pro
 				if (!visible) return;
 				const container = el as HTMLElement;
 				const full = (container.textContent || "").trim().replace(/\s+/g, " ");
-				let title = "";
+				// 标题提取：先取可见标题，再取封面图片的 alt 兜底，最后退回整卡文本截断
+				let titleText = "";
 				const titleEl = container.querySelector("a.title, .footer .title, .title, h1, h2");
-				if (titleEl) title = (titleEl.textContent || "").trim();
-				if (!title) title = full.slice(0, 120);
+				if (titleEl) titleText = (titleEl.textContent || "").trim();
+
+				// 提取封面图片 alt（多层级优先级）
+				let coverAlt = "";
+				const findAlt = (...sels: string[]): string => {
+					for (const s of sels) {
+						const img = container.querySelector(s) as HTMLImageElement | null;
+						const altAttr =
+							img && typeof (img as any).getAttribute === "function"
+								? (img as any).getAttribute("alt")
+								: "";
+						const alt = (altAttr || "").trim();
+						if (alt) return alt;
+					}
+					return "";
+				};
+				coverAlt =
+					findAlt("a.cover img[alt]") ||
+					findAlt(".cover img[alt]") ||
+					// 优先在指向详情的链接内部寻找图片 alt
+					findAlt(
+						"a[href*='/explore/'] img[alt]",
+						"a[href*='/search_result/'] img[alt]",
+						"a[href*='/discovery/item/'] img[alt]",
+						"a[href*='/question/'] img[alt]",
+						"a[href*='/p/'] img[alt]",
+						"a[href*='/zvideo/'] img[alt]",
+					) ||
+					// 最后在容器内任意 img 上兜底
+					findAlt("img[alt]");
+
+				let titleSource: "text" | "alt" | "fallback" = "fallback";
+				let title = titleText;
+				if (title && title.length > 0) {
+					titleSource = "text";
+				} else if (coverAlt && coverAlt.length > 0) {
+					title = coverAlt;
+					titleSource = "alt";
+				} else {
+					title = full.slice(0, 120);
+					titleSource = "fallback";
+				}
+
 				let noteId: string | undefined;
 				const hrefEl = container.querySelector(
 					"a[href*='/search_result/'], a[href*='/discovery/item/'], a[href*='/explore/'], a[href*='/question/'], a[href*='/p/'], a[href*='/zvideo/']",
@@ -63,7 +117,11 @@ export async function collectVisibleCards(page: Page, containerSel: string): Pro
 				out.push({
 					index,
 					noteId,
+					href: href || undefined,
 					title,
+					titleRaw: titleText || undefined,
+					coverAlt: coverAlt || undefined,
+					titleSource,
 					text: full,
 					y: rect.top,
 					h: rect.height,

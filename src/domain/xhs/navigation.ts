@@ -27,6 +27,8 @@ import { resolveContainerSelector, collectVisibleCards } from "../../selectors/c
 import { cleanTextFor } from "../../lib/text-clean.js";
 import { screenshotScrollStep } from "./scroll-debug.js";
 import { computeRetention } from "./scroll-metrics.js";
+import { isDetailUrl } from "./detail-url.js";
+import { resolveClickableInCard } from "./click.js";
 
 export enum PageType {
 	ExploreHome = "ExploreHome",
@@ -195,6 +197,8 @@ export async function findAndOpenNoteByKeywords(
 	ok: boolean;
 	matched?: string;
 	modalOpen?: boolean;
+	urlOpened?: boolean;
+	openedPath?: "modal" | "url";
 	feedVerified?: boolean;
 	feedItems?: number;
 	feedType?: string;
@@ -268,7 +272,6 @@ export async function findAndOpenNoteByKeywords(
 	const pageType = await detectPageType(page);
 	// 使用集中映射的容器选择器（优先 selectors/*.json 的逻辑 ID）
 	const containerSel = await resolveContainerSelector(page as any);
-	const anchorAllSelFallback = "a[href]";
 
 	// 供全流程累积的 feed 侧证指标
 	let feedVerified: boolean | undefined;
@@ -289,6 +292,28 @@ export async function findAndOpenNoteByKeywords(
 		}
 	};
 
+	// 等待“打开成功”结果：模态或整页详情 URL（/explore/**）
+	async function waitOpenOutcome(
+		timeoutMs?: number,
+	): Promise<{ opened: boolean; openedPath?: "modal" | "url" }> {
+		const to = Math.max(80, Number(timeoutMs || 1200));
+		// 快速模态探测
+		for (let i = 0; i < 3; i++) {
+			if (await isModalOpen()) return { opened: true, openedPath: "modal" };
+			try {
+				await page.waitForTimeout(50);
+			} catch {}
+		}
+		// 等待 URL 进入详情
+		try {
+			await page.waitForURL((u: any) => isDetailUrl(String(u)), { timeout: to });
+			return { opened: true, openedPath: "url" };
+		} catch {}
+		// 兜底再查一次模态
+		if (await isModalOpen()) return { opened: true, openedPath: "modal" };
+		return { opened: false };
+	}
+
 	// 搜索页：若允许，先用 API 返回的 note id 精确定位
 	if (pageType === PageType.Search && opts.preferApiAnchors) {
 		const r = await waitSearchNotesLocal();
@@ -304,42 +329,58 @@ export async function findAndOpenNoteByKeywords(
 							`a[href*="/discovery/item/${id}"], a[href*="/search_result/${id}"], a[href*="/explore/${id}"]`,
 						);
 						const card = page.locator(containerSel).filter({ has: idAnchor }).first();
-						const clickable = card
-							.locator(
-								"a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible",
-							)
-							.first();
-						if ((await clickable.count()) > 0) {
-							await clickHuman(page as any, clickable);
-							clicked = true;
+						let clickable = await resolveClickableInCard(page as any, card, { id });
+						if ((await clickable.count()) === 0) {
+							clickable = card
+								.locator(
+									"a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible",
+								)
+								.first();
 						}
 					} catch {}
 				}
 				// 2) 退化：以标题文本匹配（同样限制为容器内封面或标题）
 				if (!clicked && item.title) {
 					try {
-						const titleAnchor = page.locator(anchorAllSelFallback).filter({ hasText: item.title });
-						const card = page.locator(containerSel).filter({ has: titleAnchor }).first();
-						const clickable = card
-							.locator(
-								"a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible",
-							)
-							.first();
-						if ((await clickable.count()) > 0) {
-							await clickHuman(page as any, clickable);
-							clicked = true;
+						// 使用归一化包含匹配：在容器内查找文本清洗后包含 API 标题清洗后的项
+						const targetIdx = await page
+							.locator(containerSel)
+							.evaluateAll((els: any[], rawTitle: any) => {
+								const norm = (s: any) =>
+									String(s || "")
+										.normalize("NFKC")
+										.toLowerCase()
+										.replace(/[\p{P}\p{S}]+/gu, "")
+										.replace(/\s+/g, "");
+								const t = norm(String(rawTitle || ""));
+								for (let i = 0; i < els.length; i++) {
+									const el = els[i];
+									const titleEl = el.querySelector("a.title, .footer .title, .title, h1, h2");
+									const full = (titleEl ? titleEl.textContent : el.textContent) || "";
+									const f = norm(full);
+									if (f && t && f.includes(t)) return i;
+								}
+								return -1;
+							}, item.title);
+						if (targetIdx >= 0) {
+							const card = page.locator(containerSel).nth(targetIdx);
+							let clickable = await resolveClickableInCard(page as any, card);
+							if ((await clickable.count()) > 0) {
+								await clickHuman(page as any, clickable);
+								clicked = true;
+							}
 						}
 					} catch {}
 				}
 				if (clicked) {
-					try {
-						await page.waitForTimeout(200);
-					} catch {}
-					if (await isModalOpen()) {
+					const openRes = await waitOpenOutcome(Math.max(200, 1200));
+					if (openRes.opened) {
 						return {
 							ok: true,
 							matched: item.title || item.id,
-							modalOpen: true,
+							modalOpen: openRes.openedPath === "modal",
+							urlOpened: openRes.openedPath === "url",
+							openedPath: openRes.openedPath,
 							feedVerified,
 							feedItems,
 							feedType,
@@ -355,10 +396,24 @@ export async function findAndOpenNoteByKeywords(
 	const visited = new Set<string>();
 	const collectVisibleAnchors = async () => await collectVisibleCards(page as any, containerSel);
 
+	// 进入滚动循环前，尝试等待首屏卡片注水，降低 round0 空批概率
+	try {
+		const to = Math.max(200, Number(process.env.XHS_OPEN_WAIT_MS || 1500));
+		await page.waitForSelector(containerSel, { timeout: to });
+	} catch {}
+
 	let noProgressRounds = 0;
 	for (let round = 0; round < maxScrolls; round++) {
 		const visitedBefore = visited.size;
-		const anchors = await collectVisibleAnchors();
+		let anchors = await collectVisibleAnchors();
+		// round0 若仍为空，额外再等一小段时间并重试一次
+		if (round === 0 && anchors.length === 0) {
+			try {
+				const to = Math.max(200, Number(process.env.XHS_OPEN_WAIT_MS || 1500));
+				await page.waitForSelector(containerSel, { timeout: to });
+			} catch {}
+			anchors = await collectVisibleAnchors();
+		}
 		try {
 			await appendNavProgress({
 				url: page.url(),
@@ -370,10 +425,16 @@ export async function findAndOpenNoteByKeywords(
 			});
 		} catch {}
 		for (const a of anchors) {
-			const key = a.noteId ? `id:${a.noteId}` : `idx:${a.index}`;
+			const titleKey = (await normAsync(a.title || "")).slice(0, 40);
+			const yBucket = Math.max(0, Math.round(((a as any).y || 0) / 50));
+			const key = a.noteId
+				? `id:${a.noteId}`
+				: (a as any).href
+					? `href:${(a as any).href}`
+					: `t:${titleKey}|y:${yBucket}`;
 			if (visited.has(key)) continue;
 			visited.add(key);
-			const tn = await normAsync(a.text);
+			const tn = titleKey;
 			if (!tn) continue;
 			const tnNoSpace = tn.replace(/\s+/g, "");
 			if (
@@ -426,26 +487,14 @@ export async function findAndOpenNoteByKeywords(
 				try {
 					let loc;
 					if (a.noteId) {
-						// 仅允许：封面或标题（优先标题，其次封面）。若提供 noteId，则在容器内优先匹配封面中包含该 id 的可见锚点
+						// 仅允许：封面或标题（封面优先）。若提供 noteId，resolveClickableInCard 将优先匹配包含该 id 的封面锚点
 						const id = a.noteId;
 						const card = page.locator(containerSel).nth(a.index);
-						loc = card
-							.locator(
-								`a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible,
-							 a[class*="cover" i][href*="/search_result/${id}"]:visible,
-							 a[class*="cover" i][href*="/discovery/item/${id}"]:visible,
-							 a[class*="cover" i][href*="/explore/${id}"]:visible`,
-							)
-							.first();
+						loc = await resolveClickableInCard(page as any, card, { id });
 					} else {
-						// 退化：卡片容器内的可点击封面或标题（仅此两类）
-						loc = page
-							.locator(containerSel)
-							.nth(a.index)
-							.locator(
-								"a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible",
-							)
-							.first();
+						// 退化：统一通过解析器选择（封面优先，标题兜底）
+						const card = page.locator(containerSel).nth(a.index);
+						loc = await resolveClickableInCard(page as any, card);
 					}
 					const shouldWaitFeed =
 						String(process.env.XHS_FEED_WAIT_ON_CLICK ?? "true").toLowerCase() === "true" &&
@@ -496,12 +545,15 @@ export async function findAndOpenNoteByKeywords(
 							feedTtfbMs,
 						};
 					}
-					if (await isModalOpen()) {
+					const openRes = await waitOpenOutcome(Math.max(150, 1200));
+					if (openRes.opened) {
 						const matchedKw = keywords[hitIdx];
 						return {
 							ok: true,
 							matched: matchedKw || a.title,
-							modalOpen: true,
+							modalOpen: openRes.openedPath === "modal",
+							urlOpened: openRes.openedPath === "url",
+							openedPath: openRes.openedPath,
 							feedVerified,
 							feedItems,
 							feedType,
@@ -527,12 +579,14 @@ export async function findAndOpenNoteByKeywords(
 						)
 						.first();
 					await clickHuman(page as any, loc);
-					await page.waitForTimeout(150);
-					if (await isModalOpen())
+					const openRes = await waitOpenOutcome(Math.max(150, 1200));
+					if (openRes.opened)
 						return {
 							ok: true,
 							matched: "degraded:first-card",
-							modalOpen: true,
+							modalOpen: openRes.openedPath === "modal",
+							urlOpened: openRes.openedPath === "url",
+							openedPath: openRes.openedPath,
 							feedVerified,
 							feedItems,
 							feedType,
@@ -618,10 +672,16 @@ export async function findAndOpenNoteByKeywords(
 			const afterCards = await collectVisibleAnchors();
 			// 二次匹配：滚动后立刻对新可视批次再做一次匹配，避免 maxScrolls 较小时出现“滚动了但未复扫”的体验问题
 			for (const a of afterCards) {
-				const key = a.noteId ? `id:${a.noteId}` : `idx:${a.index}`;
+				const titleKey = (await normAsync(a.title || "")).slice(0, 40);
+				const yBucket = Math.max(0, Math.round(((a as any).y || 0) / 50));
+				const key = a.noteId
+					? `id:${a.noteId}`
+					: (a as any).href
+						? `href:${(a as any).href}`
+						: `t:${titleKey}|y:${yBucket}`;
 				if (visited.has(key)) continue;
 				visited.add(key);
-				const tn = await normAsync(a.text);
+				const tn = titleKey;
 				if (!tn) continue;
 				const tnNoSpace = tn.replace(/\s+/g, "");
 				let hitIdx = matchAny(tn, tnNoSpace);
@@ -669,14 +729,9 @@ export async function findAndOpenNoteByKeywords(
 								)
 								.first();
 						} else {
-							// 退化：卡片容器内的可点击封面或标题（仅此两类）
-							loc = page
-								.locator(containerSel)
-								.nth(a.index)
-								.locator(
-									"a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible",
-								)
-								.first();
+							// 退化：统一通过解析器选择（封面优先，标题兜底）
+							const card = page.locator(containerSel).nth(a.index);
+							loc = await resolveClickableInCard(page as any, card);
 						}
 						const shouldWaitFeed =
 							String(process.env.XHS_FEED_WAIT_ON_CLICK ?? "true").toLowerCase() === "true" &&
@@ -727,12 +782,15 @@ export async function findAndOpenNoteByKeywords(
 								feedTtfbMs,
 							};
 						}
-						if (await isModalOpen()) {
+						const openRes = await waitOpenOutcome(Math.max(150, 1200));
+						if (openRes.opened) {
 							const matchedKw = keywords[hitIdx];
 							return {
 								ok: true,
 								matched: matchedKw || a.title,
-								modalOpen: true,
+								modalOpen: openRes.openedPath === "modal",
+								urlOpened: openRes.openedPath === "url",
+								openedPath: openRes.openedPath,
 								feedVerified,
 								feedItems,
 								feedType,

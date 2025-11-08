@@ -416,7 +416,6 @@ export function registerPageToolsWithPrefix(
 			const { dirId, target, pageIndex, workspaceId, human } = input as any;
 			const enableHuman =
 				human !== false && !(human && typeof human === "object" && human.enabled === false);
-			const humanObj = typeof human === "object" ? human : undefined;
 			const selectorId =
 				(target && (target.id || target.text || target.role || target.selector)) || "anonymous";
 			try {
@@ -441,25 +440,25 @@ export function registerPageToolsWithPrefix(
 	server.registerTool(
 		name("screenshot"),
 		{
-			description: "页面截图（返回图片与文件路径）",
+			description: "页面截图（默认仅返回文件路径，可选返回图片数据以降低管道压力）",
 			inputSchema: {
 				dirId: DirId,
 				pageIndex: PageIndex,
 				workspaceId: WorkspaceId,
 				fullPage: z.boolean().optional(),
+				returnImage: z.boolean().optional(),
 			},
 		},
 		async (input: any) => {
 			try {
-				const { dirId, pageIndex, workspaceId, fullPage } = input as any;
+				const { dirId, pageIndex, workspaceId, fullPage, returnImage } = input as any;
 				const r = await manager.screenshot(dirId, pageIndex, fullPage, { workspaceId });
-				const base64 = r.buffer.toString("base64");
-				return {
-					content: [
-						{ type: "text", text: JSON.stringify(ok({ path: r.path })) },
-						{ type: "image", data: base64, mimeType: "image/png" },
-					],
-				};
+				const payload: any[] = [{ type: "text", text: JSON.stringify(ok({ path: r.path })) }];
+				if (returnImage === true) {
+					const base64 = r.buffer.toString("base64");
+					payload.push({ type: "image", data: base64, mimeType: "image/png" } as any);
+				}
+				return { content: payload };
 			} catch (e: any) {
 				return {
 					content: [

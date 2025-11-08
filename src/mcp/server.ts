@@ -19,7 +19,6 @@ async function main() {
 	const configProvider = ConfigProvider.load();
 	const config = configProvider.getConfig();
 	const container = new ServiceContainer(config, { loggerSilent: true });
-	const logger = container.createLogger({ module: "mcp" });
 
 	const roxyBrowserManager = container.createRoxyBrowserManager();
 
@@ -47,7 +46,7 @@ async function main() {
 
 	server.registerTool(
 		"server_capabilities",
-		{ description: "返回适配器与版本信息", inputSchema: {} },
+		{ description: "返回适配器与版本信息（附带 roxy 健康状态）", inputSchema: {} },
 		async () => {
 			const caps: any = {
 				adapter: "roxyBrowser",
@@ -55,6 +54,13 @@ async function main() {
 				integration: "Playwright CDP",
 				adminTools: true,
 			};
+			// 附带 roxy 健康探测（不抛错，仅报告）
+			try {
+				const health = await container.createRoxyClient().health();
+				caps.roxyHealth = typeof health === "string" ? health : (health?.code === 0 ? "ok" : health);
+			} catch (e: any) {
+				caps.roxyHealth = `error: ${String(e?.message || e)}`;
+			}
 			return { content: [{ type: "text", text: JSON.stringify(caps) }] };
 		},
 	);

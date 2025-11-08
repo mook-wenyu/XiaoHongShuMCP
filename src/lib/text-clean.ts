@@ -34,6 +34,9 @@ function applyRule(
 ): string {
 	let s = String(input || "");
 	try {
+		s = s.normalize("NFKC");
+	} catch {}
+	try {
 		if (rule?.removeRegex) {
 			const re = new RegExp(rule.removeRegex, "gu");
 			s = s.replace(re, "");

@@ -7,8 +7,8 @@
 ## 能力总览
 
 - 多账号隔离：`dirId` 表示账号窗口；1 个 `dirId` = 1 个持久化 BrowserContext；同 Context 可创建多 Page。
-- 原子化工具（唯一标准命名）：`browser.*`、`page.*`、`xhs.*`、`resources.*`。
-- Roxy 管理工具（保留 roxy 命名空间，仅用于管理）：`roxy.*`（工作区/窗口管理）默认注册，无需开关。
+- 原子化工具（前缀+下划线命名）：`browser_*`、`page_*`、`xhs_*`、`resources_*`。
+- Roxy 管理工具（仅用于管理）：`roxy_*`（工作区/窗口管理）默认注册，无需开关。
 - 选择器韧性与拟人化：语义优先选择器（role/name/label/testId/text）→ CSS 兜底；人类化鼠标与输入（可按参数关闭）。
 - 工件真源：截图、快照与选择器健康日志统一落盘 `artifacts/<dirId>`，支持 MCP 资源读取。
 
@@ -38,10 +38,10 @@
 - **日志**: `LOG_LEVEL`, `LOG_PRETTY`, `MCP_LOG_STDERR`
 - **拟人化**: `HUMAN_PROFILE`, `HUMAN_TRACE_LOG`
 
-**废弃变量**：
+**说明**：
 
-- `ENABLE_ROXY_ADMIN_TOOLS`（自 0.2.x 起 `roxy.*` 管理工具默认注册，无需开关）
-- `POLICY_*`（已由 `SELECTOR_BREAKER_*` 替代）
+- `ENABLE_ROXY_ADMIN_TOOLS`（自 0.2.x 起 `roxy_*` 管理工具默认注册，无需开关）
+- 断路器相关参数以 `SELECTOR_BREAKER_*` 为主；`POLICY_*` 作为全局策略限流/熔断兼容项仍保留（见 `.env.example` 注释），两者用途不同。
 
 ---
 
@@ -120,40 +120,43 @@ npm run mcp
 
 ### 页面信息获取
 
-- `page_screenshot` - 截图（返回文本 JSON + image/png 内容项）
+- `page_screenshot` - 截图（默认仅返回 `path` 文本；如需图片数据，传 `returnImage=true` 附带 `image/png`）
 - `page_snapshot` - 可访问性快照（a11y 树 + url/title + 统计信息）
 
 ### 小红书专用
 
 - `xhs_session_check` - 检查会话状态（基于 cookies 和首页加载）
 - `xhs_navigate_home` - 导航到小红书首页并验证
+- `xhs_note_extract_content` - 提取笔记完整内容（标题/正文/标签/互动数据）
 
 ### 小红书快捷工具（语义化）
 
-- `xhs.close.modal`（兼容别名 `xhs_close_modal`）- 关闭当前笔记详情模态（Esc→关闭按钮→遮罩）
-- `xhs.navigate.discover` - 导航到“发现”推荐流（含 homefeed 接口软校验）
-- `xhs.search.keyword` - 站内搜索关键词（拟人化输入 + 接口软校验）
-- `xhs.note.like` / `xhs.note.unlike` - 点赞 / 取消点赞当前笔记（需模态已打开）
-- `xhs.note.collect` / `xhs.note.uncollect` - 收藏 / 取消收藏当前笔记（需模态已打开）
-- `xhs.user.follow` / `xhs.user.unfollow` - 关注 / 取关当前笔记作者（需模态已打开）
-- `xhs.comment.post` - 发表评论（拟人化输入 + 接口软校验，需模态已打开）
+- `xhs_close_modal` - 关闭当前笔记详情模态（Esc→关闭按钮→遮罩）
+- `xhs_navigate_discover` - 导航到“发现”推荐流（含 homefeed 接口软校验）
+- `xhs_search_keyword` - 站内搜索关键词（拟人化输入 + 接口软校验）
+- `xhs_keyword_browse` - 关键词浏览（轻量滚动，提升可见文本覆盖）
+- `xhs_select_note` - 在当前页（首页/发现/搜索）按关键词匹配卡片并点击，优先点击封面，标题兜底；成功判定为“模态优先，其次 URL 进入详情”，返回 `openedPath="modal"|"url"`
+- `xhs_note_like` / `xhs_note_unlike` - 点赞 / 取消点赞当前笔记（需模态已打开）
+- `xhs_note_collect` / `xhs_note_uncollect` - 收藏 / 取消收藏当前笔记（需模态已打开）
+- `xhs_user_follow` / `xhs_user_unfollow` - 关注 / 取关当前笔记作者（需模态已打开）
+- `xhs_comment_post` - 发表评论（拟人化输入 + 接口软校验，需模态已打开）
 
 示例（命令行脚本）：
 
 ```
 # 导航到发现页（stdio MCP）
-npm run mcp -- --tool xhs.navigate.discover --dirId user
+npm run mcp -- --tool xhs_navigate_discover --dirId user
 
 # 站内搜索关键词
 npm run mcp:call:search -- --dirId=user --keyword=美食
 
 # 关闭笔记模态（若已打开）
-npm run mcp -- --tool xhs.close.modal --dirId user
+npm run mcp -- --tool xhs_close_modal --dirId user
 
 # 点赞/取关/评论（需笔记详情模态已打开）
-npm run mcp -- --tool xhs.note.like --dirId user
-npm run mcp -- --tool xhs.user.unfollow --dirId user
-npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
+npm run mcp -- --tool xhs_note_like --dirId user
+npm run mcp -- --tool xhs_user_unfollow --dirId user
+npm run mcp -- --tool xhs_comment_post --dirId user --text="写得不错！"
 ```
 
 ### 资源管理
@@ -163,9 +166,9 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 
 ### 高权限管理工具（默认已注册）
 
-- `roxy.workspaces.list` - 获取工作区列表
-- `roxy.windows.list` - 获取浏览器窗口列表
-- `roxy.window.create` - 创建新浏览器窗口
+- `roxy_workspaces_list` - 获取工作区列表
+- `roxy_windows_list` - 获取浏览器窗口列表
+- `roxy_window_create` - 创建新浏览器窗口
 
 ### 诊断与监控
 
@@ -185,7 +188,7 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
   - 快速关闭：`{"dirId":"user","target":{"text":"登录"},"human":false}`
   - 细化参数：`{"dirId":"user","target":{"text":"登录"},"human":{"enabled":true,"steps":24,"randomness":0.2}}`
 - 输入（拟人化）：`page_type`，`{"dirId":"user","target":{"role":"textbox","name":"标题"},"text":"今天好开心","human":{"enabled":true,"wpm":180}}`
-- 截图：`page_screenshot` → 返回文本 JSON + `image/png`
+- 截图：`page_screenshot`（默认仅返回路径；如需图片数据，传 `returnImage=true`）
 - 快照：`page_snapshot` → 返回 `url/title/a11y` 摘要 + 统计
 
 ---
@@ -196,7 +199,7 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 - 使用 Playwright 官方的 `chromium.connectOverCDP()` 方法连接浏览器
 - 每个 `dirId` 对应一个持久化 BrowserContext（由 RoxyBrowser 管理）
 - RoxyBrowserManager 负责连接管理、Context 缓存和生命周期控制
-- 能力探针：调用 `server.capabilities` 可查看 `{ adapter:"roxyBrowser", version, integration, adminTools }`
+- 能力探针：调用 `server_capabilities` 可查看 `{ adapter:"roxyBrowser", version, integration, adminTools }`
 
 ---
 
@@ -230,8 +233,8 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 
 ## 变更要点（0.2.x）
 
-- 仅保留官方命名 `browser.*` / `page.*` 作为唯一标准；移除 roxy.\* 浏览别名以降低心智负担。
-- 高权限管理类 `roxy.*` 默认注册（无需环境变量开关）。
+- 仅保留前缀+下划线命名 `browser_*` / `page_*` 作为唯一标准；移除 roxy_* 浏览别名以降低心智负担。
+- 高权限管理类 `roxy_*` 默认注册（无需环境变量开关）。
 - 架构升级：移除适配层抽象，直接使用 Playwright CDP 连接 RoxyBrowser。
 - 页面快照节点上限受 `SNAPSHOT_MAX_NODES` 保护。
 
@@ -293,13 +296,13 @@ npm run mcp -- --tool xhs.comment.post --dirId user --text="写得不错！"
 
 ```
 // 1) 打开或聚焦目标页
-tools/call: page.click { dirId, target: {...}, human: true }
+tools/call: page_click { dirId, target: {...}, human: true }
 
 // 2) 等待主要内容可见（由外部工作流自行 wait/sleep）
 sleep(random(3200, 6000)) // 图文；视频建议 random(5000, 10000) 并先触发播放
 
 // 3) 可选小幅滚动（提升自然度）
-tools/call: page.scroll { dirId, human: { segments: 4, perSegmentMs: 120 } }
+tools/call: page_scroll { dirId, human: { segments: 4, perSegmentMs: 120 } }
 
 // 4) 返回或继续下一步
 ```
@@ -319,7 +322,7 @@ tools/call: page.scroll { dirId, human: { segments: 4, perSegmentMs: 120 } }
 - 等待与确认
   - 首选“可见性/可交互”准则：点击前等待关键内容可见（例如标题、正文、播放器按钮）。
   - 轻等待与抖动：使用外部 `sleep(random(300,600)ms)` 等短暂停顿衔接原子动作，避免“连发”。
-  - 证据确认：在关键节点调用 `page.snapshot` 抽取 `url/title/a11y`，作为“已到达/已可见”的低成本证据。
+- 证据确认：在关键节点调用 `page_snapshot` 抽取 `url/title/a11y`，作为“已到达/已可见”的低成本证据。
 
 - 重试与回退
   - 选择器容错：优先语义定位（role/name/label/testId/text），必要时回退 CSS；失败可改用文本/正则匹配变体。
@@ -338,9 +341,9 @@ tools/call: page.scroll { dirId, human: { segments: 4, perSegmentMs: 120 } }
   - 视频：随机停留 5–10s（≥5s）；若未自动播放先触发播放，再计时。
 
 - 证据与归档
-  - 截图：`page.screenshot`（文本 + image/png）；命名规则可带上步骤号与毫秒时间戳。
-  - 资源：`resources.listArtifacts`/`resources.readArtifact` 直接读取 `artifacts/<dirId>` 下的文件。
-  - 快照：关键操作后调用 `page.snapshot` 留存 a11y 树摘要与统计（clickableCount 等）。
+- 截图：`page_screenshot`（文本 + image/png）；命名规则可带上步骤号与毫秒时间戳。
+- 资源：`resources_listArtifacts`/`resources_readArtifact` 直接读取 `artifacts/<dirId>` 下的文件。
+- 快照：关键操作后调用 `page_snapshot` 留存 a11y 树摘要与统计（clickableCount 等）。
 
 - 错误分类与处理
   - 定位错误（selector/locator）→ 先回退轻滚动/切换候选 → 再次定位。
@@ -348,13 +351,13 @@ tools/call: page.scroll { dirId, human: { segments: 4, perSegmentMs: 120 } }
   - 导航错误（navigate）→ 回退至上一步 URL，再行导航。
 
 - 诊断与能力自检
-  - 启动前/运行中可调用 `server.capabilities` 检查 `{ adapter, roxyBridge, adminTools }`。
+- 启动前/运行中可调用 `server_capabilities` 检查 `{ adapter, roxyBridge, adminTools }`。
   - 可开启 `HUMAN_TRACE_LOG=true` 将关键拟人化事件落盘到 `artifacts/<dirId>/human-trace.ndjson`（仅在需要时）。
 
 - 参考调用片段（MCP 客户端）
-  - 进入详情：
-    - tools/call `page.click` → 外部 `sleep(random(3200,6000))`（图文）
+- 进入详情：
+  - tools/call `page_click` → 外部 `sleep(random(3200,6000))`（图文）
   - 视频播放：
-    - tools/call `page.click`（播放按钮）→ 外部 `sleep(random(5000,10000))`
+    - tools/call `page_click`（播放按钮）→ 外部 `sleep(random(5000,10000))`
   - 证据：
-    - tools/call `page.screenshot` → tools/call `page.snapshot`
+    - tools/call `page_screenshot` → tools/call `page_snapshot`

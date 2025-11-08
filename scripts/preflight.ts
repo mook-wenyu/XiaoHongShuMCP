@@ -1,3 +1,4 @@
+import "dotenv/config";
 /**
  * Preflight 自检（环境变量与 Playwright 模块检测）
  * - 校验关键环境变量与 Config 解析

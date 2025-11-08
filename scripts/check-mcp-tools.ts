@@ -50,6 +50,8 @@ async function main() {
 		// XHS 基线
 		"xhs_session_check",
 		"xhs_navigate_home",
+		// 内容获取：提取笔记完整内容（与官方命名保持一致）
+		"xhs_note_extract_content",
 		// XHS 扩展（快捷语义动作）
 		"xhs_close_modal",
 		"xhs_navigate_discover",

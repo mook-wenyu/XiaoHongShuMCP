@@ -12,18 +12,12 @@ import * as Pages from "../../services/pages.js";
 import { ok } from "../utils/result.js";
 import { err } from "../utils/errors.js";
 import { XHS_CONF } from "../../config/xhs.js";
-import { resolveLocatorResilient } from "../../selectors/index.js";
-import { XhsSelectors } from "../../selectors/xhs.js";
-import { clickHuman, hoverHuman, scrollHuman } from "../../humanization/actions.js";
+import { scrollHuman } from "../../humanization/actions.js";
 
 const DirId = z.string().min(1);
 const WorkspaceId = z.string().optional();
 const Keyword = z.string().min(1);
 const Keywords = z.array(z.string()).nonempty();
-
-function escapeRegExp(s: string): string {
-	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 async function screenshotOnError(page: any, dirId: string, tag: string) {
 	try {
@@ -144,6 +138,14 @@ export function registerXhsShortcutsTools(
 				page = await Pages.ensurePage(context, {});
 				const { searchKeyword } = await import("../../domain/xhs/search.js");
 				const r = await searchKeyword(page, String(keyword));
+				// 跳转后短暂等待首屏卡片注水，避免空批
+				try {
+					if (/\/search_result\?keyword=/.test(page.url())) {
+						const sel = "section.note-item, .note-item, .List-item, article, .Card";
+						const to = Math.max(200, Number(process.env.XHS_OPEN_WAIT_MS || 1500));
+						await page.waitForSelector(sel, { timeout: to });
+					}
+				} catch {}
 				return { content: [{ type: "text", text: JSON.stringify(ok(r)) }] };
 			} catch (e: any) {
 				const { dirId } = input as any;
@@ -184,6 +186,14 @@ export function registerXhsShortcutsTools(
 					.join(" ");
 				const t0 = Date.now();
 				const r = await searchKeyword(page, key);
+				// 搜索页同样等待首屏卡片注水
+				try {
+					if (/\/search_result\?keyword=/.test(page.url())) {
+						const sel = "section.note-item, .note-item, .List-item, article, .Card";
+						const to = Math.max(200, Number(process.env.XHS_OPEN_WAIT_MS || 1500));
+						await page.waitForSelector(sel, { timeout: to });
+					}
+				} catch {}
 				const searchTimeMs = Date.now() - t0;
 				// 浏览：滚动 2~3 段以扩大可见文本覆盖
 				const tBrowse0 = Date.now();
@@ -238,7 +248,8 @@ export function registerXhsShortcutsTools(
 	server.registerTool(
 		"xhs_select_note",
 		{
-			description: "在首页/发现/搜索页内按关键词匹配卡片→点击→等待模态；若不在该三类页面则先导航到发现页再执行匹配",
+			description:
+				"在首页/发现/搜索页内按关键词匹配卡片→点击→等待模态；若不在该三类页面则先导航到发现页再执行匹配",
 			inputSchema: { dirId: DirId, keywords: Keywords, workspaceId: WorkspaceId },
 		},
 		async (input: any) => {
@@ -259,9 +270,8 @@ export function registerXhsShortcutsTools(
 				page = await Pages.ensurePage(context, {});
 
 				// 1) 判定当前页面，若不在【首页/发现/搜索】则先导航到发现页
-				const { detectPageType, ensureDiscoverPage, findAndOpenNoteByKeywords, PageType } = await import(
-					"../../domain/xhs/navigation.js"
-				);
+				const { detectPageType, ensureDiscoverPage, findAndOpenNoteByKeywords, PageType } =
+					await import("../../domain/xhs/navigation.js");
 				let pType = await detectPageType(page);
 				const allowed = [PageType.ExploreHome, PageType.Discover, PageType.Search];
 				if (!allowed.includes(pType)) {
@@ -284,7 +294,8 @@ export function registerXhsShortcutsTools(
 							type: "text",
 							text: JSON.stringify(
 								ok({
-									opened: !!r.modalOpen,
+									opened: !!(r.modalOpen || (r as any).urlOpened),
+									openedPath: (r as any).openedPath,
 									matched: r.matched,
 									url: page.url(),
 									pageType: pType,
