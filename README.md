@@ -1,6 +1,59 @@
 # HushOps.Servers.XiaoHongShu — 自动化浏览/MCP 服务
 
+![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)
+![TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6.svg)
+![Playwright](https://img.shields.io/badge/Playwright-1.56%2B-45ba4b.svg)
+![MCP](https://img.shields.io/badge/MCP-stdio-blue.svg)
+![License](https://img.shields.io/badge/license-Apache--2.0-informational.svg)
+
 面向“小红书（Little Red Book）”相关业务的人机浏览自动化与 MCP 服务。以 RoxyBrowser 提供的多账号隔离（持久化 Context）为基础，通过 Playwright CDP 接入实现稳定、最小的原子动作工具面；截图、快照与选择器健康数据统一沉淀到 `artifacts/<dirId>` 便于离线验证与审计。
+
+## 快速开始（TL;DR）
+
+- 做什么：提供稳定的原子浏览动作（打开/导航/点击/输入/截图/快照）与小红书专用采集工具面，支持多账号隔离。
+- 为什么有用：最小依赖、MCP 标准工具、可离线验证的工件沉淀，便于在任意编排器中组合业务流程。
+- 如何使用：准备 Node 环境与 Roxy API Token，安装依赖并启动 stdio MCP，或直接运行示例脚本。
+
+```
+# 1) 安装依赖
+npm install
+
+# 2) 准备环境变量（至少设置 ROXY_API_TOKEN 与 Roxy 连接）
+Copy-Item .env.example .env
+# 编辑 .env，填写 ROXY_API_TOKEN，设置 ROXY_API_BASEURL 或 ROXY_API_HOST/PORT
+
+# 3) 预检（环境/官方桥接/Playwright 模块）
+npm run preflight
+
+# 4) 启动 stdio MCP（供客户端连接）
+npm run mcp
+
+# 5) 运行示例（打开并截图）
+npm run run:example -- --dir-ids=user --url=https://example.com --limit=2
+```
+
+更多命令、环境变量与工具清单见文档下方章节与 `AGENTS.md`。
+
+## 目录
+
+- [快速开始（TL;DR）](#快速开始tldr)
+- [能力总览](#能力总览)
+- [环境要求](#环境要求)
+- [安装与最小自检](#安装与最小自检)
+- [启动与集成（stdio MCP）](#启动与集成stdio-mcp)
+- [MCP 工具清单](#mcp-工具清单唯一标准)
+- [RoxyBrowser 集成架构](#roxybrowser-集成架构)
+- [常用脚本](#常用脚本)
+- [目录结构](#目录结构)
+- [测试与质量](#测试与质量)
+- [设计与限制](#设计与限制)
+- [变更要点（0.2.x）](#变更要点02x)
+- [人机参数模板](#人机参数模板快速参考)
+- [有效停留策略](#有效停留策略外部编排工作流)
+- [外部工作流最佳实践清单](#外部工作流最佳实践清单)
+- [故障排查](#故障排查)
+- [贡献](#贡献)
+- [许可证](#许可证)
 
 ---
 
@@ -221,6 +274,30 @@ npm run mcp -- --tool xhs_comment_post --dirId user --text="写得不错！"
 
 ---
 
+## 目录结构
+
+```
+.
+├─ src/
+│  ├─ cli.ts                 # CLI 入口（示例/调试）
+│  ├─ mcp/server.ts          # MCP Server（stdio）入口
+│  ├─ config/                # 配置解析与校验（zod schema）
+│  ├─ services/              # RoxyBrowser 管理、日志、资源等服务
+│  ├─ adapter/               # Playwright/CDP 适配层
+│  ├─ selectors/             # 选择器语义解析与韧性定位
+│  └─ humanization/          # 拟人化运动/输入节律
+├─ scripts/                  # 自检、报告、诊断与演示脚本
+├─ tests/                    # 单元/集成/守卫测试（Vitest）
+├─ artifacts/                # 截图/快照/健康日志等工件
+├─ docs/                     # 模块文档
+├─ .env.example              # 环境变量示例
+└─ README.md                 # 使用向文档（本文件）
+```
+
+说明：以 `AGENTS.md` 作为架构与开发协作细则的真源；本 README 仅承载「使用与上手」。
+
+---
+
 ## 测试与质量
 
 - 全量测试：`npm test`
@@ -369,3 +446,47 @@ tools/call: page_scroll { dirId, human: { segments: 4, perSegmentMs: 120 } }
     - tools/call `page_click`（播放按钮）→ 外部 `sleep(random(5000,10000))`
   - 证据：
     - tools/call `page_screenshot` → tools/call `page_snapshot`
+
+---
+
+## 故障排查
+
+- Roxy 401/403 或连接失败
+  - 检查 `ROXY_API_TOKEN` 是否有效；`ROXY_API_BASEURL` 或 `ROXY_API_HOST/PORT` 是否可达
+  - 若有内网/白名单限制，请确认客户端 IP 已允许
+  - 用 `npm run check:env` 与 `npm run preflight` 快速定位
+
+- Playwright 浏览器未安装/版本不匹配
+  - 运行 `npx playwright install chromium` 或重新执行 `npm install`（触发 `postinstall`）
+  - 确认 Node 版本满足 `>=18`（建议 22.x）
+
+- MCP stdout 日志造成客户端协议干扰
+  - 本项目在 MCP 模式下默认仅使用 stderr/文件日志；如需调试，请设置 `MCP_LOG_STDERR=true`
+  - 参考测试用例 `tests/mcp/stdout.guard.test.ts`
+
+- Windows 终端转义/路径问题
+  - PowerShell 中 JSON/引号请使用反引号或正确转义：`--payload='{\"url\":\"https://example.com\"}'`
+  - 建议优先使用提供的 npm 脚本参数而非手写长命令
+
+- 中文编码/乱码
+  - 所有文件需为 UTF-8 无 BOM；运行 `npm run check:encoding` 自检
+
+---
+
+## 贡献
+
+- 欢迎 Issue/PR！在提交前请：
+  - 代码校验：`npm run lint`、`npm run format:check`
+  - 单元/集成测试：`npm test`
+  - 保持中文注释与一致的命名/风格（见 `AGENTS.md`）
+
+开发建议：
+
+- 使用 `scripts/` 下的诊断与演示脚本便捷复现问题
+- 对 MCP 工具的新增/修改，请同步更新 `README.md` 工具清单与 `AGENTS.md`
+
+---
+
+## 许可证
+
+本项目采用 Apache-2.0 许可证，详见 `LICENSE`。

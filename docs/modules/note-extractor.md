@@ -53,7 +53,7 @@
 ### 基础用法
 
 ```typescript
-import { extractNoteContent } from "./domain/xhs/noteExtractor.js";
+import { extractNoteContent } from "./domain/xhs/noteExtractor.ts";
 import type { BrowserContext } from "playwright";
 
 // 假设你已经有了 BrowserContext
@@ -78,7 +78,7 @@ if ("ok" in result && !result.ok) {
 ### 在 MCP 工具中使用
 
 ```typescript
-import { extractNoteContent } from "./domain/xhs/noteExtractor.js";
+import { extractNoteContent } from "./domain/xhs/noteExtractor.ts";
 
 server.registerTool(
 	"xhs_note_extract_content",
@@ -189,8 +189,8 @@ export const XHS_CONF = {
 ## 依赖
 
 - `playwright`：浏览器自动化
-- `./netwatch.js`：API 监听器（`waitNoteDetail` 函数）
-- `../../config/xhs.js`：配置管理
+- `./netwatch.ts`：API 监听器（`waitNoteDetail` 函数）
+- `../../config/xhs.ts`：配置管理
 
 ## 注意事项
 

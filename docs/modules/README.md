@@ -152,10 +152,10 @@ noteExtractor (内容提取)
 ## ⚡ 快速开始
 
 ```typescript
-// 1. 导入模块
-import { extractNoteContent } from "./domain/xhs/noteExtractor.js";
-import { resolveClickableInCard } from "./domain/xhs/click.js";
-import { isDetailUrl } from "./domain/xhs/detail-url.js";
+// 1. 导入模块（TypeScript 路径示例）
+import { extractNoteContent } from "./domain/xhs/noteExtractor.ts";
+import { resolveClickableInCard } from "./domain/xhs/click.ts";
+import { isDetailUrl } from "./domain/xhs/detail-url.ts";
 
 // 2. 使用流程示例
 async function completeWorkflow(page: Page, card: Locator) {

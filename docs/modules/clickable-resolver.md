@@ -22,7 +22,7 @@
 ### 基础用法
 
 ```typescript
-import { resolveClickableInCard } from "./domain/xhs/click.js";
+import { resolveClickableInCard } from "./domain/xhs/click.ts";
 import type { Page, Locator } from "playwright";
 
 // 假设你已经有了 page 和 card locator
@@ -43,7 +43,7 @@ await clickable2.click();
 ### 在笔记选择流程中使用
 
 ```typescript
-import { resolveClickableInCard } from "./domain/xhs/click.js";
+import { resolveClickableInCard } from "./domain/xhs/click.ts";
 
 async function selectNoteByKeyword(page: Page, keyword: string) {
 	// 1. 收集所有卡片

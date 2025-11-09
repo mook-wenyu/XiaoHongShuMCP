@@ -22,7 +22,7 @@
 ### 基础用法
 
 ```typescript
-import { isDetailUrl } from "./domain/xhs/detail-url.js";
+import { isDetailUrl } from "./domain/xhs/detail-url.ts";
 
 // 检查是否为详情页 URL
 const url1 = "https://www.xiaohongshu.com/explore/6789abcdef";
@@ -38,7 +38,7 @@ console.log(isDetailUrl(url3)); // true
 ### 在导航判断中使用
 
 ```typescript
-import { isDetailUrl } from "./domain/xhs/detail-url.js";
+import { isDetailUrl } from "./domain/xhs/detail-url.ts";
 
 async function handlePageNavigation(page: Page) {
 	const currentUrl = page.url();
@@ -58,7 +58,7 @@ async function handlePageNavigation(page: Page) {
 ### 在模态检测中使用
 
 ```typescript
-import { isDetailUrl } from "./domain/xhs/detail-url.js";
+import { isDetailUrl } from "./domain/xhs/detail-url.ts";
 
 async function detectOpenMethod(page: Page, initialUrl: string) {
 	await page.waitForTimeout(500);
