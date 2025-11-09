@@ -54,7 +54,7 @@ export async function detectPageType(page: Page): Promise<PageType> {
 		// 兜底：模态探针（role=dialog/aria-modal 或小红书特征类名 note-detail-mask/note-container）
 		const modalCount = await page
 			.locator(
-				"[role=\"dialog\"], [aria-modal=\"true\"], .note-detail-mask, #noteContainer, .note-container",
+				'[role="dialog"], [aria-modal="true"], .note-detail-mask, #noteContainer, .note-container',
 			)
 			.count();
 		if (modalCount > 0) return PageType.NoteModal;
@@ -117,7 +117,7 @@ export async function closeModalIfOpen(page: Page): Promise<boolean> {
 	const isOpen = async () =>
 		(await page
 			.locator(
-				"[role=\"dialog\"], [aria-modal=\"true\"], .note-detail-mask, #noteContainer, .note-container",
+				'[role="dialog"], [aria-modal="true"], .note-detail-mask, #noteContainer, .note-container',
 			)
 			.count()) > 0;
 	if (!(await isOpen())) return false;
@@ -131,13 +131,13 @@ export async function closeModalIfOpen(page: Page): Promise<boolean> {
 
 	// 2) 找关闭按钮（aria-label / 文本 / data-testid / 常见 class / 小红书特征 close-* / 图标 use#close）
 	const closeSelectors = [
-		"button[aria-label*=\"关闭\" i]",
-		"button:has-text(\"关闭\")",
-		"[data-testid*=\"close\" i]",
-		"[class*=\"close\" i]",
+		'button[aria-label*="关闭" i]',
+		'button:has-text("关闭")',
+		'[data-testid*="close" i]',
+		'[class*="close" i]',
 		".close-mask-dark",
 		".close-box",
-		"svg:has(use[xlink\\:href=\"#close\"])",
+		'svg:has(use[xlink\\:href="#close"])',
 	];
 	for (const sel of closeSelectors) {
 		try {
@@ -153,9 +153,9 @@ export async function closeModalIfOpen(page: Page): Promise<boolean> {
 	// 3) 点击遮罩/背景（包含 note-detail-mask）
 	const backdropSelectors = [
 		".note-detail-mask",
-		"[class*=\"mask\" i]",
-		"[class*=\"backdrop\" i]",
-		"[class*=\"overlay\" i]",
+		'[class*="mask" i]',
+		'[class*="backdrop" i]',
+		'[class*="overlay" i]',
 	];
 	for (const sel of backdropSelectors) {
 		try {
@@ -283,7 +283,7 @@ export async function findAndOpenNoteByKeywords(
 		try {
 			const c = await page
 				.locator(
-					"[role=\"dialog\"], [aria-modal=\"true\"], .note-detail-mask, #noteContainer, .note-container",
+					'[role="dialog"], [aria-modal="true"], .note-detail-mask, #noteContainer, .note-container',
 				)
 				.count();
 			return c > 0;
@@ -333,7 +333,7 @@ export async function findAndOpenNoteByKeywords(
 						if ((await clickable.count()) === 0) {
 							clickable = card
 								.locator(
-									"a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible",
+									'a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible',
 								)
 								.first();
 						}
@@ -575,7 +575,7 @@ export async function findAndOpenNoteByKeywords(
 						.locator(containerSel)
 						.nth(0)
 						.locator(
-							"a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible",
+							'a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible',
 						)
 						.first();
 					await clickHuman(page as any, loc);

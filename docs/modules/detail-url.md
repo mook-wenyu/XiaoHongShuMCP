@@ -70,7 +70,7 @@ async function detectOpenMethod(page: Page, initialUrl: string) {
 		return "url"; // URL 打开方式
 	} else {
 		// 检查是否有模态出现
-		const hasModal = await page.locator(".modal, [role='dialog']").count() > 0;
+		const hasModal = (await page.locator(".modal, [role='dialog']").count()) > 0;
 		return hasModal ? "modal" : "none";
 	}
 }
@@ -107,19 +107,20 @@ async function clickAndDetectOpen(page: Page, cardLocator: Locator) {
 **定义**
 
 ```typescript
-const DETAIL_URL_RE = /(\/explore\/|\/search_result\/|\/discovery\/item\/|\/question\/|\/p\/|\/zvideo\/)/i;
+const DETAIL_URL_RE =
+	/(\/explore\/|\/search_result\/|\/discovery\/item\/|\/question\/|\/p\/|\/zvideo\/)/i;
 ```
 
 **支持的路径前缀**
 
-| 路径前缀 | 说明 | 示例 |
-|---------|------|------|
-| `/explore/` | 发现页笔记详情 | `/explore/6789abcdef` |
-| `/search_result/` | 搜索结果笔记详情 | `/search_result/6789abcdef` |
-| `/discovery/item/` | 旧版详情页路径 | `/discovery/item/6789abcdef` |
-| `/question/` | 问答详情页 | `/question/6789abcdef` |
-| `/p/` | 短链接详情页 | `/p/6789abcdef` |
-| `/zvideo/` | 视频详情页 | `/zvideo/6789abcdef` |
+| 路径前缀           | 说明             | 示例                         |
+| ------------------ | ---------------- | ---------------------------- |
+| `/explore/`        | 发现页笔记详情   | `/explore/6789abcdef`        |
+| `/search_result/`  | 搜索结果笔记详情 | `/search_result/6789abcdef`  |
+| `/discovery/item/` | 旧版详情页路径   | `/discovery/item/6789abcdef` |
+| `/question/`       | 问答详情页       | `/question/6789abcdef`       |
+| `/p/`              | 短链接详情页     | `/p/6789abcdef`              |
+| `/zvideo/`         | 视频详情页       | `/zvideo/6789abcdef`         |
 
 ### isDetailUrl()
 
@@ -128,7 +129,7 @@ const DETAIL_URL_RE = /(\/explore\/|\/search_result\/|\/discovery\/item\/|\/ques
 **签名**
 
 ```typescript
-function isDetailUrl(url: string): boolean
+function isDetailUrl(url: string): boolean;
 ```
 
 **参数**
@@ -218,15 +219,15 @@ async function navigateToNote(page: Page, noteId: string) {
 import { isDetailUrl } from "./domain/xhs/detail-url.js";
 
 function filterDetailUrls(urls: string[]): string[] {
-	return urls.filter(url => isDetailUrl(url));
+	return urls.filter((url) => isDetailUrl(url));
 }
 
 // 使用示例
 const mixedUrls = [
-	"https://www.xiaohongshu.com/explore/abc",   // ✓ 详情页
-	"https://www.xiaohongshu.com/",              // ✗ 首页
+	"https://www.xiaohongshu.com/explore/abc", // ✓ 详情页
+	"https://www.xiaohongshu.com/", // ✗ 首页
 	"https://www.xiaohongshu.com/search_result/def", // ✓ 详情页
-	"https://www.xiaohongshu.com/user/123",      // ✗ 用户页
+	"https://www.xiaohongshu.com/user/123", // ✗ 用户页
 ];
 
 const detailUrls = filterDetailUrls(mixedUrls);
@@ -301,8 +302,7 @@ export function getDetailType(url: string): string | null {
 export function isValidDetailUrl(url: string): boolean {
 	try {
 		const urlObj = new URL(url);
-		return urlObj.hostname.includes("xiaohongshu.com") &&
-		       isDetailUrl(url);
+		return urlObj.hostname.includes("xiaohongshu.com") && isDetailUrl(url);
 	} catch {
 		return false;
 	}

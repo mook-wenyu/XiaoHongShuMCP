@@ -25,7 +25,7 @@ async function ensureNoteModalOpen(page: Page): Promise<boolean> {
 	try {
 		const count = await page
 			.locator(
-				".note-detail-mask:visible, [role=\"dialog\"]:visible, [aria-modal=\"true\"]:visible, #noteContainer:visible, .note-container:visible",
+				'.note-detail-mask:visible, [role="dialog"]:visible, [aria-modal="true"]:visible, #noteContainer:visible, .note-container:visible',
 			)
 			.count();
 		return count > 0;
@@ -38,7 +38,7 @@ function modalShellRoot(page: Page): Locator {
 	// 优先选择“模态外壳”，若不存在则回退到内容容器；以单一多选择器统一处理
 	return page
 		.locator(
-			".note-detail-mask:visible, [role=\"dialog\"]:visible, [aria-modal=\"true\"]:visible, #noteContainer:visible, .note-container:visible",
+			'.note-detail-mask:visible, [role="dialog"]:visible, [aria-modal="true"]:visible, #noteContainer:visible, .note-container:visible',
 		)
 		.first();
 }
@@ -160,7 +160,7 @@ async function clickHumanScoped(page: Page, loc: Locator): Promise<void> {
 function likeButton(page: Page): Locator {
 	const bar = engageBarRoot(page);
 	// 明确限定在 engage-bar 左侧区域，避免命中评论区点赞（常见 16px）
-	return bar.locator(".left .like-wrapper:visible:has(svg[width=\"24\"])").first();
+	return bar.locator('.left .like-wrapper:visible:has(svg[width="24"])').first();
 }
 function collectButton(page: Page): Locator {
 	const bar = engageBarRoot(page);
@@ -171,7 +171,7 @@ function followButton(page: Page): Locator {
 	// 优先特征类名，其次按语义文本的按钮（关注/已关注）
 	return shell
 		.locator(
-			".note-detail-follow-btn .follow-button:visible, button:has-text(\"关注\"), button:has-text(\"已关注\")",
+			'.note-detail-follow-btn .follow-button:visible, button:has-text("关注"), button:has-text("已关注")',
 		)
 		.first();
 }
@@ -183,7 +183,7 @@ function commentInput(page: Page): Locator {
 	const bar = engageBarRoot(page);
 	return bar
 		.locator(
-			"#content-textarea[contenteditable=\"true\"]:visible, .content-edit [contenteditable=\"true\"]:visible",
+			'#content-textarea[contenteditable="true"]:visible, .content-edit [contenteditable="true"]:visible',
 		)
 		.first();
 }

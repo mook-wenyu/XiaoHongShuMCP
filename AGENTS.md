@@ -38,8 +38,8 @@
 - 浏览器管理：`browser_open/close`
 - 页面管理：`page_create/list/close/navigate`
 - 页面交互：`page_click/hover/scroll/type/input_clear`
-- 信息获取：`page_screenshot/snapshot`
-- 小红书：`xhs_session_check/navigate_home`
+- 信息获取：`page_screenshot/page_snapshot`
+- 小红书：`xhs_session_check/open_context/navigate_home/note_extract_content`
 - 资源管理：`resources_listArtifacts/readArtifact`
 - 管理工具（高权限）：`roxy_workspaces_list/windows_list/window_create`
 - 诊断工具：`server_capabilities/ping`

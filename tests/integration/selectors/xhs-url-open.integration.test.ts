@@ -65,7 +65,7 @@ async function withHighlightedCards(page: Page, keywords: string[], fn: () => Pr
 	} finally {
 		await page.evaluate(() => {
 			const cards = Array.from(
-				document.querySelectorAll("section.note-item[data-test-highlight=\"true\"]"),
+				document.querySelectorAll('section.note-item[data-test-highlight="true"]'),
 			) as HTMLElement[];
 			for (const c of cards) {
 				const prevOutline = (c as any).__prevOutline || "";

@@ -36,7 +36,7 @@ export const XhsSelectors = {
 			alternatives: [
 				{ role: "link", name: { exact: "发现" } },
 				{ text: { exact: "发现" } },
-				{ selector: "a[href*=\"channel_id=homefeed_recommend\"]" },
+				{ selector: 'a[href*="channel_id=homefeed_recommend"]' },
 			],
 		};
 	},
@@ -46,13 +46,13 @@ export const XhsSelectors = {
 		return {
 			alternatives: [
 				// 搜索结果页：/search_result/{noteId}
-				{ selector: "a[href*=\"/search_result/\"]" },
+				{ selector: 'a[href*="/search_result/"]' },
 				// 搜索列表：/discovery/item/{noteId}
-				{ selector: "a[href*=\"/discovery/item/\"]" },
+				{ selector: 'a[href*="/discovery/item/"]' },
 				// 发现/探索：/explore/{noteId}
-				{ selector: "a[href^=\"/explore/\"]" },
+				{ selector: 'a[href^="/explore/"]' },
 				// 兜底：包含 note 路由的链接
-				{ selector: "a[href*=\"/note\"], a[href*=\"/explore?\"]" },
+				{ selector: 'a[href*="/note"], a[href*="/explore?"]' },
 			],
 		};
 	},
@@ -80,7 +80,7 @@ export const XhsSelectors = {
 				{ selector: "[class*=close i]" },
 				{ selector: ".close-mask-dark" },
 				{ selector: ".close-box" },
-				{ selector: "svg:has(use[xlink\:href=\"#close\"])" },
+				{ selector: 'svg:has(use[xlink\:href="#close"])' },
 			],
 		};
 	},

@@ -149,7 +149,7 @@ describe("端到端测试：笔记选择和内容提取", () => {
 		// Step 3: 搜索包含"美食"的卡片
 		const keyword = "美食";
 		const matchedCard = cards.find((card) =>
-			card.title.toLowerCase().includes(keyword.toLowerCase())
+			card.title.toLowerCase().includes(keyword.toLowerCase()),
 		);
 
 		expect(matchedCard).toBeDefined();
@@ -216,7 +216,7 @@ describe("端到端测试：笔记选择和内容提取", () => {
 
 		const keyword = "不存在的关键词12345";
 		const matchedCard = cards.find((card) =>
-			card.title.toLowerCase().includes(keyword.toLowerCase())
+			card.title.toLowerCase().includes(keyword.toLowerCase()),
 		);
 
 		// 应该找不到匹配的卡片
@@ -249,7 +249,7 @@ describe("端到端测试：笔记选择和内容提取", () => {
 					clickable,
 					count: await clickable.count(),
 				};
-			})
+			}),
 		);
 
 		// 验证所有卡片都能定位到可点击元素
@@ -283,7 +283,7 @@ describe("端到端测试：笔记选择和内容提取", () => {
 			cards.map(async (card, index) => {
 				const cardLocator = page.locator(containerSel).nth(index);
 				await resolveClickableInCard(page, cardLocator);
-			})
+			}),
 		);
 		const resolveTime = Date.now() - startResolve;
 

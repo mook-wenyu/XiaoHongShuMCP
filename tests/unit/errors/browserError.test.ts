@@ -330,7 +330,7 @@ describe("BrowserError 错误路径测试", () => {
 		});
 
 		it("应该处理特殊字符", () => {
-			const message = "操作失败: 选择器 \"#id > .class\" \n 包含特殊字符";
+			const message = '操作失败: 选择器 "#id > .class" \n 包含特殊字符';
 			const error = new BrowserError(message, {
 				selector: "#id > .class[data-test='value']",
 			});

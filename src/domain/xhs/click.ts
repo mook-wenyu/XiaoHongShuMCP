@@ -33,7 +33,7 @@ export async function resolveClickableInCard(
 	// 3) 退化：标题或封面可见元素
 	return card
 		.locator(
-			"a.title:visible, .footer a.title:visible, a.cover:visible, a[class*=\"cover\" i]:visible",
+			'a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible',
 		)
 		.first();
 }

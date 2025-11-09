@@ -20,6 +20,34 @@
 - **高内聚**：所有提取逻辑集中在一个函数
 - **低耦合**：通过接口与外部交互，不依赖具体实现
 
+## DOM 兜底（导出链接与非标准加载）
+
+部分导出链接（例如带有 `xsec_token/xsec_source` 的 `explore/{id}?xsec_*`）进入详情页时不会触发 `\/api\/sns\/web\/v1\/feed` 请求，纯 API 监听会出现等待超时从而提取失败。模块已在 API 失败时进行 DOM 兜底解析：
+
+- 就绪信号：`#detail-title` 或 `#noteContainer` 出现
+- 选择器：
+  - 标题：`#detail-title`
+  - 正文：`#detail-desc .note-text`（合并多段）
+  - 标签：`a.tag#hash-tag` 文本集合（去除 `#` 前缀）
+  - 作者：`.author .username`
+  - 互动：`.engage-bar .like .count` / `.collect-wrapper .count` / `.chat .count`
+
+返回 JSON 将附带 `extraction_method` 字段：
+
+```json
+{
+  "title": "…",
+  "content": "…",
+  "tags": ["…"],
+  "author_nickname": "…",
+  "interact_stats": {"likes":0,"collects":0,"comments":0,"shares":0},
+  "extracted_at": "2025-11-09T10:00:00.000Z",
+  "extraction_method": "api" | "dom"
+}
+```
+
+说明：`extraction_method` 仅用于观测统计，上游可忽略该字段；当 API 命中则为 `api`，未命中改走 DOM 时为 `dom`。
+
 ## 使用方法
 
 ### 基础用法
@@ -70,7 +98,7 @@ server.registerTool(
 		return {
 			content: [{ type: "text", text: JSON.stringify(result) }],
 		};
-	}
+	},
 );
 ```
 
@@ -85,8 +113,8 @@ server.registerTool(
 ```typescript
 async function extractNoteContent(
 	ctx: BrowserContext,
-	noteUrl: string
-): Promise<NoteContentResult | ExtractError>
+	noteUrl: string,
+): Promise<NoteContentResult | ExtractError>;
 ```
 
 **参数**
@@ -121,19 +149,19 @@ async function extractNoteContent(
 ```typescript
 {
 	ok: false;
-	code: string;              // 错误代码
-	message: string;           // 错误描述
+	code: string; // 错误代码
+	message: string; // 错误描述
 }
 ```
 
 **错误代码**
 
-| 错误代码 | 说明 | 解决方案 |
-|---------|------|---------|
-| `API_FAILED` | 笔记详情 API 调用失败或无数据 | 检查网络连接，确认笔记 URL 有效 |
-| `INVALID_DATA` | 笔记数据不完整（缺少必要字段） | 确认笔记是否正常可访问 |
-| `NAVIGATION_FAILED` | 页面导航失败 | 检查 URL 格式，确认网络状态 |
-| `TIMEOUT` | API 等待超时 | 增加超时时间或重试 |
+| 错误代码            | 说明                           | 解决方案                        |
+| ------------------- | ------------------------------ | ------------------------------- |
+| `API_FAILED`        | 笔记详情 API 调用失败或无数据  | 检查网络连接，确认笔记 URL 有效 |
+| `INVALID_DATA`      | 笔记数据不完整（缺少必要字段） | 确认笔记是否正常可访问          |
+| `NAVIGATION_FAILED` | 页面导航失败                   | 检查 URL 格式，确认网络状态     |
+| `TIMEOUT`           | API 等待超时                   | 增加超时时间或重试              |
 
 ## 工作原理
 
@@ -178,7 +206,7 @@ import { extractNoteContent } from "./domain/xhs/noteExtractor.js";
 
 async function extractMultipleNotes(
 	ctx: BrowserContext,
-	noteUrls: string[]
+	noteUrls: string[],
 ): Promise<Array<NoteContentResult | ExtractError>> {
 	const results = [];
 
@@ -186,13 +214,11 @@ async function extractMultipleNotes(
 	const concurrency = 3;
 	for (let i = 0; i < noteUrls.length; i += concurrency) {
 		const batch = noteUrls.slice(i, i + concurrency);
-		const batchResults = await Promise.all(
-			batch.map(url => extractNoteContent(ctx, url))
-		);
+		const batchResults = await Promise.all(batch.map((url) => extractNoteContent(ctx, url)));
 		results.push(...batchResults);
 
 		// 间隔延时，避免触发反爬
-		await new Promise(resolve => setTimeout(resolve, 1000));
+		await new Promise((resolve) => setTimeout(resolve, 1000));
 	}
 
 	return results;

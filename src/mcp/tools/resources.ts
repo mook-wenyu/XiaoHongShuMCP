@@ -165,7 +165,7 @@ export function registerResourceTools(
 				try {
 					clickableCount = await page.evaluate(() => {
 						const qs =
-							"a,button,[role=\"button\"],[onclick],input[type=\"submit\"],input[type=\"button\"],summary,area[href]";
+							'a,button,[role="button"],[onclick],input[type="submit"],input[type="button"],summary,area[href]';
 						return document.querySelectorAll(qs).length;
 					});
 				} catch {}

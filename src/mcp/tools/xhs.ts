@@ -86,9 +86,17 @@ export function registerXhsTools(
 				const context = await manager.getContext(dirId, { workspaceId });
 				const pages = context.pages();
 				const url = pages.length > 0 ? pages[0].url() : undefined;
-				return { content: [{ type: "text", text: JSON.stringify(ok({ opened: true, pages: pages.length, url })) }] };
+				return {
+					content: [
+						{ type: "text", text: JSON.stringify(ok({ opened: true, pages: pages.length, url })) },
+					],
+				};
 			} catch (e: any) {
-				return { content: [{ type: "text", text: JSON.stringify(err("INTERNAL_ERROR", String(e?.message || e))) }] };
+				return {
+					content: [
+						{ type: "text", text: JSON.stringify(err("INTERNAL_ERROR", String(e?.message || e))) },
+					],
+				};
 			}
 		},
 	);

@@ -91,8 +91,8 @@ async function openNoteCard(page: Page, card: Locator, noteId?: string) {
 async function resolveClickableInCard(
 	page: Page,
 	card: Locator,
-	opts?: { id?: string }
-): Promise<Locator>
+	opts?: { id?: string },
+): Promise<Locator>;
 ```
 
 **参数**
@@ -129,11 +129,11 @@ async function resolveClickableInCard(
 
 ### 允许的 URL 前缀
 
-| 前缀 | 说明 | 优先级 |
-|-----|------|-------|
-| `/search_result/` | 搜索结果页详情 | 最高 |
-| `/explore/` | 发现页详情 | 高 |
-| `/discovery/item/` | 旧版详情页 | 中 |
+| 前缀               | 说明           | 优先级 |
+| ------------------ | -------------- | ------ |
+| `/search_result/`  | 搜索结果页详情 | 最高   |
+| `/explore/`        | 发现页详情     | 高     |
+| `/discovery/item/` | 旧版详情页     | 中     |
 
 ### 可见性过滤
 
@@ -144,7 +144,7 @@ async function resolveClickableInCard(
 ### 1. noteId 精确选择器
 
 ```typescript
-`a[href*="${prefix}${id}"]:visible, a[class*="cover" i][href*="${prefix}${id}"]:visible`
+`a[href*="${prefix}${id}"]:visible, a[class*="cover" i][href*="${prefix}${id}"]:visible`;
 ```
 
 - 匹配包含指定 noteId 的链接
@@ -153,7 +153,7 @@ async function resolveClickableInCard(
 ### 2. 通用 href 选择器
 
 ```typescript
-`a[href*="${prefix}"]:visible, a[class*="cover" i][href*="${prefix}"]:visible`
+`a[href*="${prefix}"]:visible, a[class*="cover" i][href*="${prefix}"]:visible`;
 ```
 
 - 匹配包含允许前缀的任意链接
@@ -162,7 +162,7 @@ async function resolveClickableInCard(
 ### 3. 兜底选择器
 
 ```typescript
-`a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible`
+`a.title:visible, .footer a.title:visible, a.cover:visible, a[class*="cover" i]:visible`;
 ```
 
 - 匹配标题或封面元素
@@ -175,7 +175,7 @@ async function resolveClickableInCard(
 ```typescript
 // 当你知道 noteId 时，使用精确匹配
 const clickable = await resolveClickableInCard(page, card, {
-	id: "6789abcdef"
+	id: "6789abcdef",
 });
 await clickable.click();
 ```
@@ -213,8 +213,8 @@ for (const card of cards) {
 ```typescript
 // 当前配置
 const allow = [
-	"/search_result/",  // 优先级 1
-	"/explore/",        // 优先级 2
+	"/search_result/", // 优先级 1
+	"/explore/", // 优先级 2
 	"/discovery/item/", // 优先级 3
 ];
 ```
@@ -231,11 +231,13 @@ const allow = [
 ### 问题：找不到可点击元素
 
 **可能原因**：
+
 - 卡片 DOM 结构变化
 - 元素未完全加载
 - CSS 类名或 href 格式变化
 
 **解决方案**：
+
 1. 检查页面 HTML 结构
 2. 更新选择器字符串
 3. 添加等待逻辑确保元素可见
@@ -243,10 +245,12 @@ const allow = [
 ### 问题：点击了错误的元素
 
 **可能原因**：
+
 - 优先级策略不符合预期
 - 多个元素匹配同一选择器
 
 **解决方案**：
+
 1. 提供 `id` 参数使用精确匹配
 2. 调整 `allow` 数组优先级
 3. 检查返回的 Locator 是否正确
@@ -255,33 +259,35 @@ const allow = [
 
 - `detail-url.ts`：笔记详情 URL 识别
 - `navigation.ts`：笔记选择和导航
-- `card.ts`：卡片信息收集
+- `search.ts`：搜索与页面元素准备
 
 ## 扩展建议
 
 如需支持更多场景：
 
 1. **添加新 URL 前缀**：
+
    ```typescript
    const allow = [
-	   "/search_result/",
-	   "/explore/",
-	   "/discovery/item/",
-	   "/question/",     // 新增：问答页
-	   "/zvideo/",       // 新增：视频页
+   	"/search_result/",
+   	"/explore/",
+   	"/discovery/item/",
+   	"/question/", // 新增：问答页
+   	"/zvideo/", // 新增：视频页
    ];
    ```
 
 2. **自定义选择器策略**：
+
    ```typescript
    function resolveClickableInCard(
-	   page: Page,
-	   card: Locator,
-	   opts?: {
-		   id?: string;
-		   strategy?: "cover-first" | "title-first";
-	   }
-   ): Promise<Locator>
+   	page: Page,
+   	card: Locator,
+   	opts?: {
+   		id?: string;
+   		strategy?: "cover-first" | "title-first";
+   	},
+   ): Promise<Locator>;
    ```
 
 3. **添加日志追踪**：

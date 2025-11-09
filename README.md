@@ -127,7 +127,14 @@ npm run mcp
 
 - `xhs_session_check` - 检查会话状态（基于 cookies 和首页加载）
 - `xhs_navigate_home` - 导航到小红书首页并验证
+- `xhs_open_context` - 确保浏览器上下文已打开，返回页面数量与首个页面 URL（若存在）
 - `xhs_note_extract_content` - 提取笔记完整内容（标题/正文/标签/互动数据）
+
+> 提示：`xhs_note_extract_content` 采用“API→DOM 兜底”的两段式提取。
+>
+> - 优先拦截 `\/api\/sns\/web\/v1\/feed` 获取详情；
+> - 当导出链接（如 `?xsec_token=...`）未触发 API 时，自动从 DOM 解析 `#detail-title`、`#detail-desc .note-text`、`a.tag#hash-tag` 等；
+> - 返回 JSON 会附带 `extraction_method=api|dom`，便于上游统计命中率（消费方可忽略额外字段）。
 
 ### 小红书快捷工具（语义化）
 
@@ -183,6 +190,7 @@ npm run mcp -- --tool xhs_comment_post --dirId user --text="写得不错！"
 示例（默认开启拟人化；两种方式关闭：`human=false` 或 `human.enabled=false`，可按需细化参数）：
 
 - 打开窗口：`browser_open`，`{"dirId":"user"}`
+- 打开上下文：`xhs_open_context`，`{"dirId":"user"}` → 返回 `{"ok":true,"data":{"opened":true,"pages":1,"url":"https://..."}}`
 - 导航：`page_navigate`，`{"dirId":"user","url":"https://example.com"}`
 - 语义点击（拟人化）：
   - 快速关闭：`{"dirId":"user","target":{"text":"登录"},"human":false}`
@@ -233,7 +241,7 @@ npm run mcp -- --tool xhs_comment_post --dirId user --text="写得不错！"
 
 ## 变更要点（0.2.x）
 
-- 仅保留前缀+下划线命名 `browser_*` / `page_*` 作为唯一标准；移除 roxy_* 浏览别名以降低心智负担。
+- 仅保留前缀+下划线命名 `browser_*` / `page_*` 作为唯一标准；移除 roxy\_\* 浏览别名以降低心智负担。
 - 高权限管理类 `roxy_*` 默认注册（无需环境变量开关）。
 - 架构升级：移除适配层抽象，直接使用 Playwright CDP 连接 RoxyBrowser。
 - 页面快照节点上限受 `SNAPSHOT_MAX_NODES` 保护。

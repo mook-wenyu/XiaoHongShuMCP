@@ -57,7 +57,7 @@ async function main() {
 			// 附带 roxy 健康探测（不抛错，仅报告）
 			try {
 				const health = await container.createRoxyClient().health();
-				caps.roxyHealth = typeof health === "string" ? health : (health?.code === 0 ? "ok" : health);
+				caps.roxyHealth = typeof health === "string" ? health : health?.code === 0 ? "ok" : health;
 			} catch (e: any) {
 				caps.roxyHealth = `error: ${String(e?.message || e)}`;
 			}
@@ -166,7 +166,7 @@ async function main() {
 			try {
 				clickableCount = await p.evaluate(() => {
 					const qs =
-						"a,button,[role=\"button\"],[onclick],input[type=\"submit\"],input[type=\"button\"],summary,area[href]";
+						'a,button,[role="button"],[onclick],input[type="submit"],input[type="button"],summary,area[href]';
 					return document.querySelectorAll(qs).length;
 				});
 			} catch {}
