@@ -1,6 +1,6 @@
 # AGENTS.md（XiaoHongShu 子模块指引）
 
-- 最近更新：2025-11-09
+- 最近更新：2025-11-10
 
 本子模块遵循仓库根目录 AGENTS.md 的全部强制指令。本文件在本目录范围内做差异化补充：官方命名、MCP 静默、Roxy/Playwright 运行约束与测试策略等。
 
@@ -39,7 +39,8 @@
 - 页面管理：`page_create/list/close/navigate`
 - 页面交互：`page_click/hover/scroll/type/input_clear`
 - 信息获取：`page_screenshot/page_snapshot`
-- 小红书：`xhs_session_check/open_context/navigate_home/note_extract_content`
+- 小红书基线：`xhs_session_check/open_context/navigate_home/note_extract_content`
+- 小红书快捷：`xhs_search_keyword/xhs_collect_search_results/xhs_keyword_browse/xhs_select_note/xhs_note_like/xhs_note_unlike/xhs_note_collect/xhs_note_uncollect/xhs_user_follow/xhs_user_unfollow/xhs_comment_post`
 - 资源管理：`resources_listArtifacts/readArtifact`
 - 管理工具（高权限）：`roxy_workspaces_list/windows_list/window_create`
 - 诊断工具：`server_capabilities/ping`

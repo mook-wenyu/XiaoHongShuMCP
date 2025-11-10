@@ -49,6 +49,7 @@ async function main() {
 		"page_input_clear",
 		// XHS 基线
 		"xhs_session_check",
+		"xhs_open_context",
 		"xhs_navigate_home",
 		// 内容获取：提取笔记完整内容（与官方命名保持一致）
 		"xhs_note_extract_content",
@@ -56,6 +57,7 @@ async function main() {
 		"xhs_close_modal",
 		"xhs_navigate_discover",
 		"xhs_search_keyword",
+		"xhs_collect_search_results",
 		"xhs_keyword_browse",
 		"xhs_select_note",
 		"xhs_note_like",

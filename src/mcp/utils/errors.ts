@@ -9,6 +9,7 @@ export type ErrorCode =
 	| "ACTION_INTERCEPTED"
 	| "ACTION_FAILED"
 	| "SCREENSHOT_FAILED"
+	| "NO_WS_ENDPOINT"
 	| "TIMEOUT"
 	| "INTERNAL_ERROR";
 

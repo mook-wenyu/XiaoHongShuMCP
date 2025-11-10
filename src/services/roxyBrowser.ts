@@ -51,8 +51,14 @@ export class RoxyBrowserManager {
 		const logger = this.container.createLogger({ module: "roxyBrowser" });
 
 		try {
-			// 1. 通过 RoxyBrowser API 启动或获取浏览器
-			const connectionInfo = await roxyClient.open(dirId, undefined, opts?.workspaceId);
+			// 1. 通过 RoxyBrowser API 启动或获取浏览器（先 ensureOpen 再回退 open）
+			let connectionInfo: { ws?: string } | undefined;
+			try {
+				connectionInfo = await (roxyClient as any).ensureOpen(dirId, opts?.workspaceId);
+			} catch {}
+			if (!connectionInfo?.ws) {
+				connectionInfo = await roxyClient.open(dirId, undefined, opts?.workspaceId);
+			}
 
 			if (!connectionInfo.ws) {
 				throw new Error(`RoxyBrowser 未返回 CDP endpoint: dirId=${dirId}`);

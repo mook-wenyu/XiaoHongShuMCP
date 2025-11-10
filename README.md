@@ -194,6 +194,7 @@ npm run mcp
 - `xhs_close_modal` - 关闭当前笔记详情模态（Esc→关闭按钮→遮罩）
 - `xhs_navigate_discover` - 导航到“发现”推荐流（含 homefeed 接口软校验）
 - `xhs_search_keyword` - 站内搜索关键词（拟人化输入 + 接口软校验）
+- `xhs_collect_search_results` - 在站内搜索后收集前 N 条笔记结果（优先 API 回执，DOM 兜底）
 - `xhs_keyword_browse` - 关键词浏览（轻量滚动，提升可见文本覆盖）
 - `xhs_select_note` - 在当前页（首页/发现/搜索）按关键词匹配卡片并点击，优先点击封面，标题兜底；成功判定为“模态优先，其次 URL 进入详情”，返回 `openedPath="modal"|"url"`
 - `xhs_note_like` / `xhs_note_unlike` - 点赞 / 取消点赞当前笔记（需模态已打开）

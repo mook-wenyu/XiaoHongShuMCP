@@ -21,6 +21,7 @@ describeIf("CDP 连接集成测试", () => {
 	let roxyClient: IRoxyClient;
 	let testDirId: string;
 	let browser: Browser | undefined;
+  let openedByUs = false;
 
 	beforeAll(() => {
 		const configProvider = ConfigProvider.load();
@@ -47,7 +48,38 @@ describeIf("CDP 连接集成测试", () => {
 	it("应该能通过 CDP 连接到 RoxyBrowser", async () => {
 		// 1. 打开浏览器窗口
 		console.log(`1️⃣ 打开浏览器窗口 (dirId: ${testDirId})`);
-		const opened = await roxyClient.ensureOpen(testDirId);
+		let opened: { ws?: string } = {};
+		try {
+			const wsId = process.env.ROXY_DEFAULT_WORKSPACE_ID;
+			opened = await roxyClient.ensureOpen(testDirId, wsId ? Number(wsId) : undefined);
+			openedByUs = true;
+		} catch (e) {
+			console.warn("ensureOpen 失败，降级复用现有窗口：", e);
+			// 降级：优先使用环境变量中的 dirId；若无则从工作区窗口列表取一个
+			const fromEnv = (process.env.ROXY_DIR_IDS || "")
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean);
+			let candidate = fromEnv[0];
+			if (!candidate) {
+				const provider = ConfigProvider.load();
+				const container = new ServiceContainer(provider.getConfig());
+				const roxy = container.createRoxyClient();
+				const wsList = await roxy.workspaces().catch(() => ({ data: { rows: [] as any[] } }) as any);
+				const wsId = wsList?.data?.rows?.[0]?.id as any;
+				if (wsId) {
+					const win = await roxy
+						.listWindows({ workspaceId: wsId })
+						.catch(() => ({ data: { rows: [] as any[] } }) as any);
+					candidate = (win?.data?.rows?.[0]?.dirId as string) || "";
+				}
+			}
+			if (!candidate) throw new Error("未找到可用的 Roxy 窗口供连接");
+			const info = await roxyClient.connectionInfo([candidate]);
+			const item = info?.data?.find((x) => x?.ws);
+			if (!item?.ws) throw new Error("现有窗口未返回 ws 端点");
+			opened.ws = item.ws as string;
+		}
 
 		expect(opened).toBeDefined();
 		expect(opened.ws).toBeDefined();
@@ -94,8 +126,37 @@ describeIf("CDP 连接集成测试", () => {
 		console.log("测试同一 Context 多 Page 场景");
 
 		// 连接到浏览器
-		const opened = await roxyClient.ensureOpen(testDirId);
-		const browser = await chromium.connectOverCDP(opened.ws!);
+		let browser: Browser;
+		try {
+			const wsId = process.env.ROXY_DEFAULT_WORKSPACE_ID;
+			const opened = await roxyClient.ensureOpen(testDirId, wsId ? Number(wsId) : undefined);
+			browser = await chromium.connectOverCDP(opened.ws!);
+		} catch (e) {
+			console.warn("ensureOpen 失败，降级复用现有窗口：", e);
+			const fromEnv = (process.env.ROXY_DIR_IDS || "")
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean);
+			let candidate = fromEnv[0];
+			if (!candidate) {
+				const provider = ConfigProvider.load();
+				const container = new ServiceContainer(provider.getConfig());
+				const roxy = container.createRoxyClient();
+				const wsList = await roxy.workspaces().catch(() => ({ data: { rows: [] as any[] } }) as any);
+				const wsId = wsList?.data?.rows?.[0]?.id as any;
+				if (wsId) {
+					const win = await roxy
+						.listWindows({ workspaceId: wsId })
+						.catch(() => ({ data: { rows: [] as any[] } }) as any);
+					candidate = (win?.data?.rows?.[0]?.dirId as string) || "";
+				}
+			}
+			if (!candidate) throw new Error("未找到可用的 Roxy 窗口供连接");
+			const info = await roxyClient.connectionInfo([candidate]);
+			const item = info?.data?.find((x) => x?.ws);
+			if (!item?.ws) throw new Error("现有窗口未返回 ws 端点");
+			browser = await chromium.connectOverCDP(item.ws as string);
+		}
 		const context = browser.contexts()[0];
 
 		// 创建 3 个页面

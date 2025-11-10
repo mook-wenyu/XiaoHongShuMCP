@@ -162,14 +162,14 @@ export class RoxyClient implements IRoxyClient {
 				}
 				// 进一步回退：选取任意已运行窗口（同工作区）；若没有则尝试创建窗口后再回补
 				const wsList = await this.workspaces().catch(() => undefined as any);
-				const wsId =
-					(wsList?.data && Array.isArray(wsList.data) && wsList.data[0]?.id) || undefined;
+				const wsRows = Array.isArray(wsList?.data?.rows) ? (wsList!.data!.rows as any[]) : [];
+				const wsId = (wsRows[0]?.id as any) || undefined;
 				if (wsId) {
 					const win = await this.listWindows({ workspaceId: wsId as any }).catch(
 						() => undefined as any,
 					);
-					const dirIds: string[] = Array.isArray(win?.data)
-						? win!.data!.map((w: any) => w?.dirId).filter(Boolean)
+					const dirIds: string[] = Array.isArray(win?.data?.rows)
+						? (win!.data!.rows as any[]).map((w: any) => w?.dirId).filter(Boolean)
 						: [];
 					if (dirIds.length) {
 						const info2 = await this.connectionInfo(dirIds).catch(() => ({ data: null }) as any);
@@ -257,14 +257,14 @@ export class RoxyClient implements IRoxyClient {
 				}
 				// 进一步回退：选取任意已运行窗口（同工作区）；若没有则尝试创建窗口后再回补
 				const wsList = await this.workspaces().catch(() => undefined as any);
-				const wsId =
-					(wsList?.data && Array.isArray(wsList.data) && wsList.data[0]?.id) || undefined;
+				const wsRows = Array.isArray(wsList?.data?.rows) ? (wsList!.data!.rows as any[]) : [];
+				const wsId = (wsRows[0]?.id as any) || undefined;
 				if (wsId) {
 					const win = await this.listWindows({ workspaceId: wsId as any }).catch(
 						() => undefined as any,
 					);
-					const dirIds: string[] = Array.isArray(win?.data)
-						? win!.data!.map((w: any) => w?.dirId).filter(Boolean)
+					const dirIds: string[] = Array.isArray(win?.data?.rows)
+						? (win!.data!.rows as any[]).map((w: any) => w?.dirId).filter(Boolean)
 						: [];
 					if (dirIds.length) {
 						const info2 = await this.connectionInfo(dirIds).catch(() => ({ data: null }) as any);

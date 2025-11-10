@@ -19,8 +19,18 @@ function getArg(name: string, def?: string) {
 		process.exit(2);
 	}
 	const argsRaw = getArg("args");
+	const argsFile = getArg("argsFile");
 	let args: any = {};
-	if (argsRaw) {
+	if (argsFile) {
+		try {
+			const { readFile } = await import("node:fs/promises");
+			const text = await readFile(argsFile, { encoding: "utf-8" });
+			args = JSON.parse(text);
+		} catch (e: any) {
+			console.error(JSON.stringify({ ok: false, error: `invalid --argsFile JSON: ${String(e?.message || e)}` }));
+			process.exit(2);
+		}
+	} else if (argsRaw) {
 		try {
 			args = JSON.parse(argsRaw);
 		} catch (e: any) {
