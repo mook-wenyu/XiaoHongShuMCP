@@ -86,7 +86,8 @@ server.registerTool(
 		description: "提取小红书笔记的完整内容",
 		inputSchema: {
 			dirId: z.string(),
-			noteUrl: z.string().url(),
+			// 不强校验 URL 形状，避免导出链接（含 xsec_* 等）被误判为非法
+			noteUrl: z.string().min(1),
 		},
 	},
 	async (input: any) => {
@@ -175,13 +176,13 @@ async function extractNoteContent(
 
 ## 配置
 
-模块使用 `XHS_CONF.feed.waitApiMs` 配置 API 等待超时时间（默认 10000ms）：
+模块使用 `XHS_CONF.feed.waitApiMs` 配置 API 等待超时时间（默认 7000ms）：
 
 ```typescript
 // 在 src/config/xhs.ts 中配置
 export const XHS_CONF = {
 	feed: {
-		waitApiMs: 10000, // API 等待超时时间（毫秒）
+		waitApiMs: 7000, // API 等待超时时间（毫秒）
 	},
 };
 ```
@@ -244,3 +245,4 @@ async function extractMultipleNotes(
 ## 更新日志
 
 - **2025-01** - 初始版本，支持基础笔记内容提取
+ - **2025-11-10** - 修正文档默认超时（7000ms），示例输入校验由 `z.string().url()` 改为 `z.string().min(1)` 以避免导出链接误判；与实现保持一致。

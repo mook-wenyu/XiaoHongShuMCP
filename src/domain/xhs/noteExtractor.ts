@@ -62,8 +62,11 @@ export async function extractNoteContent(
 		// 启动 API 监听器（必须在导航之前）
 		const waiter = waitNoteDetail(page, XHS_CONF.feed.waitApiMs);
 
-		// 导航到笔记页面，触发 API 请求
-		await page.goto(noteUrl, { waitUntil: "domcontentloaded" });
+		// 导航到笔记页面，触发 API 请求（根据环境选择是否使用完整原始链接）
+		const __clean = String(process.env.XHS_CLEAN_URL || "").trim().toLowerCase();
+		const __cleanOn = (__clean === "1" || __clean === "true" || __clean === "yes" || __clean === "on");
+		const __gotoUrl = __cleanOn ? normalizedUrl : noteUrl;
+		await page.goto(__gotoUrl, { waitUntil: "domcontentloaded" });
 
 		// 等待 API 响应
 		const result = await waiter.promise;
@@ -157,7 +160,7 @@ function extractNoteIdFromUrl(url: string): string {
  */
 async function extractFromDom(page: Page, url: string): Promise<NoteContentResult | null> {
 	// 等待渲染完成的最小信号：标题或 noteContainer 渲染完成
-	const maxWait = Math.max(Number(XHS_CONF.capture?.waitContentMs || 5000), 3000);
+	const maxWait = Math.max(Number(XHS_CONF.capture?.waitContentMs || 8000), 3000);
 	try {
 		await Promise.race([
 			page.waitForSelector("#detail-title", { timeout: maxWait }),

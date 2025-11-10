@@ -253,6 +253,87 @@ npm run mcp -- --tool xhs_comment_post --dirId user --text="写得不错！"
 - 截图：`page_screenshot`（默认仅返回路径；如需图片数据，传 `returnImage=true`）
 - 快照：`page_snapshot` → 返回 `url/title/a11y` 摘要 + 统计
 
+### 示例参数（速查）
+
+以下为常用工具的入参与返回片段示例（仅展示关键字段，实际返回含标准包裹结构）。
+
+```
+# 浏览器与页面
+browser_open        {"dirId":"user"}
+page_create         {"dirId":"user","url":"https://example.com"}
+page_list           {"dirId":"user"}
+page_close          {"dirId":"user","pageIndex":0}
+page_navigate       {"dirId":"user","url":"https://example.com","pageIndex":0}
+
+# 页面交互（语义定位 + 拟人化可选）
+page_click          {"dirId":"user","target":{"role":"button","name":"登录"}}
+page_click(关闭拟人) {"dirId":"user","target":{"text":"登录"},"human":false}
+page_hover          {"dirId":"user","target":{"selector":".menu-item[data-id='settings']"}}
+page_type           {"dirId":"user","target":{"role":"textbox","name":"标题"},"text":"今天好开心","human":{"wpm":180}}
+page_input_clear    {"dirId":"user","target":{"role":"textbox","name":"搜索"}}
+page_scroll         {"dirId":"user","deltaY":1200,"human":{"segments":6,"perSegmentMs":120}}
+
+# 页面信息获取
+page_screenshot     {"dirId":"user","fullPage":true,"returnImage":true}
+page_snapshot       {"dirId":"user","pageIndex":0,"maxNodes":800}
+```
+
+page_snapshot 返回示例（节选）：
+
+```
+{
+  "ok": true,
+  "data": {
+    "url": "https://example.com",
+    "title": "Example",
+    "a11y": { "role": "document", "name": "", "children": [/* ...裁剪... */] },
+    "stats": { "nodeCount": 801, "roleCounts": {"button": 12}, "landmarks": ["navigation","main"], "clickableCount": 37 }
+  }
+}
+```
+
+```
+# 小红书（XHS）
+xhs_open_context            {"dirId":"user"}
+xhs_navigate_home           {"dirId":"user"}
+xhs_search_keyword          {"dirId":"user","keyword":"美食"}
+xhs_collect_search_results  {"dirId":"user","keyword":"美食","limit":10}
+xhs_keyword_browse          {"dirId":"user","keywords":["美食","穿搭"]}
+xhs_select_note             {"dirId":"user","keywords":["咖啡","拉花"]}
+xhs_comment_post            {"dirId":"user","text":"写得不错！"}
+xhs_note_extract_content    {"dirId":"user","noteUrl":"https://www.xiaohongshu.com/explore/xxxxxxxx"}
+```
+
+xhs_note_extract_content 返回示例（节选，含兜底标记）：
+
+```
+{
+  "ok": true,
+  "data": {
+    "note_id": "xxxxxxxx",
+    "url": "https://www.xiaohongshu.com/explore/xxxxxxxx",
+    "title": "……",
+    "content": "……",
+    "tags": ["…"],
+    "author_nickname": "…",
+    "interact_stats": {"likes": 0, "collects": 0, "comments": 0, "shares": 0},
+    "extracted_at": "2025-11-10T10:00:00.000Z",
+    "extraction_method": "api" | "dom"
+  }
+}
+```
+
+```
+# 资源管理
+resources_listArtifacts     {"dirId":"user"}
+resources_readArtifact      {"dirId":"user","path":"test/page-1.png"}
+
+# 管理工具（高权限）
+roxy_workspaces_list        {"page_index":1,"page_size":20}
+roxy_windows_list           {"workspaceId":"123","dirIds":"user"}
+roxy_window_create          {"workspaceId":"123","windowName":"xhs-user","defaultOpenUrl":["https://www.xiaohongshu.com/explore"]}
+```
+
 ---
 
 ## RoxyBrowser 集成架构
